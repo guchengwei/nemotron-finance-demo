@@ -1,0 +1,103 @@
+import { useEffect } from 'react'
+import { useStore } from './store'
+import { api } from './api'
+import { useSurvey } from './hooks/useSurvey'
+import Layout from './components/Layout'
+import FilterPanel from './components/FilterPanel'
+import SurveyConfig from './components/SurveyConfig'
+import SurveyRunner from './components/SurveyRunner'
+import ReportDashboard from './components/ReportDashboard'
+import FollowUpChat from './components/FollowUpChat'
+
+const QUICK_DEMO_THEME = 'AIを活用した資産運用アドバイザリーサービスの導入に対する金融機関顧客の反応'
+const QUICK_DEMO_QUESTIONS = [
+  'AIによる資産運用アドバイスに対する全体的な関心度を教えてください（1:全く関心がない〜5:非常に関心がある）',
+  'AIアドバイザーに最も期待する機能は何ですか？',
+  '利用にあたっての懸念点をお聞かせください',
+]
+
+function QuickDemoButton() {
+  const store = useStore()
+  const { startSurvey } = useSurvey()
+
+  const handleQuickDemo = async () => {
+    try {
+      const result = await api.getSample({ count: 8 })
+      store.setSelectedPersonas(result.sampled)
+      store.setSurveyTheme(QUICK_DEMO_THEME)
+      store.setQuestions(QUICK_DEMO_QUESTIONS)
+      store.setSurveyLabel('クイックデモ')
+      store.setStep(3)
+      startSurvey()
+    } catch (e) {
+      console.error('Quick demo failed:', e)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleQuickDemo}
+      className="bg-[#00A3E0] hover:bg-[#0090c5] text-white font-bold px-6 py-3 rounded-lg text-sm transition-colors"
+    >
+      ⚡ デモを実行
+    </button>
+  )
+}
+
+function WelcomeScreen() {
+  return (
+    <div className="flex flex-col items-center justify-center h-64 gap-6 text-center">
+      <div>
+        <div className="text-2xl font-black text-white mb-2">
+          Nemotron Financial Survey Demo
+        </div>
+        <div className="text-gray-500 text-sm max-w-md">
+          NVIDIA Nemotron-Personas-Japan × Nemotron-Nano-9B-v2 を使用した<br />
+          金融サービスAIリサーチデモ
+        </div>
+      </div>
+      <div className="flex gap-4">
+        <QuickDemoButton />
+        <button
+          onClick={() => useStore.getState().setStep(1)}
+          className="border border-[rgba(118,185,0,0.3)] text-[#76B900] hover:bg-[#76B900]/10 font-bold px-6 py-3 rounded-lg text-sm transition-colors"
+        >
+          カスタム調査を始める
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function App() {
+  const { currentStep, setHistory } = useStore()
+
+  // Load history on startup
+  useEffect(() => {
+    api.getHistory().then((r) => setHistory(r.runs)).catch(console.error)
+  }, [setHistory])
+
+  const renderStep = () => {
+    switch (currentStep) {
+      case 1: return (
+        <div>
+          <WelcomeScreen />
+          <div className="mt-8">
+            <FilterPanel />
+          </div>
+        </div>
+      )
+      case 2: return <SurveyConfig />
+      case 3: return <SurveyRunner />
+      case 4: return <ReportDashboard />
+      case 5: return <FollowUpChat />
+      default: return null
+    }
+  }
+
+  return (
+    <Layout>
+      {renderStep()}
+    </Layout>
+  )
+}

@@ -1,0 +1,32 @@
+# Environment (never commit secrets)
+.env
+.env.bak
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Data — databases and large parquet files
+data/
+backend/data/*.db
+backend/data/*.parquet
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Claude Code local settings
+.claude/settings.local.json
