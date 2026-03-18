@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../store'
 import { api } from '../api'
 
@@ -17,6 +17,21 @@ export default function Sidebar() {
   useEffect(() => {
     api.getHistory().then((r) => setHistory(r.runs)).catch(console.error)
   }, [setHistory])
+
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  const deleteRun = async (e: React.MouseEvent, run_id: string) => {
+    e.stopPropagation()
+    setDeleting(run_id)
+    try {
+      await api.deleteHistoryRun(run_id)
+      setHistory(history.filter(r => r.id !== run_id))
+    } catch (err) {
+      console.error('Failed to delete run:', err)
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   const loadRun = async (run_id: string) => {
     try {
@@ -69,7 +84,7 @@ export default function Sidebar() {
             <button
               key={run.id}
               onClick={() => loadRun(run.id)}
-              className="w-full text-left px-3 py-2 hover:bg-[#1E2D40] border-b border-[rgba(255,255,255,0.03)] transition-colors group"
+              className="relative w-full text-left px-3 py-2 hover:bg-[#1E2D40] border-b border-[rgba(255,255,255,0.03)] transition-colors group"
             >
               <div className="flex items-center justify-between mb-1">
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${scoreColor(run.overall_score)}`}>
@@ -84,6 +99,17 @@ export default function Sidebar() {
               </div>
               <div className="text-[10px] text-gray-600 mt-0.5">
                 {new Date(run.created_at).toLocaleDateString('ja-JP')}
+              </div>
+              <div
+                data-testid={`delete-run-${run.id}`}
+                role="button"
+                onClick={(e) => deleteRun(e, run.id)}
+                className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center
+                  rounded text-gray-600 hover:text-red-400 hover:bg-red-400/10
+                  opacity-0 group-hover:opacity-100 transition-all text-xs"
+                title="削除"
+              >
+                {deleting === run.id ? '...' : '×'}
               </div>
             </button>
           ))

@@ -106,3 +106,37 @@ describe('Sidebar new survey', () => {
     expect(await screen.findByRole('heading', { name: 'ペルソナ選択' })).toBeInTheDocument()
   })
 })
+
+describe('Sidebar delete', () => {
+  beforeEach(() => {
+    useStore.setState({ dbReady: true })
+    mockedApi.getFilters.mockResolvedValue(filtersResponse)
+    mockedApi.getCount.mockResolvedValue({ total_matching: 100 })
+  })
+
+  it('delete button removes history entry', async () => {
+    const user = userEvent.setup()
+    const mockRun = {
+      id: 'run-1',
+      created_at: '2026-03-18T00:00:00',
+      survey_theme: 'テストテーマ',
+      persona_count: 8,
+      status: 'completed',
+      overall_score: 3.5,
+    }
+    mockedApi.getHistory.mockResolvedValue({ runs: [mockRun] })
+    mockedApi.deleteHistoryRun.mockResolvedValue(undefined)
+
+    render(<App />)
+
+    expect(await screen.findByText('テストテーマ')).toBeInTheDocument()
+
+    const deleteBtn = screen.getByTestId('delete-run-run-1')
+    await user.click(deleteBtn)
+
+    await waitFor(() => {
+      expect(screen.queryByText('テストテーマ')).not.toBeInTheDocument()
+    })
+    expect(mockedApi.deleteHistoryRun).toHaveBeenCalledWith('run-1')
+  })
+})
