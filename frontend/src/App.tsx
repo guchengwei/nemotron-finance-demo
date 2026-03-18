@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useState } from 'react'
 import { useStore } from './store'
 import { api } from './api'
 import { useSurvey } from './hooks/useSurvey'
@@ -19,8 +19,10 @@ const QUICK_DEMO_QUESTIONS = [
 function QuickDemoButton() {
   const store = useStore()
   const { startSurvey } = useSurvey()
+  const [loading, setLoading] = useState(false)
 
   const handleQuickDemo = async () => {
+    setLoading(true)
     try {
       const result = await api.getSample({ count: 8 })
       store.setSelectedPersonas(result.sampled)
@@ -31,15 +33,18 @@ function QuickDemoButton() {
       startSurvey()
     } catch (e) {
       console.error('Quick demo failed:', e)
+      setLoading(false)
     }
   }
 
   return (
     <button
+      data-testid="quick-demo-button"
       onClick={handleQuickDemo}
-      className="bg-[#00A3E0] hover:bg-[#0090c5] text-white font-bold px-6 py-3 rounded-lg text-sm transition-colors"
+      disabled={loading}
+      className="bg-[#00A3E0] hover:bg-[#0090c5] disabled:opacity-70 text-white font-bold px-6 py-3 rounded-lg text-sm transition-colors"
     >
-      ⚡ デモを実行
+      {loading ? '起動中...' : '⚡ デモを実行'}
     </button>
   )
 }
@@ -59,7 +64,8 @@ function WelcomeScreen() {
       <div className="flex gap-4">
         <QuickDemoButton />
         <button
-          onClick={() => useStore.getState().setStep(1)}
+          data-testid="custom-survey-button"
+          onClick={() => useStore.getState().setStep(2)}
           className="border border-[rgba(118,185,0,0.3)] text-[#76B900] hover:bg-[#76B900]/10 font-bold px-6 py-3 rounded-lg text-sm transition-colors"
         >
           カスタム調査を始める
@@ -70,34 +76,31 @@ function WelcomeScreen() {
 }
 
 export default function App() {
-  const { currentStep, setHistory } = useStore()
-
-  // Load history on startup
-  useEffect(() => {
-    api.getHistory().then((r) => setHistory(r.runs)).catch(console.error)
-  }, [setHistory])
+  const { currentStep, resetVersion } = useStore()
 
   const renderStep = () => {
     switch (currentStep) {
-      case 1: return (
-        <div>
-          <WelcomeScreen />
-          <div className="mt-8">
-            <FilterPanel />
+      case 1:
+        return (
+          <div>
+            <WelcomeScreen />
+            <div className="mt-8">
+              <FilterPanel key={resetVersion} />
+            </div>
           </div>
-        </div>
-      )
-      case 2: return <SurveyConfig />
-      case 3: return <SurveyRunner />
-      case 4: return <ReportDashboard />
-      case 5: return <FollowUpChat />
-      default: return null
+        )
+      case 2:
+        return <SurveyConfig />
+      case 3:
+        return <SurveyRunner />
+      case 4:
+        return <ReportDashboard />
+      case 5:
+        return <FollowUpChat />
+      default:
+        return null
     }
   }
 
-  return (
-    <Layout>
-      {renderStep()}
-    </Layout>
-  )
+  return <Layout>{renderStep()}</Layout>
 }

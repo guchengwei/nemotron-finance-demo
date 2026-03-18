@@ -8,7 +8,7 @@ export default function SurveyConfig() {
   const {
     selectedPersonas, surveyTheme, setSurveyTheme,
     questions, setQuestions, surveyLabel, setSurveyLabel,
-    setStep
+    setStep,
   } = useStore()
   const { startSurvey } = useSurvey()
 
@@ -49,8 +49,8 @@ export default function SurveyConfig() {
             currentData = line.slice(6).trim()
           } else if (line === '' && currentEvent && currentData) {
             if (currentEvent === 'questions_generated') {
-              const d = JSON.parse(currentData)
-              setQuestions(d.questions)
+              const data = JSON.parse(currentData)
+              setQuestions(data.questions)
               reader.cancel()
               return
             }
@@ -91,7 +91,7 @@ export default function SurveyConfig() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div data-testid="survey-config-screen" className="max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">調査設定</h2>
         <div className="text-sm text-gray-500">
@@ -99,7 +99,6 @@ export default function SurveyConfig() {
         </div>
       </div>
 
-      {/* Survey theme */}
       <div>
         <label className="block text-xs font-semibold text-gray-400 mb-2">
           調査テーマ <span className="text-red-500">*</span>
@@ -109,12 +108,10 @@ export default function SurveyConfig() {
           onChange={(e) => setSurveyTheme(e.target.value)}
           placeholder={DEFAULT_THEME}
           rows={3}
-          className="w-full bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] rounded-lg px-4 py-3 text-sm text-gray-200
-            focus:border-[#76B900] focus:outline-none placeholder-gray-600 resize-none"
+          className="w-full bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] rounded-lg px-4 py-3 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none placeholder-gray-600 resize-none"
         />
       </div>
 
-      {/* Label */}
       <div>
         <label className="block text-xs font-semibold text-gray-400 mb-2">ラベル（任意）</label>
         <input
@@ -122,12 +119,10 @@ export default function SurveyConfig() {
           value={surveyLabel}
           onChange={(e) => setSurveyLabel(e.target.value)}
           placeholder="例: 投信オンライン_40代男性_東京"
-          className="w-full bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] rounded-lg px-4 py-2.5 text-sm text-gray-200
-            focus:border-[#76B900] focus:outline-none placeholder-gray-600"
+          className="w-full bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none placeholder-gray-600"
         />
       </div>
 
-      {/* Questions */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-semibold text-gray-400">質問項目</label>
@@ -150,14 +145,12 @@ export default function SurveyConfig() {
                   onChange={(e) => updateQuestion(i, e.target.value)}
                   onBlur={() => setEditingIdx(null)}
                   rows={2}
-                  className="flex-1 bg-[#1c1c2e] border border-[#76B900] rounded px-3 py-1.5 text-sm text-gray-200
-                    focus:outline-none resize-none"
+                  className="flex-1 bg-[#1c1c2e] border border-[#76B900] rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none resize-none"
                 />
               ) : (
                 <button
                   onClick={() => setEditingIdx(i)}
-                  className="flex-1 text-left bg-[#1c1c2e] border border-[rgba(118,185,0,0.1)] rounded px-3 py-2
-                    text-sm text-gray-300 hover:border-[rgba(118,185,0,0.4)] transition-colors"
+                  className="flex-1 text-left bg-[#1c1c2e] border border-[rgba(118,185,0,0.1)] rounded px-3 py-2 text-sm text-gray-300 hover:border-[rgba(118,185,0,0.4)] transition-colors"
                 >
                   {q || <span className="text-gray-600">（クリックして編集）</span>}
                 </button>
@@ -179,7 +172,6 @@ export default function SurveyConfig() {
         </div>
       </div>
 
-      {/* Estimated time */}
       <div className="bg-[#141420] rounded-lg px-4 py-3 text-sm text-gray-400">
         推定所要時間: 約 <span className="text-white font-bold">{estimatedMinutes}分</span>
         <span className="text-gray-600 ml-2">
@@ -187,12 +179,10 @@ export default function SurveyConfig() {
         </span>
       </div>
 
-      {/* Start button */}
       <button
         onClick={handleStart}
         disabled={!surveyTheme || questions.length === 0 || selectedPersonas.length === 0}
-        className="w-full bg-[#76B900] hover:bg-[#8fd100] disabled:opacity-50 disabled:cursor-not-allowed
-          text-black font-bold py-3 px-6 rounded-lg text-base transition-colors"
+        className="w-full bg-[#76B900] hover:bg-[#8fd100] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-3 px-6 rounded-lg text-base transition-colors"
       >
         調査を開始する →
       </button>

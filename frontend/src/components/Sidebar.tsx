@@ -32,7 +32,6 @@ export default function Sidebar() {
 
   return (
     <aside className="w-56 flex-shrink-0 bg-[#141420] border-r border-[rgba(118,185,0,0.1)] flex flex-col h-full">
-      {/* Logo */}
       <div className="p-4 border-b border-[rgba(118,185,0,0.1)]">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-[#76B900] rounded flex items-center justify-center">
@@ -45,9 +44,9 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* New survey button */}
       <div className="p-3">
         <button
+          data-testid="new-survey-button"
           onClick={() => resetSurvey()}
           className="w-full bg-[#76B900] hover:bg-[#8fd100] text-black text-sm font-bold py-2 px-3 rounded transition-colors"
         >
@@ -55,7 +54,6 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* History list */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 py-1 text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
           調査履歴

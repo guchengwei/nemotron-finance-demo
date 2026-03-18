@@ -1,0 +1,79 @@
+import { expect, test } from '@playwright/test'
+import { filtersFixture } from './fixtures/personas'
+
+test('filter hit count updates for latest dropdown selection', async ({ page }) => {
+  let requestIndex = 0
+
+  await page.route('**/api/personas/filters', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(filtersFixture),
+    })
+  })
+
+  await page.route('**/api/history', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ runs: [] }),
+    })
+  })
+
+  await page.route('**/api/personas/count**', async (route) => {
+    requestIndex += 1
+    if (requestIndex === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ total_matching: 3 }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ total_matching: 7 }),
+    })
+  })
+
+  await page.goto('/')
+  const sexSelect = page.locator('select').first()
+  await sexSelect.selectOption('男')
+  await sexSelect.selectOption('女')
+
+  await expect(page.getByTestId('match-count')).toHaveText('7')
+})
+
+test('loading state clears once filters are ready', async ({ page }) => {
+  let releaseFilters: (() => void) | undefined
+  const filtersReleased = new Promise<void>((resolve) => {
+    releaseFilters = resolve
+  })
+
+  await page.route('**/api/personas/filters', async (route) => {
+    await filtersReleased
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(filtersFixture),
+    })
+  })
+
+  await page.route('**/api/history', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ runs: [] }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.getByTestId('filters-loading')).toBeVisible()
+
+  releaseFilters?.()
+
+  await expect(page.getByTestId('filters-loading')).toBeHidden()
+})

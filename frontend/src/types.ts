@@ -45,6 +45,10 @@ export interface FiltersResponse {
   total_count: number
 }
 
+export interface CountResponse {
+  total_matching: number
+}
+
 export interface PersonaSample {
   total_matching: number
   sampled: Persona[]
@@ -117,7 +121,6 @@ export interface SurveyRunDetail {
   followup_chats: Record<string, Array<{ role: string; content: string }>>
 }
 
-// SSE Events
 export interface SSERunCreated {
   run_id: string
   total_personas: number

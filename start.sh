@@ -61,11 +61,15 @@ seed_history()
 " || echo "  (Seeding skipped — may already exist)"
 
 # Frontend
-echo "[4/4] Building frontend..."
+echo "[4/4] Preparing frontend..."
 cd "$REPO_DIR/frontend"
-if [ ! -d "node_modules" ]; then
+if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules" ] || [ "package-lock.json" -nt "node_modules" ]; then
+    echo "  Installing/updating frontend dependencies..."
     npm install
+else
+    echo "  Frontend dependencies are up to date."
 fi
+echo "  Building frontend..."
 npm run build
 
 echo ""

@@ -30,3 +30,6 @@ backend/data/*.parquet
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Test artifacts
+frontend/test-results/

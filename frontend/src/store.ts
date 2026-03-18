@@ -11,17 +11,14 @@ import type {
 export type Step = 1 | 2 | 3 | 4 | 5
 
 interface AppState {
-  // Navigation
   currentStep: Step
   setStep: (step: Step) => void
 
-  // Filters & personas
   filters: FiltersResponse | null
   setFilters: (f: FiltersResponse) => void
   selectedPersonas: Persona[]
   setSelectedPersonas: (p: Persona[]) => void
 
-  // Survey config
   surveyTheme: string
   setSurveyTheme: (t: string) => void
   questions: string[]
@@ -29,7 +26,6 @@ interface AppState {
   surveyLabel: string
   setSurveyLabel: (l: string) => void
 
-  // Survey run state
   currentRunId: string | null
   setCurrentRunId: (id: string | null) => void
   personaStates: Record<string, PersonaRunState>
@@ -41,23 +37,26 @@ interface AppState {
   surveyFailed: number
   setSurveyCounts: (completed: number, failed: number) => void
 
-  // Report
   currentReport: ReportResponse | null
   setCurrentReport: (r: ReportResponse | null) => void
 
-  // Follow-up
   followupPersona: Persona | null
   setFollowupPersona: (p: Persona | null) => void
 
-  // History
   history: SurveyRunSummary[]
   setHistory: (h: SurveyRunSummary[]) => void
   currentHistoryRun: SurveyRunDetail | null
   setCurrentHistoryRun: (r: SurveyRunDetail | null) => void
 
-  // Reset
+  resetVersion: number
   resetSurvey: () => void
 }
+
+const defaultQuestions = [
+  'このようなサービスに対する全体的な関心度を教えてください（1:全く関心がない〜5:非常に関心がある）',
+  '最も重視する点は何ですか？',
+  '懸念点や改善要望があればお聞かせください',
+]
 
 export const useStore = create<AppState>((set) => ({
   currentStep: 1,
@@ -70,11 +69,7 @@ export const useStore = create<AppState>((set) => ({
 
   surveyTheme: '',
   setSurveyTheme: (surveyTheme) => set({ surveyTheme }),
-  questions: [
-    'このようなサービスに対する全体的な関心度を教えてください（1:全く関心がない〜5:非常に関心がある）',
-    '最も重視する点は何ですか？',
-    '懸念点や改善要望があればお聞かせください',
-  ],
+  questions: defaultQuestions,
   setQuestions: (questions) => set({ questions }),
   surveyLabel: '',
   setSurveyLabel: (surveyLabel) => set({ surveyLabel }),
@@ -108,16 +103,13 @@ export const useStore = create<AppState>((set) => ({
   currentHistoryRun: null,
   setCurrentHistoryRun: (currentHistoryRun) => set({ currentHistoryRun }),
 
+  resetVersion: 0,
   resetSurvey: () =>
-    set({
+    set((state) => ({
       currentStep: 1,
       selectedPersonas: [],
       surveyTheme: '',
-      questions: [
-        'このようなサービスに対する全体的な関心度を教えてください（1:全く関心がない〜5:非常に関心がある）',
-        '最も重視する点は何ですか？',
-        '懸念点や改善要望があればお聞かせください',
-      ],
+      questions: defaultQuestions,
       surveyLabel: '',
       currentRunId: null,
       personaStates: {},
@@ -127,5 +119,6 @@ export const useStore = create<AppState>((set) => ({
       currentReport: null,
       followupPersona: null,
       currentHistoryRun: null,
-    }),
+      resetVersion: state.resetVersion + 1,
+    })),
 }))

@@ -1,4 +1,5 @@
 import type {
+  CountResponse,
   FiltersResponse,
   PersonaSample,
   SurveyRunRequest,
@@ -9,7 +10,11 @@ import type {
 
 const BASE = '/api'
 
-async function get<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+async function get<T>(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+  signal?: AbortSignal,
+): Promise<T> {
   const url = new URL(BASE + path, window.location.origin)
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
@@ -18,7 +23,7 @@ async function get<T>(path: string, params?: Record<string, string | number | un
       }
     })
   }
-  const res = await fetch(url.toString())
+  const res = await fetch(url.toString(), { signal })
   if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`)
   return res.json()
 }
@@ -38,20 +43,29 @@ async function del(path: string): Promise<void> {
   if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`)
 }
 
+type PersonaQueryParams = {
+  sex?: string
+  age_min?: number
+  age_max?: number
+  prefecture?: string
+  region?: string
+  occupation?: string
+  education?: string
+  financial_literacy?: string
+}
+
 export const api = {
   getFilters: (): Promise<FiltersResponse> => get('/personas/filters'),
 
-  getSample: (params: {
-    sex?: string
-    age_min?: number
-    age_max?: number
-    prefecture?: string
-    region?: string
-    occupation?: string
-    education?: string
-    financial_literacy?: string
-    count?: number
-  }): Promise<PersonaSample> => get('/personas/sample', params as Record<string, string | number | undefined>),
+  getCount: (
+    params: PersonaQueryParams,
+    signal?: AbortSignal,
+  ): Promise<CountResponse> => get('/personas/count', params as Record<string, string | number | undefined>, signal),
+
+  getSample: (
+    params: PersonaQueryParams & { count?: number },
+    signal?: AbortSignal,
+  ): Promise<PersonaSample> => get('/personas/sample', params as Record<string, string | number | undefined>, signal),
 
   generateReport: (run_id: string): Promise<ReportResponse> =>
     post('/report/generate', { run_id }),
@@ -63,7 +77,6 @@ export const api = {
   deleteHistoryRun: (run_id: string): Promise<void> => del(`/history/${run_id}`),
 }
 
-// SSE streaming
 export function startSurveySSE(
   request: SurveyRunRequest,
   onEvent: (event: string, data: unknown) => void,

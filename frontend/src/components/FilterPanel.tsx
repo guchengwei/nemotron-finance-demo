@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { api } from '../api'
 import type { Persona } from '../types'
@@ -24,58 +24,99 @@ export default function FilterPanel() {
   const [count, setCount] = useState(8)
   const [customCount, setCustomCount] = useState('')
 
+  const [filtersLoading, setFiltersLoading] = useState(!filters)
   const [sampling, setSampling] = useState(false)
-  const [matchCount, setMatchCount] = useState<number | null>(null)
+  const [matchCount, setMatchCount] = useState<number | null>(filters?.total_count ?? null)
   const [personas, setPersonas] = useState<Persona[]>([])
+  const latestCountRequest = useRef(0)
 
-  // Load filters
+  const queryParams = useMemo(() => ({
+    sex: sex || undefined,
+    age_min: ageMin,
+    age_max: ageMax,
+    region: region || undefined,
+    prefecture: prefecture || undefined,
+    occupation: occupation || undefined,
+    education: education || undefined,
+    financial_literacy: financialLiteracy || undefined,
+  }), [sex, ageMin, ageMax, region, prefecture, occupation, education, financialLiteracy])
+
   useEffect(() => {
-    if (!filters) {
-      api.getFilters().then((f) => {
-        setFilters(f)
-        setMatchCount(f.total_count)
-      }).catch(console.error)
-    } else {
+    let active = true
+
+    if (filters) {
+      setFiltersLoading(false)
       setMatchCount(filters.total_count)
+      return
+    }
+
+    setFiltersLoading(true)
+    api.getFilters().then((response) => {
+      if (!active) return
+      setFilters(response)
+      setMatchCount(response.total_count)
+      setFiltersLoading(false)
+    }).catch((error) => {
+      if (!active) return
+      console.error(error)
+      setFiltersLoading(false)
+    })
+
+    return () => {
+      active = false
     }
   }, [filters, setFilters])
 
-  // Update match count when filters change
   useEffect(() => {
-    const timeout = setTimeout(async () => {
-      try {
-        const result = await api.getSample({
-          sex: sex || undefined,
-          age_min: ageMin,
-          age_max: ageMax,
-          region: region || undefined,
-          prefecture: prefecture || undefined,
-          occupation: occupation || undefined,
-          education: education || undefined,
-          financial_literacy: financialLiteracy || undefined,
-          count: 1,
-        })
-        setMatchCount(result.total_matching)
-      } catch {
-        // ignore
-      }
-    }, 300)
-    return () => clearTimeout(timeout)
-  }, [sex, ageMin, ageMax, region, prefecture, occupation, education, financialLiteracy])
+    if (!filters) return
+
+    const isDefaultFilterState = (
+      !sex &&
+      ageMin === 20 &&
+      ageMax === 80 &&
+      !region &&
+      !prefecture &&
+      !occupation &&
+      !education &&
+      !financialLiteracy
+    )
+
+    if (isDefaultFilterState) {
+      setMatchCount(filters.total_count)
+      return
+    }
+
+    const controller = new AbortController()
+    const requestId = latestCountRequest.current + 1
+    latestCountRequest.current = requestId
+
+    api.getCount(queryParams, controller.signal).then((result) => {
+      if (latestCountRequest.current !== requestId) return
+      setMatchCount(result.total_matching)
+    }).catch((error) => {
+      if ((error as Error).name === 'AbortError') return
+      if (latestCountRequest.current !== requestId) return
+      console.error(error)
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [filters, queryParams, sex, ageMin, ageMax, region, prefecture, occupation, education, financialLiteracy])
+
+  const resolvedCount = (() => {
+    if (!customCount.trim()) return count
+    const parsed = Number.parseInt(customCount, 10)
+    if (Number.isNaN(parsed)) return count
+    return Math.min(200, Math.max(1, parsed))
+  })()
 
   const handleSample = async () => {
     setSampling(true)
     try {
       const result = await api.getSample({
-        sex: sex || undefined,
-        age_min: ageMin,
-        age_max: ageMax,
-        region: region || undefined,
-        prefecture: prefecture || undefined,
-        occupation: occupation || undefined,
-        education: education || undefined,
-        financial_literacy: financialLiteracy || undefined,
-        count,
+        ...queryParams,
+        count: resolvedCount,
       })
       setPersonas(result.sampled)
       setSelectedPersonas(result.sampled)
@@ -87,12 +128,16 @@ export default function FilterPanel() {
     }
   }
 
-  if (!filters) {
+  if (filtersLoading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <div className="text-gray-500 text-sm">データベース読み込み中...</div>
+        <div data-testid="filters-loading" className="text-gray-500 text-sm">データベース読み込み中...</div>
       </div>
     )
+  }
+
+  if (!filters) {
+    return null
   }
 
   return (
@@ -100,17 +145,15 @@ export default function FilterPanel() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">ペルソナ選択</h2>
         <div className="text-sm text-gray-400">
-          該当: <span className="text-[#76B900] font-bold text-base">
+          該当: <span data-testid="match-count" className="text-[#76B900] font-bold text-base">
             {matchCount !== null ? matchCount.toLocaleString() : '—'}
           </span> 件
           <span className="text-gray-600 ml-2">/ {filters.total_count.toLocaleString()} 総数</span>
         </div>
       </div>
 
-      {/* Filters */}
       <div className="bg-[#1c1c2e] border border-[rgba(118,185,0,0.1)] rounded-lg p-4">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {/* Sex */}
           <div>
             <label className="block text-xs text-gray-500 mb-1">性別</label>
             <select
@@ -125,7 +168,6 @@ export default function FilterPanel() {
             </select>
           </div>
 
-          {/* Age range */}
           <div>
             <label className="block text-xs text-gray-500 mb-1">年齢 ({ageMin}〜{ageMax}歳)</label>
             <div className="flex gap-2">
@@ -134,7 +176,7 @@ export default function FilterPanel() {
                 value={ageMin}
                 min={18}
                 max={ageMax}
-                onChange={(e) => setAgeMin(parseInt(e.target.value) || 18)}
+                onChange={(e) => setAgeMin(Number.parseInt(e.target.value, 10) || 18)}
                 className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
               />
               <span className="text-gray-500 self-center">〜</span>
@@ -143,13 +185,12 @@ export default function FilterPanel() {
                 value={ageMax}
                 min={ageMin}
                 max={100}
-                onChange={(e) => setAgeMax(parseInt(e.target.value) || 80)}
+                onChange={(e) => setAgeMax(Number.parseInt(e.target.value, 10) || 80)}
                 className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
               />
             </div>
           </div>
 
-          {/* Region */}
           <div>
             <label className="block text-xs text-gray-500 mb-1">地域</label>
             <select
@@ -164,7 +205,6 @@ export default function FilterPanel() {
             </select>
           </div>
 
-          {/* Prefecture */}
           <div>
             <label className="block text-xs text-gray-500 mb-1">都道府県</label>
             <select
@@ -179,7 +219,6 @@ export default function FilterPanel() {
             </select>
           </div>
 
-          {/* Occupation */}
           <div>
             <label className="block text-xs text-gray-500 mb-1">職業</label>
             <input
@@ -197,7 +236,6 @@ export default function FilterPanel() {
             </datalist>
           </div>
 
-          {/* Education */}
           <div>
             <label className="block text-xs text-gray-500 mb-1">学歴</label>
             <select
@@ -206,13 +244,12 @@ export default function FilterPanel() {
               className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
             >
               <option value="">すべての学歴</option>
-              {filters.education_levels.map((e) => (
-                <option key={e} value={e}>{e}</option>
+              {filters.education_levels.map((level) => (
+                <option key={level} value={level}>{level}</option>
               ))}
             </select>
           </div>
 
-          {/* Financial literacy */}
           <div>
             <label className="block text-xs text-gray-500 mb-1">金融リテラシー</label>
             <select
@@ -221,29 +258,28 @@ export default function FilterPanel() {
               className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
             >
               <option value="">すべて</option>
-              {filters.financial_literacy.map((l) => (
-                <option key={l} value={l}>{l}</option>
+              {filters.financial_literacy.map((level) => (
+                <option key={level} value={level}>{level}</option>
               ))}
             </select>
           </div>
         </div>
       </div>
 
-      {/* Count selector */}
       <div>
         <div className="text-xs text-gray-500 mb-2">サンプル数</div>
         <div className="flex flex-wrap gap-2">
-          {COUNT_PRESETS.map((p) => (
+          {COUNT_PRESETS.map((preset) => (
             <button
-              key={p.value}
-              onClick={() => { setCount(p.value); setCustomCount('') }}
+              key={preset.value}
+              onClick={() => { setCount(preset.value); setCustomCount('') }}
               className={`px-4 py-2 rounded text-sm font-medium transition-colors
-                ${count === p.value && !customCount
+                ${count === preset.value && !customCount
                   ? 'bg-[#76B900] text-black'
                   : 'bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] text-gray-300 hover:border-[#76B900]'
                 }`}
             >
-              {p.label}
+              {preset.label}
             </button>
           ))}
           <div className="flex items-center gap-2">
@@ -260,18 +296,16 @@ export default function FilterPanel() {
         </div>
       </div>
 
-      {/* Sample button */}
       <button
         onClick={handleSample}
         disabled={sampling}
         className="bg-[#76B900] hover:bg-[#8fd100] disabled:opacity-50 text-black font-bold px-6 py-2.5 rounded text-sm transition-colors"
       >
-        {sampling ? '抽出中...' : `ペルソナを抽出 (${customCount || count}名)`}
+        {sampling ? '抽出中...' : `ペルソナを抽出 (${resolvedCount}名)`}
       </button>
 
-      {/* Persona cards */}
       {personas.length > 0 && (
-        <div>
+        <div data-testid="persona-sampled-section">
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm text-gray-400">{personas.length}名 抽出済み</div>
             <button

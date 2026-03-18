@@ -119,7 +119,7 @@ export default function SurveyRunner() {
   const displayState = displayUuid ? personaStates[displayUuid] : null
 
   return (
-    <div className="h-full flex flex-col gap-4">
+    <div data-testid="survey-runner-screen" className="h-full flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-white">

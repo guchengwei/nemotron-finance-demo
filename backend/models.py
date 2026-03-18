@@ -1,11 +1,8 @@
 """Pydantic models for API request/response types."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 
-
-# --- Persona ---
 
 class FinancialExtension(BaseModel):
     financial_literacy: Optional[str] = None
@@ -43,6 +40,10 @@ class Persona(BaseModel):
     financial_extension: Optional[FinancialExtension] = None
 
 
+class CountResponse(BaseModel):
+    total_matching: int
+
+
 class PersonaSample(BaseModel):
     total_matching: int
     sampled: List[Persona]
@@ -59,8 +60,6 @@ class FiltersResponse(BaseModel):
     total_count: int
 
 
-# --- Survey ---
-
 class SurveyRunRequest(BaseModel):
     persona_ids: List[str]
     survey_theme: str
@@ -75,8 +74,6 @@ class SurveyAnswer(BaseModel):
     answer: str
     score: Optional[int] = None
 
-
-# --- Report ---
 
 class TopPick(BaseModel):
     persona_uuid: str
@@ -100,15 +97,11 @@ class ReportRequest(BaseModel):
     run_id: str
 
 
-# --- Follow-up ---
-
 class FollowUpRequest(BaseModel):
     run_id: str
     persona_uuid: str
     question: str
 
-
-# --- History ---
 
 class SurveyRunSummary(BaseModel):
     id: str
