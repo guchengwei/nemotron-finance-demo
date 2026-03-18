@@ -1,9 +1,14 @@
 """Application configuration loaded from environment variables."""
 
 import json
-from pydantic_settings import BaseSettings
-from pydantic import Field
+from pathlib import Path
 from typing import List
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_ENV_FILE = _REPO_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -32,7 +37,18 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         return json.loads(self.cors_origins)
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": str(_ENV_FILE), "env_file_encoding": "utf-8", "extra": "ignore", "env_ignore_empty": True}
+
+    @model_validator(mode="after")
+    def _resolve_paths(self) -> "Settings":
+        """Resolve relative paths against repo root, not CWD."""
+        for field in ("data_dir", "db_path", "history_db_path", "persona_parquet_path"):
+            val = getattr(self, field)
+            if val:
+                p = Path(val)
+                if not p.is_absolute():
+                    object.__setattr__(self, field, str(_REPO_ROOT / p))
+        return self
 
 
 settings = Settings()
