@@ -80,14 +80,20 @@ export default function App() {
   const dbReady = useStore(s => s.dbReady)
   const setDbReady = useStore(s => s.setDbReady)
   const setLlmStatus = useStore(s => s.setLlmStatus)
+  const [dbError, setDbError] = useState<string | null>(null);
 
   useEffect(() => {
     if (dbReady) return;
     let cancelled = false;
     const poll = async () => {
       while (!cancelled) {
-        const ready = await api.checkReady();
-        if (ready && !cancelled) {
+        const result = await api.checkReady();
+        if (cancelled) return;
+        if (result.error) {
+          setDbError(result.error);
+          return;
+        }
+        if (result.ready) {
           setDbReady(true);
           const health = await api.checkHealth();
           setLlmStatus(health);
@@ -104,9 +110,19 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-2 border-[#2563EB] border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-gray-300">データベースを準備中...</p>
-          <p className="text-gray-500 text-sm mt-2">初回は数分かかる場合があります</p>
+          {dbError ? (
+            <>
+              <div className="w-8 h-8 mx-auto mb-4 text-red-500 text-2xl">!</div>
+              <p className="text-red-400">データベースの初期化に失敗しました</p>
+              <p className="text-gray-500 text-sm mt-2 max-w-md">{dbError}</p>
+            </>
+          ) : (
+            <>
+              <div className="animate-spin w-8 h-8 border-2 border-[#2563EB] border-t-transparent rounded-full mx-auto mb-4" />
+              <p className="text-gray-300">データベースを準備中...</p>
+              <p className="text-gray-500 text-sm mt-2">初回は数分かかる場合があります</p>
+            </>
+          )}
         </div>
       </div>
     );

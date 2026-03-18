@@ -76,12 +76,17 @@ export const api = {
 
   deleteHistoryRun: (run_id: string): Promise<void> => del(`/history/${run_id}`),
 
-  async checkReady(): Promise<boolean> {
+  async checkReady(): Promise<{ ready: boolean; error?: string }> {
     try {
       const res = await fetch('/ready');
-      return res.ok;
+      if (res.ok) return { ready: true };
+      if (res.status === 500) {
+        const data = await res.json();
+        return { ready: false, error: data.detail || 'Database initialization failed' };
+      }
+      return { ready: false };
     } catch {
-      return false;
+      return { ready: false };
     }
   },
 
