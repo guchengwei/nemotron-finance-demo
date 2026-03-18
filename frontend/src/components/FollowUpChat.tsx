@@ -35,6 +35,7 @@ export default function FollowUpChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [profileExpanded, setProfileExpanded] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const cancelRef = useRef<(() => void) | null>(null)
 
@@ -137,7 +138,19 @@ export default function FollowUpChat() {
             </div>
           </div>
           <div className="text-xs text-gray-500">{followupPersona.prefecture}（{followupPersona.region}）</div>
-          <div className="text-xs text-gray-400 mt-2 line-clamp-3">{followupPersona.persona?.slice(0, 120)}...</div>
+          <div className="mt-2">
+            <div className={`text-xs text-gray-400 ${profileExpanded ? '' : 'line-clamp-3'}`}>
+              {followupPersona.persona}
+            </div>
+            {followupPersona.persona && followupPersona.persona.length > 120 && (
+              <button
+                onClick={() => setProfileExpanded(v => !v)}
+                className="text-[10px] text-gray-600 hover:text-gray-400 mt-1 transition-colors"
+              >
+                {profileExpanded ? '▲ 折りたたむ' : '▼ すべて表示'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Back button */}
