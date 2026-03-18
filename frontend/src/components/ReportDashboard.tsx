@@ -75,8 +75,19 @@ export default function ReportDashboard() {
 
   if (!report) {
     return (
-      <div className="flex items-center justify-center h-32">
-        <div className="text-gray-500 text-sm">レポートデータがありません</div>
+      <div className="flex flex-col items-center justify-center h-32 gap-3">
+        <div className="text-gray-500 text-sm">レポートがありません</div>
+        {(currentHistoryRun?.status === 'running' || currentHistoryRun?.status === 'failed') && (
+          <div className="text-xs text-gray-600">
+            この調査は{currentHistoryRun.status === 'running' ? '実行中に中断' : '失敗'}しました
+          </div>
+        )}
+        <button
+          onClick={() => setStep(1)}
+          className="text-xs text-[#0EA5E9] hover:underline"
+        >
+          ← 新規調査を開始
+        </button>
       </div>
     )
   }

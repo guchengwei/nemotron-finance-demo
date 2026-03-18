@@ -39,8 +39,19 @@ export default function Sidebar() {
       setCurrentHistoryRun(detail)
       if (detail.report) {
         setCurrentReport(detail.report)
+        setStep(4)
+      } else if (detail.status === 'running' || detail.answers.length > 0) {
+        // Run was stuck or has answers but no report - try generating one
+        try {
+          const report = await api.generateReport(run_id)
+          setCurrentReport(report)
+        } catch {
+          // No answers to generate from - still show report view
+        }
+        setStep(4)
+      } else {
+        setStep(4)
       }
-      setStep(4)
     } catch (e) {
       console.error('Failed to load run:', e)
     }

@@ -185,6 +185,7 @@ async def _survey_stream(request: SurveyRunRequest) -> AsyncGenerator[str, None]
         semaphore = asyncio.Semaphore(settings.llm_concurrency)
         completed = 0
         failed = 0
+        tasks = []
 
         async def run_with_sem(pid, idx):
             async with semaphore:
@@ -193,46 +194,58 @@ async def _survey_stream(request: SurveyRunRequest) -> AsyncGenerator[str, None]
                     request.survey_theme, event_queue, history_db
                 )
 
-        tasks = [asyncio.create_task(run_with_sem(pid, i)) for i, pid in enumerate(persona_ids)]
+        try:
+            tasks = [asyncio.create_task(run_with_sem(pid, i)) for i, pid in enumerate(persona_ids)]
 
-        pending_tasks = set(tasks)
-        while pending_tasks or not event_queue.empty():
+            pending_tasks = set(tasks)
+            while pending_tasks or not event_queue.empty():
+                try:
+                    event = event_queue.get_nowait()
+                    etype = event["event"]
+                    edata = json.dumps(event["data"], ensure_ascii=False)
+                    yield f"event: {etype}\ndata: {edata}\n\n"
+                    if etype == "persona_complete":
+                        completed += 1
+                    elif etype == "persona_error":
+                        failed += 1
+                except asyncio.QueueEmpty:
+                    # Check if tasks are done
+                    done = {t for t in pending_tasks if t.done()}
+                    pending_tasks -= done
+                    if pending_tasks:
+                        await asyncio.sleep(0.05)
+                    else:
+                        # Drain remaining queue
+                        while not event_queue.empty():
+                            event = event_queue.get_nowait()
+                            etype = event["event"]
+                            edata = json.dumps(event["data"], ensure_ascii=False)
+                            yield f"event: {etype}\ndata: {edata}\n\n"
+                            if etype == "persona_complete":
+                                completed += 1
+                            elif etype == "persona_error":
+                                failed += 1
+                        break
+
+            yield f"event: survey_complete\ndata: {json.dumps({'run_id': run_id, 'completed': completed, 'failed': failed}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            logger.error("Survey stream error for run %s: %s", run_id, e)
+            yield f"event: survey_error\ndata: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+        finally:
+            # Cancel any still-running tasks
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            # Always mark run as completed (or failed) so it doesn't stay "running" forever
             try:
-                event = event_queue.get_nowait()
-                etype = event["event"]
-                edata = json.dumps(event["data"], ensure_ascii=False)
-                yield f"event: {etype}\ndata: {edata}\n\n"
-                if etype == "persona_complete":
-                    completed += 1
-                elif etype == "persona_error":
-                    failed += 1
-            except asyncio.QueueEmpty:
-                # Check if tasks are done
-                done = {t for t in pending_tasks if t.done()}
-                pending_tasks -= done
-                if pending_tasks:
-                    await asyncio.sleep(0.05)
-                else:
-                    # Drain remaining queue
-                    while not event_queue.empty():
-                        event = event_queue.get_nowait()
-                        etype = event["event"]
-                        edata = json.dumps(event["data"], ensure_ascii=False)
-                        yield f"event: {etype}\ndata: {edata}\n\n"
-                        if etype == "persona_complete":
-                            completed += 1
-                        elif etype == "persona_error":
-                            failed += 1
-                    break
-
-        # Mark run complete
-        await history_db.execute(
-            "UPDATE survey_runs SET status = 'completed' WHERE id = ?",
-            [run_id]
-        )
-        await history_db.commit()
-
-        yield f"event: survey_complete\ndata: {json.dumps({'run_id': run_id, 'completed': completed, 'failed': failed}, ensure_ascii=False)}\n\n"
+                final_status = 'completed' if completed > 0 else 'failed'
+                await history_db.execute(
+                    "UPDATE survey_runs SET status = ? WHERE id = ?",
+                    [final_status, run_id]
+                )
+                await history_db.commit()
+            except Exception as e:
+                logger.error("Failed to update run status for %s: %s", run_id, e)
 
 
 @router.post("/run")

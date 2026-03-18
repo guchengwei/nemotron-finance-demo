@@ -82,7 +82,13 @@ def _create_history_db():
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(HISTORY_DDL)
+    # Fix any surveys stuck in 'running' status from previous crashes
+    stuck = conn.execute(
+        "UPDATE survey_runs SET status = 'failed' WHERE status = 'running'"
+    ).rowcount
     conn.commit()
+    if stuck:
+        logger.info("Cleaned up %d stuck 'running' survey(s)", stuck)
     conn.close()
     logger.info("History DB ready: %s", settings.history_db_path)
 

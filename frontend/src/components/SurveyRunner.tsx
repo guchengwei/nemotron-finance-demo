@@ -98,6 +98,10 @@ export default function SurveyRunner() {
   // Auto-advance to report when complete
   useEffect(() => {
     if (surveyComplete && currentRunId) {
+      // Only auto-advance if we have at least some completed answers
+      const hasAnswers = Object.values(personaStates).some(s => s.answers.length > 0)
+      if (!hasAnswers) return
+
       const timer = setTimeout(async () => {
         try {
           const report = await api.generateReport(currentRunId)
@@ -110,7 +114,7 @@ export default function SurveyRunner() {
       }, 1500)
       return () => clearTimeout(timer)
     }
-  }, [surveyComplete, currentRunId, setCurrentReport, setStep])
+  }, [surveyComplete, currentRunId, personaStates, setCurrentReport, setStep])
 
   // Display target: active persona, or last completed
   const completed = allStates.filter((s) => s.status === 'complete')
@@ -122,22 +126,36 @@ export default function SurveyRunner() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-white">
-          {surveyComplete ? '✓ 調査完了' : '調査実行中...'}
+          {surveyComplete
+            ? surveyFailed > 0 && surveyCompleted === 0
+              ? '調査エラー'
+              : '✓ 調査完了'
+            : '調査実行中...'}
         </h2>
-        {surveyComplete && (
-          <button
-            onClick={async () => {
-              if (currentRunId) {
-                const report = await api.generateReport(currentRunId)
-                setCurrentReport(report)
-              }
-              setStep(4)
-            }}
-            className="bg-[#2563EB] text-black font-bold px-4 py-2 rounded text-sm"
-          >
-            レポートを見る →
-          </button>
-        )}
+        <div className="flex gap-2">
+          {surveyComplete && surveyFailed > 0 && surveyCompleted === 0 && (
+            <button
+              onClick={() => setStep(2)}
+              className="border border-[rgba(255,255,255,0.2)] text-gray-300 font-bold px-4 py-2 rounded text-sm hover:bg-[#1E2D40]"
+            >
+              ← 設定に戻る
+            </button>
+          )}
+          {surveyComplete && surveyCompleted > 0 && (
+            <button
+              onClick={async () => {
+                if (currentRunId) {
+                  const report = await api.generateReport(currentRunId)
+                  setCurrentReport(report)
+                }
+                setStep(4)
+              }}
+              className="bg-[#2563EB] text-black font-bold px-4 py-2 rounded text-sm"
+            >
+              レポートを見る →
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Progress */}
@@ -201,6 +219,7 @@ export default function SurveyRunner() {
                 {displayState.answers.map((ans, i) => (
                   <div key={i} className="fade-in">
                     <div className="text-xs text-gray-500 mb-1">Q{i + 1}: {ans.question}</div>
+                    {ans.thinking && <ThinkingBlock thinking={ans.thinking} />}
                     <div className="bg-[#1E2D40] rounded-lg p-3 text-sm text-gray-200">
                       {ans.score !== undefined && (
                         <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded mr-2 text-white ${scoreBg(ans.score)}`}>
@@ -209,7 +228,6 @@ export default function SurveyRunner() {
                       )}
                       {ans.answer}
                     </div>
-                    {ans.thinking && <ThinkingBlock thinking={ans.thinking} />}
                   </div>
                 ))}
 
@@ -229,11 +247,11 @@ export default function SurveyRunner() {
                     {displayState.activeThinking && (
                       <ThinkingBlock thinking={displayState.activeThinking} />
                     )}
-                    <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded-lg p-3 text-sm text-gray-200 mt-1">
+                    <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded-lg p-3 text-sm mt-1">
                       {isLarge ? (
-                        displayState.activeAnswer || <span className="text-gray-600">回答中...</span>
+                        <span className="text-gray-200">{displayState.activeAnswer || <span className="text-gray-600">回答中...</span>}</span>
                       ) : (
-                        <span className={displayState.activeAnswer ? 'cursor-blink' : 'text-gray-600'}>
+                        <span className={`text-gray-200 ${displayState.activeAnswer ? 'cursor-blink' : 'text-gray-600'}`}>
                           {displayState.activeAnswer || '入力中...'}
                         </span>
                       )}

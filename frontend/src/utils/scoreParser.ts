@@ -19,7 +19,7 @@ export function scoreColor(score: number): string {
     case 2: return '#f97316'  // orange
     case 3: return '#eab308'  // yellow
     case 4: return '#86efac'  // light green
-    case 5: return '#76B900'  // nvidia green
+    case 5: return '#2563EB'  // nvidia green
     default: return '#888'
   }
 }
@@ -30,7 +30,7 @@ export function scoreBg(score: number): string {
     case 2: return 'bg-orange-500'
     case 3: return 'bg-yellow-500'
     case 4: return 'bg-green-400'
-    case 5: return 'bg-[#76B900]'
+    case 5: return 'bg-[#2563EB]'
     default: return 'bg-gray-600'
   }
 }

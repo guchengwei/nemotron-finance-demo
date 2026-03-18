@@ -146,10 +146,36 @@ export function useSurvey() {
             cancelRef.current = null
             break
           }
+          case 'survey_error': {
+            // Server-side error: mark survey as complete with whatever we have
+            if (flushRef.current) {
+              clearInterval(flushRef.current)
+              flushRef.current = null
+            }
+            chunkBuffer.current = {}
+            const completedCount = Object.values(s.personaStates).filter(ps => ps.status === 'complete').length
+            const failedCount = Object.values(s.personaStates).filter(ps => ps.status === 'error').length
+            s.setSurveyComplete(true)
+            s.setSurveyCounts(completedCount, failedCount || 1)
+            cancelRef.current = null
+            break
+          }
         }
       },
       (err) => {
         console.error('Survey SSE error:', err)
+        // On SSE connection error, mark survey as complete to prevent blank screen
+        const s = useStore.getState()
+        if (flushRef.current) {
+          clearInterval(flushRef.current)
+          flushRef.current = null
+        }
+        chunkBuffer.current = {}
+        const completedCount = Object.values(s.personaStates).filter(ps => ps.status === 'complete').length
+        const failedCount = Object.values(s.personaStates).filter(ps => ps.status === 'error').length
+        s.setSurveyComplete(true)
+        s.setSurveyCounts(completedCount, failedCount || 1)
+        cancelRef.current = null
       }
     )
 

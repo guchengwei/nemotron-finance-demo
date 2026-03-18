@@ -25,4 +25,4 @@ export function formatScoreDistribution(dist: Record<string, number>) {
   }))
 }
 
-export const CHART_COLORS = ['#76B900', '#00A3E0', '#4ade80', '#60a5fa', '#a78bfa']
+export const CHART_COLORS = ['#2563EB', '#0EA5E9', '#4ade80', '#60a5fa', '#a78bfa']

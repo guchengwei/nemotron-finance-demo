@@ -280,7 +280,11 @@ async def stream_followup_answer(
 async def generate_questions(survey_theme: str) -> list[str]:
     """Generate survey questions from theme."""
     from prompts import QUESTION_GEN_PROMPT
-    prompt = QUESTION_GEN_PROMPT.format(survey_theme=survey_theme)
+    variation_seed = random.randint(1, 10000)
+    prompt = QUESTION_GEN_PROMPT.format(
+        survey_theme=survey_theme,
+        variation_seed=variation_seed,
+    )
 
     if settings.mock_llm:
         await asyncio.sleep(0.5)
@@ -290,18 +294,22 @@ async def generate_questions(survey_theme: str) -> list[str]:
     resp = await client.chat.completions.create(
         model=settings.vllm_model,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
+        temperature=0.9,
         max_tokens=512,
     )
     text = _strip_thinking(resp.choices[0].message.content or "[]")
     # Strip markdown code blocks if present
     text = re.sub(r'```(?:json)?\s*', '', text).strip()
+    # Try to extract JSON array from the response
+    json_match = re.search(r'\[.*\]', text, re.DOTALL)
+    if json_match:
+        text = json_match.group(0)
     try:
         questions = json.loads(text)
-        if isinstance(questions, list):
+        if isinstance(questions, list) and len(questions) > 0:
             return [str(q) for q in questions]
     except Exception:
-        pass
+        logger.warning("Question generation JSON parse failed: %s", text[:200])
     return MOCK_QUESTIONS[:3]
 
 

@@ -27,6 +27,7 @@ export default function FilterPanel() {
   const [filtersLoading, setFiltersLoading] = useState(!filters)
   const [sampling, setSampling] = useState(false)
   const [matchCount, setMatchCount] = useState<number | null>(filters?.total_count ?? null)
+  const [countLoading, setCountLoading] = useState(false)
   const [personas, setPersonas] = useState<Persona[]>([])
   const latestCountRequest = useRef(0)
 
@@ -83,20 +84,24 @@ export default function FilterPanel() {
 
     if (isDefaultFilterState) {
       setMatchCount(filters.total_count)
+      setCountLoading(false)
       return
     }
 
     const controller = new AbortController()
     const requestId = latestCountRequest.current + 1
     latestCountRequest.current = requestId
+    setCountLoading(true)
 
     api.getCount(queryParams, controller.signal).then((result) => {
       if (latestCountRequest.current !== requestId) return
       setMatchCount(result.total_matching)
+      setCountLoading(false)
     }).catch((error) => {
       if ((error as Error).name === 'AbortError') return
       if (latestCountRequest.current !== requestId) return
       console.error(error)
+      setCountLoading(false)
     })
 
     return () => {
@@ -145,7 +150,10 @@ export default function FilterPanel() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">ペルソナ選択</h2>
         <div className="text-sm text-gray-400">
-          該当: <span data-testid="match-count" className="text-[#2563EB] font-bold text-base">
+          該当: <span data-testid="match-count" className={`text-[#2563EB] font-bold text-base transition-opacity duration-200 ${countLoading ? 'opacity-50' : ''}`}>
+            {countLoading && (
+              <span className="inline-block w-3 h-3 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin mr-1 align-middle" />
+            )}
             {matchCount !== null ? matchCount.toLocaleString() : '—'}
           </span> 件
           <span className="text-gray-600 ml-2">/ {filters.total_count.toLocaleString()} 総数</span>
