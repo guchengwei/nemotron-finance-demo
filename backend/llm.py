@@ -178,7 +178,10 @@ async def _stream_split_thinking(
                 yield ('think', think_buf)
                 buf = buf[end + len('</think>'):]
                 in_think = False
-    if buf and not in_think:
+    # Stream ended inside an unclosed <think> block — emit what we have
+    if in_think and (think_buf or buf):
+        yield ('think', think_buf + buf)
+    elif buf:
         yield ('answer', buf)
 
 
@@ -260,7 +263,7 @@ async def stream_followup_answer(
             model=settings.vllm_model,
             messages=[{"role": "system", "content": system_prompt}] + messages,
             temperature=settings.llm_temperature,
-            max_tokens=settings.llm_max_tokens,
+            max_tokens=settings.followup_max_tokens,
             stream=True,
         )
 
