@@ -61,7 +61,6 @@ case "$PRESET" in
     DEFAULT_PARQUET=""
     DEFAULT_BACKEND_HOST="127.0.0.1"
     DEFAULT_BACKEND_PORT="8080"
-    DEFAULT_FRONTEND_PORT="3000"
     DEFAULT_CONCURRENCY="4"
     ;;
   local-vllm)
@@ -72,7 +71,6 @@ case "$PRESET" in
     DEFAULT_PARQUET=""
     DEFAULT_BACKEND_HOST="127.0.0.1"
     DEFAULT_BACKEND_PORT="8080"
-    DEFAULT_FRONTEND_PORT="3000"
     DEFAULT_CONCURRENCY="4"
     ;;
   k8s)
@@ -83,7 +81,6 @@ case "$PRESET" in
     DEFAULT_PARQUET="/genai/finance/backend/data/personas.parquet"
     DEFAULT_BACKEND_HOST="0.0.0.0"
     DEFAULT_BACKEND_PORT="8080"
-    DEFAULT_FRONTEND_PORT="3000"
     DEFAULT_CONCURRENCY="4"
     ;;
   docker)
@@ -94,7 +91,6 @@ case "$PRESET" in
     DEFAULT_PARQUET=""
     DEFAULT_BACKEND_HOST="0.0.0.0"
     DEFAULT_BACKEND_PORT="8080"
-    DEFAULT_FRONTEND_PORT="3000"
     DEFAULT_CONCURRENCY="4"
     ;;
   *)
@@ -105,7 +101,6 @@ case "$PRESET" in
     DEFAULT_PARQUET=""
     DEFAULT_BACKEND_HOST="0.0.0.0"
     DEFAULT_BACKEND_PORT="8080"
-    DEFAULT_FRONTEND_PORT="3000"
     DEFAULT_CONCURRENCY="4"
     ;;
 esac
@@ -156,9 +151,6 @@ read -r BACKEND_HOST; BACKEND_HOST="${BACKEND_HOST:-$DEFAULT_BACKEND_HOST}"
 ask "Backend port" "$DEFAULT_BACKEND_PORT"
 read -r BACKEND_PORT; BACKEND_PORT="${BACKEND_PORT:-$DEFAULT_BACKEND_PORT}"
 
-ask "Frontend port" "$DEFAULT_FRONTEND_PORT"
-read -r FRONTEND_PORT; FRONTEND_PORT="${FRONTEND_PORT:-$DEFAULT_FRONTEND_PORT}"
-
 # ── write .env ────────────────────────────────────────────────────────────────
 header "Writing $ENV_FILE"
 
@@ -189,7 +181,6 @@ HISTORY_DB_PATH=$HISTORY_DB_PATH
 # Server
 BACKEND_HOST=$BACKEND_HOST
 BACKEND_PORT=$BACKEND_PORT
-FRONTEND_PORT=$FRONTEND_PORT
 CORS_ORIGINS=["*"]
 EOF
 
@@ -228,7 +219,7 @@ case "$PRESET" in
     echo "    ./start.sh"
     echo
     echo "  Port-forward from your laptop:"
-    echo "    kubectl port-forward pod/<pod-name> 3000:3000 8080:8080"
+    echo "    kubectl port-forward pod/<pod-name> 8080:8080"
     ;;
   docker)
     echo "  Start the full stack:"

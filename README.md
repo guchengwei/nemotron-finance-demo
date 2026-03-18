@@ -25,7 +25,7 @@ A web application for event booth demos showcasing **NVIDIA Nemotron-Nano-9B-v2-
 │  TypeScript         │ ◄────────────────── │  Port 8080           │
 │  Tailwind CSS       │                     │                      │
 │  Recharts + Zustand │                     │  SQLite (personas)   │
-│  Port 3000          │                     │  SQLite (history)    │
+│  Served via backend │                     │  SQLite (history)    │
 └─────────────────────┘                     └──────────┬───────────┘
                                                        │ OpenAI API
                                                        ▼
@@ -51,11 +51,11 @@ cd nemotron-finance-demo
 # Interactive env setup — choose preset "1) local-mock"
 ./setup-env.sh
 
-# Start backend + frontend
+# Start the backend and build the frontend bundle
 ./start.sh
 ```
 
-Open http://localhost:3000
+Open http://localhost:8080
 
 ### Option B — Local GPU with vLLM
 
@@ -125,7 +125,6 @@ $EDITOR .env
 | `HISTORY_DB_PATH` | `$DATA_DIR/history.db` | Survey run history database |
 | `BACKEND_HOST` | `0.0.0.0` | Uvicorn bind host |
 | `BACKEND_PORT` | `8080` | Uvicorn port |
-| `FRONTEND_PORT` | `3000` | Vite dev server port |
 | `CORS_ORIGINS` | `["*"]` | JSON array of allowed CORS origins |
 
 ---
@@ -191,13 +190,13 @@ vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese \
 ### 3. Port-forward from laptop
 
 ```bash
-kubectl port-forward pod/<pod-name> 3000:3000 8080:8080
+kubectl port-forward pod/<pod-name> 8080:8080
 
 # or with Run:ai CLI
 runai exec <job-name> -- bash
 ```
 
-Open http://localhost:3000
+Open http://localhost:8080
 
 ---
 
@@ -214,7 +213,7 @@ MOCK_LLM=true docker compose up app
 ```
 
 `docker-compose.yml` services:
-- `app` — FastAPI backend + Vite frontend
+- `app` — FastAPI backend serving the built frontend
 - `vllm` — vLLM server (requires GPU, optional with mock mode)
 
 ---
