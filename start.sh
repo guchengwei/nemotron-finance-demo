@@ -53,6 +53,10 @@ done
 # Seed demo history
 echo "[3/4] Seeding demo history..."
 cd "$REPO_DIR/backend"
+# Export .env so seed script inherits the same config as uvicorn
+set -a
+. "$REPO_DIR/.env"
+set +a
 python -c "
 import os, sys
 sys.path.insert(0, '.')
