@@ -145,21 +145,21 @@ export default function FilterPanel() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">ペルソナ選択</h2>
         <div className="text-sm text-gray-400">
-          該当: <span data-testid="match-count" className="text-[#76B900] font-bold text-base">
+          該当: <span data-testid="match-count" className="text-[#2563EB] font-bold text-base">
             {matchCount !== null ? matchCount.toLocaleString() : '—'}
           </span> 件
           <span className="text-gray-600 ml-2">/ {filters.total_count.toLocaleString()} 総数</span>
         </div>
       </div>
 
-      <div className="bg-[#1c1c2e] border border-[rgba(118,185,0,0.1)] rounded-lg p-4">
+      <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.1)] rounded-lg p-4">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs text-gray-500 mb-1">性別</label>
             <select
               value={sex}
               onChange={(e) => setSex(e.target.value)}
-              className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
+              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
             >
               <option value="">すべて</option>
               {filters.sex.map((s) => (
@@ -177,7 +177,7 @@ export default function FilterPanel() {
                 min={18}
                 max={ageMax}
                 onChange={(e) => setAgeMin(Number.parseInt(e.target.value, 10) || 18)}
-                className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
+                className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
               />
               <span className="text-gray-500 self-center">〜</span>
               <input
@@ -186,7 +186,7 @@ export default function FilterPanel() {
                 min={ageMin}
                 max={100}
                 onChange={(e) => setAgeMax(Number.parseInt(e.target.value, 10) || 80)}
-                className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
+                className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
               />
             </div>
           </div>
@@ -196,7 +196,7 @@ export default function FilterPanel() {
             <select
               value={region}
               onChange={(e) => { setRegion(e.target.value); setPrefecture('') }}
-              className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
+              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
             >
               <option value="">すべての地域</option>
               {filters.regions.map((r) => (
@@ -210,7 +210,7 @@ export default function FilterPanel() {
             <select
               value={prefecture}
               onChange={(e) => setPrefecture(e.target.value)}
-              className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
+              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
             >
               <option value="">すべての都道府県</option>
               {filters.prefectures.map((p) => (
@@ -227,7 +227,7 @@ export default function FilterPanel() {
               onChange={(e) => setOccupation(e.target.value)}
               placeholder="職業を入力..."
               list="occupation-list"
-              className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none placeholder-gray-600"
+              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none placeholder-gray-600"
             />
             <datalist id="occupation-list">
               {filters.occupations_top50.map((o) => (
@@ -241,7 +241,7 @@ export default function FilterPanel() {
             <select
               value={education}
               onChange={(e) => setEducation(e.target.value)}
-              className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
+              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
             >
               <option value="">すべての学歴</option>
               {filters.education_levels.map((level) => (
@@ -255,7 +255,7 @@ export default function FilterPanel() {
             <select
               value={financialLiteracy}
               onChange={(e) => setFinancialLiteracy(e.target.value)}
-              className="w-full bg-[#141420] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none"
+              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
             >
               <option value="">すべて</option>
               {filters.financial_literacy.map((level) => (
@@ -275,8 +275,8 @@ export default function FilterPanel() {
               onClick={() => { setCount(preset.value); setCustomCount('') }}
               className={`px-4 py-2 rounded text-sm font-medium transition-colors
                 ${count === preset.value && !customCount
-                  ? 'bg-[#76B900] text-black'
-                  : 'bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] text-gray-300 hover:border-[#76B900]'
+                  ? 'bg-[#2563EB] text-black'
+                  : 'bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] text-gray-300 hover:border-[#2563EB]'
                 }`}
             >
               {preset.label}
@@ -290,7 +290,7 @@ export default function FilterPanel() {
               placeholder="カスタム"
               min={1}
               max={200}
-              className="w-24 bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] rounded px-3 py-2 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none placeholder-gray-600"
+              className="w-24 bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded px-3 py-2 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none placeholder-gray-600"
             />
           </div>
         </div>
@@ -299,7 +299,7 @@ export default function FilterPanel() {
       <button
         onClick={handleSample}
         disabled={sampling}
-        className="bg-[#76B900] hover:bg-[#8fd100] disabled:opacity-50 text-black font-bold px-6 py-2.5 rounded text-sm transition-colors"
+        className="bg-[#2563EB] hover:bg-[#3B82F6] disabled:opacity-50 text-black font-bold px-6 py-2.5 rounded text-sm transition-colors"
       >
         {sampling ? '抽出中...' : `ペルソナを抽出 (${resolvedCount}名)`}
       </button>
@@ -310,7 +310,7 @@ export default function FilterPanel() {
             <div className="text-sm text-gray-400">{personas.length}名 抽出済み</div>
             <button
               onClick={() => setStep(2)}
-              className="bg-[#00A3E0] hover:bg-[#0090c5] text-white font-bold px-5 py-2 rounded text-sm transition-colors"
+              className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white font-bold px-5 py-2 rounded text-sm transition-colors"
             >
               次へ: 調査設定 →
             </button>

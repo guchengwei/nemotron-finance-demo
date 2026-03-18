@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 body {
-  background-color: #0a0a0f;
-  color: #e0e0e0;
+  background-color: #0F172A;
+  color: #E2E8F0;
   font-family: 'Noto Sans JP', sans-serif;
 }
 
@@ -14,14 +14,14 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #141420;
+  background: #1E293B;
 }
 ::-webkit-scrollbar-thumb {
-  background: #333;
+  background: #334155;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #76B900;
+  background: #2563EB;
 }
 
 /* Typing animation */
@@ -32,16 +32,16 @@ body {
 .cursor-blink::after {
   content: '▊';
   animation: blink 1s infinite;
-  color: #76B900;
+  color: #2563EB;
 }
 
 /* Pulse animation for active persona */
-@keyframes pulse-green {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(118, 185, 0, 0.4); }
-  50% { box-shadow: 0 0 0 6px rgba(118, 185, 0, 0); }
+@keyframes pulse-blue {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0); }
 }
 .pulse-green {
-  animation: pulse-green 2s infinite;
+  animation: pulse-blue 2s infinite;
 }
 
 /* Fade in */

@@ -22,7 +22,7 @@ function SkillTags({ listStr }: { listStr?: string }) {
     return (
       <div className="flex flex-wrap gap-1 mt-1">
         {tags.map((tag, i) => (
-          <span key={i} className="text-[10px] bg-[#76B900]/10 text-[#76B900] px-1.5 py-0.5 rounded">
+          <span key={i} className="text-[10px] bg-[#2563EB]/10 text-[#2563EB] px-1.5 py-0.5 rounded">
             {tag}
           </span>
         ))}
@@ -47,8 +47,8 @@ export default function PersonaCards({ personas, maxVisible = 20 }: Props) {
           <button
             key={p.uuid}
             onClick={() => setSelected(p)}
-            className="text-left bg-[#1c1c2e] border border-[rgba(118,185,0,0.1)] rounded-lg p-3
-              hover:border-[rgba(118,185,0,0.4)] hover:bg-[#242438] transition-all fade-in"
+            className="text-left bg-[#1E2D40] border border-[rgba(37,99,235,0.1)] rounded-lg p-3
+              hover:border-[rgba(37,99,235,0.4)] hover:bg-[#242438] transition-all fade-in"
           >
             <div className="flex items-center gap-2 mb-2">
               <PersonaAvatar name={p.name} age={p.age} sex={p.sex} size={32} />
@@ -57,14 +57,14 @@ export default function PersonaCards({ personas, maxVisible = 20 }: Props) {
                 <div className="text-[10px] text-gray-500">{p.age}歳 · {sexDisplay(p.sex)}</div>
               </div>
             </div>
-            <div className="text-[11px] text-[#76B900] truncate mb-1">{p.occupation}</div>
+            <div className="text-[11px] text-[#2563EB] truncate mb-1">{p.occupation}</div>
             <div className="text-[10px] text-gray-500 truncate">{p.prefecture}（{p.region}）</div>
             <div className="text-[10px] text-gray-400 mt-1 line-clamp-2">{p.persona.slice(0, 60)}...</div>
             <SkillTags listStr={p.skills_and_expertise_list} />
           </button>
         ))}
         {remaining > 0 && (
-          <div className="bg-[#1c1c2e] border border-[rgba(118,185,0,0.1)] rounded-lg p-3 flex items-center justify-center">
+          <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.1)] rounded-lg p-3 flex items-center justify-center">
             <span className="text-gray-500 text-sm">他 {remaining} 名...</span>
           </div>
         )}

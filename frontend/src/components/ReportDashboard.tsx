@@ -100,7 +100,7 @@ export default function ReportDashboard() {
       </div>
 
       {/* Score overview */}
-      <div className="bg-[#1c1c2e] border border-[rgba(118,185,0,0.1)] rounded-xl p-6">
+      <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.1)] rounded-xl p-6">
         <div className="flex items-center gap-8">
           {report.overall_score !== undefined && (
             <ScoreCircle score={report.overall_score} />
@@ -108,7 +108,7 @@ export default function ReportDashboard() {
           <div className="flex-1">
             {report.group_tendency && (
               <div className="mb-3">
-                <div className="text-xs font-semibold text-[#76B900] mb-1">グループ傾向</div>
+                <div className="text-xs font-semibold text-[#2563EB] mb-1">グループ傾向</div>
                 <div className="text-sm text-gray-300 leading-relaxed">{report.group_tendency}</div>
               </div>
             )}
@@ -118,8 +118,8 @@ export default function ReportDashboard() {
 
       {/* Conclusion */}
       {report.conclusion && (
-        <div className="bg-[#141420] border-l-4 border-[#76B900] rounded-r-lg px-5 py-4">
-          <div className="text-xs font-semibold text-[#76B900] mb-2">総合結論・推奨アクション</div>
+        <div className="bg-[#1E293B] border-l-4 border-[#2563EB] rounded-r-lg px-5 py-4">
+          <div className="text-xs font-semibold text-[#2563EB] mb-2">総合結論・推奨アクション</div>
           <div className="text-sm text-gray-200 leading-relaxed">{report.conclusion}</div>
         </div>
       )}

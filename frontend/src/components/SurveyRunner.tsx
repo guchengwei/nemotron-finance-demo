@@ -14,7 +14,7 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
         <span className="transition-transform group-open:rotate-90 inline-block">▸</span>
         <span>思考過程</span>
       </summary>
-      <div className="mt-1 text-xs text-gray-600 bg-[#0a0a0f] rounded p-2 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+      <div className="mt-1 text-xs text-gray-600 bg-[#0F172A] rounded p-2 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
         {thinking}
       </div>
     </details>
@@ -39,12 +39,12 @@ const PersonaListItem = React.memo(function PersonaListItem({
   onClick: () => void
 }) {
   const statusIcon = status === 'complete' ? '✓' : status === 'error' ? '✗' : status === 'active' ? '●' : '○'
-  const statusColor = status === 'complete' ? 'text-green-400' : status === 'error' ? 'text-red-400' : status === 'active' ? 'text-[#76B900]' : 'text-gray-600'
+  const statusColor = status === 'complete' ? 'text-green-400' : status === 'error' ? 'text-red-400' : status === 'active' ? 'text-[#2563EB]' : 'text-gray-600'
 
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-3 py-2 flex items-center gap-2 rounded transition-colors ${isActive ? 'bg-[#76B900]/10 border border-[rgba(118,185,0,0.3)]' : 'hover:bg-[#1c1c2e]'}`}
+      className={`w-full text-left px-3 py-2 flex items-center gap-2 rounded transition-colors ${isActive ? 'bg-[#2563EB]/10 border border-[rgba(37,99,235,0.3)]' : 'hover:bg-[#1E2D40]'}`}
     >
       <span className={`text-xs ${statusColor} ${status === 'active' ? 'pulse-green' : ''}`}>
         {statusIcon}
@@ -133,7 +133,7 @@ export default function SurveyRunner() {
               }
               setStep(4)
             }}
-            className="bg-[#76B900] text-black font-bold px-4 py-2 rounded text-sm"
+            className="bg-[#2563EB] text-black font-bold px-4 py-2 rounded text-sm"
           >
             レポートを見る →
           </button>
@@ -151,7 +151,7 @@ export default function SurveyRunner() {
       {/* Main split view */}
       <div className="flex-1 flex gap-4 min-h-0">
         {/* Left: persona list */}
-        <div className="w-44 flex-shrink-0 bg-[#141420] rounded-lg overflow-y-auto">
+        <div className="w-44 flex-shrink-0 bg-[#1E293B] rounded-lg overflow-y-auto">
           <div className="px-3 py-2 text-[10px] text-gray-600 uppercase tracking-wider border-b border-[rgba(255,255,255,0.05)]">
             ペルソナ一覧
           </div>
@@ -174,7 +174,7 @@ export default function SurveyRunner() {
         </div>
 
         {/* Right: live Q&A feed */}
-        <div className="flex-1 bg-[#141420] rounded-lg flex flex-col overflow-hidden">
+        <div className="flex-1 bg-[#1E293B] rounded-lg flex flex-col overflow-hidden">
           {displayState ? (
             <>
               {/* Persona header */}
@@ -192,7 +192,7 @@ export default function SurveyRunner() {
                   </div>
                 </div>
                 {displayState.status === 'active' && (
-                  <div className="ml-auto text-xs text-[#76B900] pulse-green">回答中...</div>
+                  <div className="ml-auto text-xs text-[#2563EB] pulse-green">回答中...</div>
                 )}
               </div>
 
@@ -201,7 +201,7 @@ export default function SurveyRunner() {
                 {displayState.answers.map((ans, i) => (
                   <div key={i} className="fade-in">
                     <div className="text-xs text-gray-500 mb-1">Q{i + 1}: {ans.question}</div>
-                    <div className="bg-[#1c1c2e] rounded-lg p-3 text-sm text-gray-200">
+                    <div className="bg-[#1E2D40] rounded-lg p-3 text-sm text-gray-200">
                       {ans.score !== undefined && (
                         <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded mr-2 text-white ${scoreBg(ans.score)}`}>
                           {ans.score}
@@ -229,7 +229,7 @@ export default function SurveyRunner() {
                     {displayState.activeThinking && (
                       <ThinkingBlock thinking={displayState.activeThinking} />
                     )}
-                    <div className="bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] rounded-lg p-3 text-sm text-gray-200 mt-1">
+                    <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded-lg p-3 text-sm text-gray-200 mt-1">
                       {isLarge ? (
                         displayState.activeAnswer || <span className="text-gray-600">回答中...</span>
                       ) : (

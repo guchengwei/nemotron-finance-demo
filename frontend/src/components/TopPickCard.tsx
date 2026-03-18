@@ -11,7 +11,7 @@ interface Props {
 const VARIANT_LABELS = {
   positive: { label: 'ポジティブ', color: 'text-green-400 bg-green-400/10' },
   negative: { label: 'ネガティブ', color: 'text-orange-400 bg-orange-400/10' },
-  unique: { label: 'ユニーク', color: 'text-[#00A3E0] bg-[#00A3E0]/10' },
+  unique: { label: 'ユニーク', color: 'text-[#0EA5E9] bg-[#0EA5E9]/10' },
 }
 
 export default function TopPickCard({ pick, persona, variant, onChat }: Props) {
@@ -20,7 +20,7 @@ export default function TopPickCard({ pick, persona, variant, onChat }: Props) {
   const sex = persona?.sex || '男'
 
   return (
-    <div className="bg-[#1c1c2e] border border-[rgba(118,185,0,0.15)] rounded-lg p-4 space-y-3">
+    <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.15)] rounded-lg p-4 space-y-3">
       {/* Variant badge */}
       <span className={`text-[10px] font-bold px-2 py-1 rounded ${v.color}`}>
         {v.label}
@@ -39,7 +39,7 @@ export default function TopPickCard({ pick, persona, variant, onChat }: Props) {
       <div className="text-xs text-gray-500">{pick.highlight_reason}</div>
 
       {/* Quote */}
-      <blockquote className="border-l-2 border-[#76B900] pl-3 text-sm text-gray-300 italic">
+      <blockquote className="border-l-2 border-[#2563EB] pl-3 text-sm text-gray-300 italic">
         「{pick.highlight_quote}」
       </blockquote>
 
@@ -47,7 +47,7 @@ export default function TopPickCard({ pick, persona, variant, onChat }: Props) {
       {onChat && (
         <button
           onClick={onChat}
-          className="w-full text-center text-xs text-[#00A3E0] hover:text-[#40c0f0] py-1.5 border border-[rgba(0,163,224,0.2)] rounded hover:border-[#00A3E0] transition-colors"
+          className="w-full text-center text-xs text-[#0EA5E9] hover:text-[#38BDF8] py-1.5 border border-[rgba(0,163,224,0.2)] rounded hover:border-[#0EA5E9] transition-colors"
         >
           この人に質問する →
         </button>

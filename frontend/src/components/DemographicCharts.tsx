@@ -19,16 +19,16 @@ function MiniChart({ title, data, colorByScore = false }: {
 }) {
   const dataKey = data[0]?.count !== undefined ? 'count' : 'score'
   return (
-    <div className="bg-[#141420] rounded-lg p-4">
+    <div className="bg-[#1E293B] rounded-lg p-4">
       <div className="text-xs font-semibold text-gray-400 mb-3">{title}</div>
       <ResponsiveContainer width="100%" height={120}>
         <BarChart data={data} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
           <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#888' }} />
           <YAxis tick={{ fontSize: 10, fill: '#888' }} domain={dataKey === 'score' ? [0, 5] : undefined} />
           <Tooltip
-            contentStyle={{ background: '#1c1c2e', border: '1px solid rgba(118,185,0,0.2)', borderRadius: 4 }}
+            contentStyle={{ background: '#1E2D40', border: '1px solid rgba(37,99,235,0.2)', borderRadius: 4 }}
             labelStyle={{ color: '#ccc', fontSize: 11 }}
-            itemStyle={{ color: '#76B900', fontSize: 11 }}
+            itemStyle={{ color: '#2563EB', fontSize: 11 }}
           />
           <Bar dataKey={dataKey} radius={[3, 3, 0, 0]}>
             {data.map((entry, i) => (

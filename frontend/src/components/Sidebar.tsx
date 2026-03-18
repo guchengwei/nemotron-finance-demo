@@ -4,7 +4,7 @@ import { api } from '../api'
 
 function scoreColor(score?: number): string {
   if (!score) return 'bg-gray-700 text-gray-400'
-  if (score >= 4.5) return 'bg-[#76B900] text-black'
+  if (score >= 4.5) return 'bg-[#2563EB] text-black'
   if (score >= 3.5) return 'bg-green-700 text-white'
   if (score >= 2.5) return 'bg-yellow-600 text-white'
   return 'bg-red-700 text-white'
@@ -32,14 +32,14 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-56 flex-shrink-0 bg-[#141420] border-r border-[rgba(118,185,0,0.1)] flex flex-col h-full">
-      <div className="p-4 border-b border-[rgba(118,185,0,0.1)]">
+    <aside className="w-56 flex-shrink-0 bg-[#1E293B] border-r border-[rgba(37,99,235,0.1)] flex flex-col h-full">
+      <div className="p-4 border-b border-[rgba(37,99,235,0.1)]">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-[#76B900] rounded flex items-center justify-center">
+          <div className="w-6 h-6 bg-[#2563EB] rounded flex items-center justify-center">
             <span className="text-black text-xs font-black">N</span>
           </div>
           <div>
-            <div className="text-xs font-bold text-[#76B900]">NEMOTRON</div>
+            <div className="text-xs font-bold text-[#2563EB]">NEMOTRON</div>
             <div className="text-[10px] text-gray-500">Financial Survey</div>
           </div>
         </div>
@@ -50,7 +50,7 @@ export default function Sidebar() {
           data-testid="new-survey-button"
           disabled={!dbReady}
           onClick={() => resetSurvey()}
-          className={`w-full bg-[#76B900] hover:bg-[#8fd100] text-black text-sm font-bold py-2 px-3 rounded transition-colors ${!dbReady ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`w-full bg-[#2563EB] hover:bg-[#3B82F6] text-black text-sm font-bold py-2 px-3 rounded transition-colors ${!dbReady ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           ＋ 新規調査
         </button>
@@ -69,7 +69,7 @@ export default function Sidebar() {
             <button
               key={run.id}
               onClick={() => loadRun(run.id)}
-              className="w-full text-left px-3 py-2 hover:bg-[#1c1c2e] border-b border-[rgba(255,255,255,0.03)] transition-colors group"
+              className="w-full text-left px-3 py-2 hover:bg-[#1E2D40] border-b border-[rgba(255,255,255,0.03)] transition-colors group"
             >
               <div className="flex items-center justify-between mb-1">
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${scoreColor(run.overall_score)}`}>

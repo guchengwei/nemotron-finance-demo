@@ -112,7 +112,7 @@ export default function SurveyConfig() {
           onChange={(e) => setSurveyTheme(e.target.value)}
           placeholder={DEFAULT_THEME}
           rows={3}
-          className="w-full bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] rounded-lg px-4 py-3 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none placeholder-gray-600 resize-none"
+          className="w-full bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded-lg px-4 py-3 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none placeholder-gray-600 resize-none"
         />
       </div>
 
@@ -123,7 +123,7 @@ export default function SurveyConfig() {
           value={surveyLabel}
           onChange={(e) => setSurveyLabel(e.target.value)}
           placeholder="例: 投信オンライン_40代男性_東京"
-          className="w-full bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:border-[#76B900] focus:outline-none placeholder-gray-600"
+          className="w-full bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none placeholder-gray-600"
         />
       </div>
 
@@ -133,7 +133,7 @@ export default function SurveyConfig() {
           <button
             onClick={generateQuestions}
             disabled={!surveyTheme || generatingQuestions}
-            className="text-xs text-[#00A3E0] hover:text-[#40c0f0] disabled:opacity-50 transition-colors"
+            className="text-xs text-[#0EA5E9] hover:text-[#38BDF8] disabled:opacity-50 transition-colors"
           >
             {generatingQuestions ? '生成中...' : '✨ AIに質問を生成させる'}
           </button>
@@ -157,12 +157,12 @@ export default function SurveyConfig() {
                   onChange={(e) => updateQuestion(i, e.target.value)}
                   onBlur={() => setEditingIdx(null)}
                   rows={2}
-                  className="flex-1 bg-[#1c1c2e] border border-[#76B900] rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none resize-none"
+                  className="flex-1 bg-[#1E2D40] border border-[#2563EB] rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none resize-none"
                 />
               ) : (
                 <button
                   onClick={() => setEditingIdx(i)}
-                  className="flex-1 text-left bg-[#1c1c2e] border border-[rgba(118,185,0,0.1)] rounded px-3 py-2 text-sm text-gray-300 hover:border-[rgba(118,185,0,0.4)] transition-colors"
+                  className="flex-1 text-left bg-[#1E2D40] border border-[rgba(37,99,235,0.1)] rounded px-3 py-2 text-sm text-gray-300 hover:border-[rgba(37,99,235,0.4)] transition-colors"
                 >
                   {q || <span className="text-gray-600">（クリックして編集）</span>}
                 </button>
@@ -177,14 +177,14 @@ export default function SurveyConfig() {
           ))}
           <button
             onClick={addQuestion}
-            className="text-xs text-[#76B900] hover:text-[#8fd100] transition-colors mt-1"
+            className="text-xs text-[#2563EB] hover:text-[#3B82F6] transition-colors mt-1"
           >
             ＋ 質問を追加
           </button>
         </div>
       </div>
 
-      <div className="bg-[#141420] rounded-lg px-4 py-3 text-sm text-gray-400">
+      <div className="bg-[#1E293B] rounded-lg px-4 py-3 text-sm text-gray-400">
         推定所要時間: 約 <span className="text-white font-bold">{estimatedMinutes}分</span>
         <span className="text-gray-600 ml-2">
           ({selectedPersonas.length}名 × {questions.length}問 × ~3秒/回答)
@@ -194,7 +194,7 @@ export default function SurveyConfig() {
       <button
         onClick={handleStart}
         disabled={!surveyTheme || questions.length === 0 || selectedPersonas.length === 0}
-        className="w-full bg-[#76B900] hover:bg-[#8fd100] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-3 px-6 rounded-lg text-base transition-colors"
+        className="w-full bg-[#2563EB] hover:bg-[#3B82F6] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-3 px-6 rounded-lg text-base transition-colors"
       >
         調査を開始する →
       </button>

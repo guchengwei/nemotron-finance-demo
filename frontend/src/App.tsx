@@ -42,7 +42,7 @@ function QuickDemoButton() {
       data-testid="quick-demo-button"
       onClick={handleQuickDemo}
       disabled={loading}
-      className="bg-[#00A3E0] hover:bg-[#0090c5] disabled:opacity-70 text-white font-bold px-6 py-3 rounded-lg text-sm transition-colors"
+      className="bg-[#0EA5E9] hover:bg-[#0284C7] disabled:opacity-70 text-white font-bold px-6 py-3 rounded-lg text-sm transition-colors"
     >
       {loading ? '起動中...' : '⚡ デモを実行'}
     </button>
@@ -66,7 +66,7 @@ function WelcomeScreen() {
         <button
           data-testid="custom-survey-button"
           onClick={() => useStore.getState().setStep(2)}
-          className="border border-[rgba(118,185,0,0.3)] text-[#76B900] hover:bg-[#76B900]/10 font-bold px-6 py-3 rounded-lg text-sm transition-colors"
+          className="border border-[rgba(37,99,235,0.3)] text-[#2563EB] hover:bg-[#2563EB]/10 font-bold px-6 py-3 rounded-lg text-sm transition-colors"
         >
           カスタム調査を始める
         </button>
@@ -102,9 +102,9 @@ export default function App() {
 
   if (!dbReady) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-2 border-[#76B900] border-t-transparent rounded-full mx-auto mb-4" />
+          <div className="animate-spin w-8 h-8 border-2 border-[#2563EB] border-t-transparent rounded-full mx-auto mb-4" />
           <p className="text-gray-300">データベースを準備中...</p>
           <p className="text-gray-500 text-sm mt-2">初回は数分かかる場合があります</p>
         </div>

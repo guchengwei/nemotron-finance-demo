@@ -34,16 +34,16 @@ export default function StepIndicator() {
               disabled={!canNav}
               className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors
                 ${isActive
-                  ? 'bg-[#76B900] text-black'
+                  ? 'bg-[#2563EB] text-black'
                   : isDone && canNav
-                  ? 'text-[#76B900] hover:bg-[#76B900]/10 cursor-pointer'
+                  ? 'text-[#2563EB] hover:bg-[#2563EB]/10 cursor-pointer'
                   : canNav
                   ? 'text-gray-400 hover:bg-white/5 cursor-pointer'
                   : 'text-gray-600 cursor-not-allowed'
                 }`}
             >
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
-                ${isActive ? 'bg-black/20' : isDone ? 'bg-[#76B900]/20' : 'bg-white/10'}`}
+                ${isActive ? 'bg-black/20' : isDone ? 'bg-[#2563EB]/20' : 'bg-white/10'}`}
               >
                 {isDone ? '✓' : step.id}
               </span>

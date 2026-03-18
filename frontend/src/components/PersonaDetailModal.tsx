@@ -10,7 +10,7 @@ function Section({ title, content }: { title: string; content?: string }) {
   if (!content) return null
   return (
     <div className="mb-4">
-      <div className="text-xs font-semibold text-[#76B900] mb-1">{title}</div>
+      <div className="text-xs font-semibold text-[#2563EB] mb-1">{title}</div>
       <div className="text-sm text-gray-300 leading-relaxed">{content}</div>
     </div>
   )
@@ -27,18 +27,18 @@ export default function PersonaDetailModal({ persona, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-[#1c1c2e] border border-[rgba(118,185,0,0.2)] rounded-lg w-full max-w-2xl max-h-[85vh] overflow-y-auto"
+        className="bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded-lg w-full max-w-2xl max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 p-5 border-b border-[rgba(118,185,0,0.1)] sticky top-0 bg-[#1c1c2e]">
+        <div className="flex items-center gap-3 p-5 border-b border-[rgba(37,99,235,0.1)] sticky top-0 bg-[#1E2D40]">
           <PersonaAvatar name={persona.name} age={persona.age} sex={persona.sex} size={48} />
           <div className="flex-1">
             <div className="text-lg font-bold text-white">{persona.name}</div>
             <div className="text-sm text-gray-400">
               {persona.age}歳 · {sexDisplay} · {persona.prefecture}（{persona.region}）
             </div>
-            <div className="text-sm text-[#76B900]">{persona.occupation}</div>
+            <div className="text-sm text-[#2563EB]">{persona.occupation}</div>
           </div>
           <button
             onClick={onClose}
@@ -52,11 +52,11 @@ export default function PersonaDetailModal({ persona, onClose }: Props) {
         <div className="p-5">
           {/* Basic info */}
           <div className="grid grid-cols-2 gap-2 mb-5 text-sm">
-            <div className="bg-[#141420] rounded p-2">
+            <div className="bg-[#1E293B] rounded p-2">
               <span className="text-gray-500">学歴: </span>
               <span className="text-gray-200">{persona.education_level}</span>
             </div>
-            <div className="bg-[#141420] rounded p-2">
+            <div className="bg-[#1E293B] rounded p-2">
               <span className="text-gray-500">婚姻: </span>
               <span className="text-gray-200">{persona.marital_status}</span>
             </div>
@@ -64,8 +64,8 @@ export default function PersonaDetailModal({ persona, onClose }: Props) {
 
           {/* Financial extension */}
           {persona.financial_extension && (
-            <div className="bg-[#141420] rounded-lg p-4 mb-5 border border-[rgba(118,185,0,0.15)]">
-              <div className="text-xs font-semibold text-[#76B900] mb-3">金融プロファイル</div>
+            <div className="bg-[#1E293B] rounded-lg p-4 mb-5 border border-[rgba(37,99,235,0.15)]">
+              <div className="text-xs font-semibold text-[#2563EB] mb-3">金融プロファイル</div>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div><span className="text-gray-500">リテラシー: </span><span className="text-white">{persona.financial_extension.financial_literacy}</span></div>
                 <div><span className="text-gray-500">年収帯: </span><span className="text-white">{persona.financial_extension.annual_income_bracket}</span></div>

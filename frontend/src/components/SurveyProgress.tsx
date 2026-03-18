@@ -13,9 +13,9 @@ export default function SurveyProgress({ completed, total, failed, averageScore 
     <div className="space-y-2">
       {/* Progress bar */}
       <div className="flex items-center gap-3">
-        <div className="flex-1 bg-[#141420] rounded-full h-2 overflow-hidden">
+        <div className="flex-1 bg-[#1E293B] rounded-full h-2 overflow-hidden">
           <div
-            className="h-full bg-[#76B900] transition-all duration-500"
+            className="h-full bg-[#2563EB] transition-all duration-500"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -29,7 +29,7 @@ export default function SurveyProgress({ completed, total, failed, averageScore 
         {failed > 0 && <span>失敗: <span className="text-red-400 font-bold">{failed}</span></span>}
         {averageScore !== undefined && (
           <span className="ml-auto">
-            平均スコア: <span className="text-[#76B900] font-bold">{averageScore.toFixed(1)}</span>
+            平均スコア: <span className="text-[#2563EB] font-bold">{averageScore.toFixed(1)}</span>
           </span>
         )}
       </div>

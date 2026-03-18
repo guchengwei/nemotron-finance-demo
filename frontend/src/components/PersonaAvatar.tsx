@@ -16,7 +16,7 @@ function hashStr(s: string): number {
 }
 
 const COLORS = [
-  '#76B900', '#00A3E0', '#4ade80', '#60a5fa', '#a78bfa',
+  '#2563EB', '#0EA5E9', '#4ade80', '#60a5fa', '#a78bfa',
   '#f472b6', '#fb923c', '#34d399', '#38bdf8', '#818cf8',
 ]
 

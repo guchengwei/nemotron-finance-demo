@@ -8,11 +8,11 @@ interface Props {
 
 export default function Layout({ children }: Props) {
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0a0a0f]">
+    <div className="flex h-screen overflow-hidden bg-[#0F172A]">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="flex-shrink-0 bg-[#141420] border-b border-[rgba(118,185,0,0.1)] px-6 py-3">
+        <header className="flex-shrink-0 bg-[#1E293B] border-b border-[rgba(37,99,235,0.1)] px-6 py-3">
           <StepIndicator />
         </header>
         {/* Main content */}
