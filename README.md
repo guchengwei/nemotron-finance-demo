@@ -93,7 +93,7 @@ Guides you through all settings and writes `.env`. Presets:
 
 | Preset | Description |
 |--------|-------------|
-| `local-mock` | No GPU, mock responses, local SQLite in `~/.local/share/` |
+| `local-mock` | No GPU, mock responses, local SQLite in `./data` |
 | `local-vllm` | GPU on localhost, vLLM on port 8000 |
 | `k8s` | Kubernetes / Run:ai pod, paths under `/genai/finance/` |
 | `docker` | Docker Compose stack, vLLM service name `vllm` |
@@ -119,7 +119,7 @@ $EDITOR .env
 | `LLM_MAX_TOKENS` | `512` | Max tokens per survey answer |
 | `REPORT_MAX_TOKENS` | `4096` | Max tokens for report generation |
 | `LLM_CONCURRENCY` | `4` | Simultaneous LLM calls (asyncio semaphore) |
-| `DATA_DIR` | `/genai/finance/data` | Directory for SQLite databases |
+| `DATA_DIR` | `./data` | Directory for SQLite databases in local/default setups; K8s preset overrides this to `/genai/finance/data` |
 | `PERSONA_PARQUET_PATH` | _(blank)_ | Path to parquet file; blank = auto-download |
 | `DB_PATH` | `$DATA_DIR/personas.db` | Persona database (~4 GB with 1M rows) |
 | `HISTORY_DB_PATH` | `$DATA_DIR/history.db` | Survey run history database |
