@@ -18,7 +18,7 @@ source venv/bin/activate
 pip install -q -r requirements.txt
 
 # Ensure data dir exists
-DATA_DIR="${DATA_DIR:-/workspace/data}"
+DATA_DIR="${DATA_DIR:-$REPO_DIR/data}"
 mkdir -p "$DATA_DIR"
 
 echo "[2/4] Starting backend (port 8080)..."
@@ -29,9 +29,26 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8080 --env-file "$REPO_DIR/.env
 BACKEND_PID=$!
 echo "Backend PID: $BACKEND_PID"
 
-# Wait for backend to be ready
-sleep 3
-echo "  Backend ready."
+echo -n "  Waiting for backend..."
+for i in $(seq 1 120); do
+    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+        echo
+        echo "ERROR: Backend process exited during startup."
+        wait "$BACKEND_PID"
+        exit 1
+    fi
+    if curl -fsS http://127.0.0.1:8080/ready >/dev/null 2>&1; then
+        echo " ready."
+        break
+    fi
+    sleep 5
+    echo -n "."
+    if [ "$i" -eq 120 ]; then
+        echo
+        echo "ERROR: Backend did not become ready after 600s."
+        exit 1
+    fi
+done
 
 # Seed demo history
 echo "[3/4] Seeding demo history..."
@@ -44,22 +61,19 @@ seed_history()
 " || echo "  (Seeding skipped — may already exist)"
 
 # Frontend
-echo "[4/4] Starting frontend (port 3000)..."
+echo "[4/4] Building frontend..."
 cd "$REPO_DIR/frontend"
 if [ ! -d "node_modules" ]; then
     npm install
 fi
-npm run dev -- --host 0.0.0.0 --port 3000 &
-FRONTEND_PID=$!
-echo "Frontend PID: $FRONTEND_PID"
+npm run build
 
 echo ""
 echo "=== Started! ==="
-echo "Frontend: http://localhost:3000"
-echo "Backend:  http://localhost:8080"
+echo "App:      http://localhost:8080"
 echo "API docs: http://localhost:8080/docs"
 echo ""
 echo "Press Ctrl+C to stop."
 
-trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit" INT TERM
+trap "kill $BACKEND_PID 2>/dev/null; exit" INT TERM
 wait

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Data paths
     data_dir: str = "./data"
-    persona_parquet_path: str = "./data/personas.parquet"
+    persona_parquet_path: str = ""
     persona_hf_dataset: str = "nvidia/Nemotron-Personas-Japan"
     db_path: str = "./data/personas.db"
     history_db_path: str = "./data/history.db"

@@ -45,7 +45,7 @@ A web application for event booth demos showcasing **NVIDIA Nemotron-Nano-9B-v2-
 Ideal for development, demo preparation, or any environment without a GPU.
 
 ```bash
-git clone https://github.com/YOUR_ORG/nemotron-finance-demo.git
+git clone https://github.com/guchengwei/nemotron-finance-demo.git
 cd nemotron-finance-demo
 
 # Interactive env setup — choose preset "1) local-mock"
@@ -69,7 +69,8 @@ pip install vllm
 vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese \
   --host 0.0.0.0 --port 8000 \
   --max-model-len 8192 \
-  --gpu-memory-utilization 0.9
+  --gpu-memory-utilization 0.9 \
+  --trust-remote-code
 
 # 3. Configure environment — choose preset "2) local-vllm"
 ./setup-env.sh
@@ -163,7 +164,7 @@ spec:
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_ORG/nemotron-finance-demo.git /genai/finance
+git clone https://github.com/guchengwei/nemotron-finance-demo.git /genai/finance
 cd /genai/finance
 
 # Install Node.js 20+ if not present
@@ -178,7 +179,8 @@ vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese \
   --host 0.0.0.0 --port 8000 \
   --max-model-len 8192 \
   --gpu-memory-utilization 0.9 \
-  --dtype bfloat16 &
+  --dtype bfloat16 \
+  --trust-remote-code &
 
 # Wait for model load (check: curl http://localhost:8000/v1/models)
 

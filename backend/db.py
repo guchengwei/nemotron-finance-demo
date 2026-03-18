@@ -41,11 +41,11 @@ def extract_name(persona_text: str) -> str:
 # -- Persona DB ---------------------------------------------------------------
 
 def _get_persona_conn():
-    return sqlite3.connect(settings.db_path)
+    return sqlite3.connect(settings.db_path, timeout=30)
 
 
 def _get_history_conn():
-    return sqlite3.connect(settings.history_db_path)
+    return sqlite3.connect(settings.history_db_path, timeout=30)
 
 
 async def get_persona_db() -> aiosqlite.Connection:
@@ -146,7 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_followup_run ON followup_chats(run_id, persona_uu
 
 def _create_history_db():
     os.makedirs(os.path.dirname(settings.history_db_path) or ".", exist_ok=True)
-    conn = sqlite3.connect(settings.history_db_path)
+    conn = sqlite3.connect(settings.history_db_path, timeout=30)
     conn.executescript(HISTORY_DDL)
     conn.commit()
     conn.close()
@@ -155,14 +155,25 @@ def _create_history_db():
 
 def _load_personas_to_sqlite():
     """Load parquet → SQLite. Skips if DB already has correct row count."""
-    parquet_path = Path(settings.persona_parquet_path)
+    raw_parquet = (settings.persona_parquet_path or "").strip()
+    if raw_parquet:
+        parquet_path = Path(raw_parquet).expanduser()
+    else:
+        parquet_path = Path(settings.data_dir) / "personas.parquet"
+
+    if str(parquet_path) in (".", "./", ""):
+        raise RuntimeError(
+            "PERSONA_PARQUET_PATH resolves to current directory. "
+            "Set it to a .parquet file path or leave blank for auto-download."
+        )
+
     db_path = Path(settings.db_path)
 
     os.makedirs(db_path.parent, exist_ok=True)
 
     # Check if DB already loaded
     if db_path.exists():
-        conn = sqlite3.connect(str(db_path))
+        conn = sqlite3.connect(str(db_path), timeout=30)
         try:
             row = conn.execute("SELECT COUNT(*) FROM personas").fetchone()
             existing_count = row[0] if row else 0
@@ -215,7 +226,7 @@ def _load_personas_to_sqlite():
     df_to_save = df[expected_cols]
 
     # Write to SQLite
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=30)
     conn.executescript(PERSONA_DDL)
     df_to_save.to_sql("personas", conn, if_exists="replace", index=False, chunksize=10000)
     # Re-create indexes after replace
@@ -233,7 +244,7 @@ def _load_personas_to_sqlite():
     logger.info("Persona DB loaded: %d rows", count)
 
     # Print sample for verification
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=30)
     conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT uuid, name, sex, age, occupation, prefecture FROM personas LIMIT 3").fetchall()
     for r in rows:
@@ -244,7 +255,7 @@ def _load_personas_to_sqlite():
 
 
 def _ensure_financial_ext_table():
-    conn = sqlite3.connect(settings.db_path)
+    conn = sqlite3.connect(settings.db_path, timeout=30)
     conn.executescript(FINANCIAL_EXT_DDL)
     conn.commit()
     conn.close()
