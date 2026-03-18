@@ -4,7 +4,36 @@ from pathlib import Path
 import pytest
 
 from config import settings
-from db import PERSONA_DDL, _create_history_db
+from db import _create_history_db
+
+# Minimal DDL for the personas table used by seed_demo_history.py
+_PERSONAS_DDL = """
+CREATE TABLE IF NOT EXISTS personas (
+    uuid TEXT PRIMARY KEY,
+    name TEXT,
+    professional_persona TEXT,
+    sports_persona TEXT,
+    arts_persona TEXT,
+    travel_persona TEXT,
+    culinary_persona TEXT,
+    persona TEXT,
+    cultural_background TEXT,
+    skills_and_expertise TEXT,
+    skills_and_expertise_list TEXT,
+    hobbies_and_interests TEXT,
+    hobbies_and_interests_list TEXT,
+    career_goals_and_ambitions TEXT,
+    sex TEXT,
+    age INTEGER,
+    marital_status TEXT,
+    education_level TEXT,
+    occupation TEXT,
+    region TEXT,
+    area TEXT,
+    prefecture TEXT,
+    country TEXT
+);
+"""
 
 
 @pytest.fixture()
@@ -23,7 +52,7 @@ def persona_db(tmp_path):
     """Create a minimal persona DB with one row."""
     db_path = str(tmp_path / "personas.db")
     conn = sqlite3.connect(db_path)
-    conn.executescript(PERSONA_DDL)
+    conn.executescript(_PERSONAS_DDL)
     conn.execute(
         "INSERT INTO personas (uuid, name, persona, country, sex, age, marital_status,"
         " education_level, occupation, region, area, prefecture)"

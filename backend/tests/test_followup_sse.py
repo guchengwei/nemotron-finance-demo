@@ -11,30 +11,15 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import settings
-from db import PERSONA_DDL, _create_history_db
+from db import _create_history_db
 from routers import followup
 
 
 @pytest.fixture()
 def followup_client(tmp_path):
     history_db = str(tmp_path / "history.db")
-    persona_db = str(tmp_path / "personas.db")
 
-    conn = sqlite3.connect(persona_db)
-    conn.executescript(PERSONA_DDL)
-    conn.execute(
-        "INSERT INTO personas (uuid, name, persona, country, sex, age, marital_status,"
-        " education_level, occupation, region, area, prefecture)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        ("p1", "テスト太郎", "テストペルソナ", "日本", "男", 30,
-         "未婚", "大学卒", "会社員", "関東", "都心", "東京都"),
-    )
-    conn.commit()
-    conn.close()
-
-    orig_db = settings.db_path
     orig_hist = settings.history_db_path
-    settings.db_path = persona_db
     settings.history_db_path = history_db
 
     _create_history_db()
@@ -61,7 +46,6 @@ def followup_client(tmp_path):
     with TestClient(app) as c:
         yield c
 
-    settings.db_path = orig_db
     settings.history_db_path = orig_hist
 
 

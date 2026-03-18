@@ -3,110 +3,21 @@
 import logging
 from typing import Optional
 
-import aiosqlite
 from fastapi import APIRouter, Query
 
-from config import settings
 from models import CountResponse, FiltersResponse, PersonaSample, Persona, FinancialExtension
+from persona_store import get_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/personas', tags=['personas'])
 
-FINANCIAL_LITERACY_OPTIONS = ['初心者', '中級者', '上級者', '専門家']
-AGE_RANGES = ['20-29', '30-39', '40-49', '50-59', '60-69', '70+']
-
-
-def build_persona_filters(
-    sex: Optional[str],
-    age_min: Optional[int],
-    age_max: Optional[int],
-    prefecture: Optional[str],
-    region: Optional[str],
-    occupation: Optional[str],
-    education: Optional[str],
-    financial_literacy: Optional[str],
-) -> tuple[list[str], list[object], str, str]:
-    conditions: list[str] = []
-    params: list[object] = []
-
-    if sex:
-        conditions.append('p.sex = ?')
-        params.append(sex)
-    if age_min is not None:
-        conditions.append('p.age >= ?')
-        params.append(age_min)
-    if age_max is not None:
-        conditions.append('p.age <= ?')
-        params.append(age_max)
-    if prefecture:
-        conditions.append('p.prefecture = ?')
-        params.append(prefecture)
-    if region:
-        conditions.append('p.region = ?')
-        params.append(region)
-    if occupation:
-        conditions.append('p.occupation LIKE ?')
-        params.append(f'%{occupation}%')
-    if education:
-        conditions.append('p.education_level LIKE ?')
-        params.append(f'%{education}%')
-
-    if financial_literacy:
-        join_clause = 'INNER JOIN persona_financial_context pfc ON p.uuid = pfc.persona_uuid'
-        conditions.append('pfc.financial_literacy = ?')
-        params.append(financial_literacy)
-    else:
-        join_clause = 'LEFT JOIN persona_financial_context pfc ON p.uuid = pfc.persona_uuid'
-
-    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ''
-    return conditions, params, join_clause, where_clause
-
-
-async def fetch_total_matching(
-    db: aiosqlite.Connection,
-    join_clause: str,
-    where_clause: str,
-    params: list[object],
-) -> int:
-    count_query = f'SELECT COUNT(*) FROM personas p {join_clause} {where_clause}'
-    count_row = await db.execute_fetchall(count_query, params)
-    return count_row[0][0] if count_row else 0
-
 
 @router.get('/filters', response_model=FiltersResponse)
 async def get_filters():
-    """Return distinct filter values from the persona database."""
-    async with aiosqlite.connect(settings.db_path) as db:
-        db.row_factory = aiosqlite.Row
-
-        async def fetch_col(col: str) -> list[str]:
-            rows = await db.execute_fetchall(
-                f'SELECT DISTINCT {col} FROM personas WHERE {col} IS NOT NULL ORDER BY {col}'
-            )
-            return [r[0] for r in rows if r[0]]
-
-        sex_vals = await fetch_col('sex')
-        regions = await fetch_col('region')
-        prefectures = await fetch_col('prefecture')
-        education_levels = await fetch_col('education_level')
-        occ_rows = await db.execute_fetchall(
-            'SELECT occupation, COUNT(*) as cnt FROM personas '
-            'WHERE occupation IS NOT NULL GROUP BY occupation ORDER BY cnt DESC LIMIT 50'
-        )
-        top_occupations = [r[0] for r in occ_rows]
-        count_row = await db.execute_fetchall('SELECT COUNT(*) FROM personas')
-        total_count = count_row[0][0] if count_row else 0
-
-    return FiltersResponse(
-        sex=sex_vals,
-        age_ranges=AGE_RANGES,
-        regions=regions,
-        prefectures=prefectures,
-        occupations_top50=top_occupations,
-        education_levels=education_levels,
-        financial_literacy=FINANCIAL_LITERACY_OPTIONS,
-        total_count=total_count,
-    )
+    """Return distinct filter values from the persona store."""
+    store = get_store()
+    f = store.get_filters()
+    return FiltersResponse(**f)
 
 
 @router.get('/count', response_model=CountResponse)
@@ -120,22 +31,14 @@ async def get_count(
     education: Optional[str] = Query(None),
     financial_literacy: Optional[str] = Query(None),
 ):
-    _, params, join_clause, where_clause = build_persona_filters(
-        sex,
-        age_min,
-        age_max,
-        prefecture,
-        region,
-        occupation,
-        education,
-        financial_literacy,
+    store = get_store()
+    total = store.count(
+        sex=sex, age_min=age_min, age_max=age_max,
+        region=region, prefecture=prefecture,
+        occupation=occupation, education=education,
+        financial_literacy=financial_literacy,
     )
-
-    async with aiosqlite.connect(settings.db_path) as db:
-        db.row_factory = aiosqlite.Row
-        total_matching = await fetch_total_matching(db, join_clause, where_clause, params)
-
-    return CountResponse(total_matching=total_matching)
+    return CountResponse(total_matching=total)
 
 
 @router.get('/sample', response_model=PersonaSample)
@@ -150,37 +53,16 @@ async def get_sample(
     financial_literacy: Optional[str] = Query(None),
     count: int = Query(8, ge=1, le=200),
 ):
-    """Return a filtered random sample of personas."""
-    _, params, join_clause, where_clause = build_persona_filters(
-        sex,
-        age_min,
-        age_max,
-        prefecture,
-        region,
-        occupation,
-        education,
-        financial_literacy,
+    store = get_store()
+    total, rows = store.sample(
+        count=count,
+        sex=sex, age_min=age_min, age_max=age_max,
+        region=region, prefecture=prefecture,
+        occupation=occupation, education=education,
+        financial_literacy=financial_literacy,
     )
-
-    async with aiosqlite.connect(settings.db_path) as db:
-        db.row_factory = aiosqlite.Row
-        total_matching = await fetch_total_matching(db, join_clause, where_clause, params)
-
-        if total_matching == 0:
-            return PersonaSample(total_matching=0, sampled=[])
-
-        sample_query = (
-            'SELECT p.*, pfc.financial_literacy, pfc.investment_experience, '
-            'pfc.financial_concerns, pfc.annual_income_bracket, pfc.asset_bracket, '
-            'pfc.primary_bank_type '
-            f'FROM personas p {join_clause} {where_clause} '
-            'ORDER BY RANDOM() LIMIT ?'
-        )
-        rows = await db.execute_fetchall(sample_query, params + [count])
-
     personas = []
-    for row in rows:
-        record = dict(row)
+    for record in rows:
         fin_ext = None
         if record.get('financial_literacy'):
             fin_ext = FinancialExtension(
@@ -217,5 +99,4 @@ async def get_sample(
             country=record.get('country'),
             financial_extension=fin_ext,
         ))
-
-    return PersonaSample(total_matching=total_matching, sampled=personas)
+    return PersonaSample(total_matching=total, sampled=personas)

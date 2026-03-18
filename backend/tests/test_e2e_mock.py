@@ -1,51 +1,55 @@
 import json
-import sqlite3
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import settings
-from db import PERSONA_DDL, _create_history_db
+from db import _create_history_db
+from persona_store import PersonaStore
 
 
 @pytest.fixture()
 def e2e_client(tmp_path):
     """Full app client with mock LLM and temp DBs."""
-    persona_db = str(tmp_path / "personas.db")
     history_db = str(tmp_path / "history.db")
 
-    conn = sqlite3.connect(persona_db)
-    conn.executescript(PERSONA_DDL)
-    conn.execute(
-        "INSERT INTO personas (uuid, name, persona, country, sex, age, marital_status,"
-        " education_level, occupation, region, area, prefecture)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        ("p1", "テスト太郎", "テストペルソナ", "日本", "男", 30,
-         "未婚", "大学卒", "会社員", "関東", "都心", "東京都"),
-    )
-    conn.commit()
-    conn.close()
-
-    orig_db = settings.db_path
     orig_hist = settings.history_db_path
     orig_mock = settings.mock_llm
-    settings.db_path = persona_db
     settings.history_db_path = history_db
     settings.mock_llm = True
 
     _create_history_db()
 
+    df = pd.DataFrame([{
+        "uuid": "p1", "name": "テスト太郎", "persona": "テストペルソナ",
+        "country": "日本", "sex": "男", "age": 30, "marital_status": "未婚",
+        "education_level": "大学卒", "occupation": "会社員", "region": "関東",
+        "area": "都心", "prefecture": "東京都", "professional_persona": "会社員",
+        "cultural_background": "日本", "skills_and_expertise": "営業",
+        "skills_and_expertise_list": None, "hobbies_and_interests": "読書",
+        "hobbies_and_interests_list": None, "career_goals_and_ambitions": "昇進",
+        "sports_persona": None, "arts_persona": None, "travel_persona": None,
+        "culinary_persona": None, "financial_literacy": None,
+        "investment_experience": None, "financial_concerns": None,
+        "annual_income_bracket": None, "asset_bracket": None,
+        "primary_bank_type": None,
+    }])
+    store = PersonaStore(df)
+
     import main
     main._db_ready.set()
 
-    with TestClient(main.app) as c:
-        yield c
+    with patch("routers.personas.get_store", return_value=store), \
+         patch("persona_store.get_store", return_value=store):
+        with TestClient(main.app) as c:
+            yield c
 
-    settings.db_path = orig_db
     settings.history_db_path = orig_hist
     settings.mock_llm = orig_mock
 

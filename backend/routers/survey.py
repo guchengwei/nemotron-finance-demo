@@ -34,20 +34,9 @@ def extract_score(text: str) -> int | None:
     return None
 
 
-async def _get_persona(db: aiosqlite.Connection, persona_id: str) -> dict | None:
-    db.row_factory = aiosqlite.Row
-    rows = await db.execute_fetchall(
-        "SELECT p.*, pfc.financial_literacy, pfc.investment_experience, "
-        "pfc.financial_concerns, pfc.annual_income_bracket, pfc.asset_bracket, "
-        "pfc.primary_bank_type "
-        "FROM personas p "
-        "LEFT JOIN persona_financial_context pfc ON p.uuid = pfc.persona_uuid "
-        "WHERE p.uuid = ?",
-        [persona_id]
-    )
-    if not rows:
-        return None
-    return dict(rows[0])
+async def _get_persona(persona_id: str) -> dict | None:
+    from persona_store import get_store
+    return get_store().get_persona(persona_id)
 
 
 def _build_financial_ext(row: dict) -> dict | None:
@@ -76,12 +65,11 @@ async def _run_persona_survey(
     run_id: str,
     survey_theme: str,
     event_queue: asyncio.Queue,
-    persona_db: aiosqlite.Connection,
     history_db: aiosqlite.Connection,
 ):
     """Run all questions for a single persona and queue SSE events."""
     try:
-        persona = await _get_persona(persona_db, persona_id)
+        persona = await _get_persona(persona_id)
         if not persona:
             logger.warning("Persona %s not found", persona_id)
             return
@@ -200,11 +188,10 @@ async def _survey_stream(request: SurveyRunRequest) -> AsyncGenerator[str, None]
 
         async def run_with_sem(pid, idx):
             async with semaphore:
-                async with aiosqlite.connect(settings.db_path) as persona_db:
-                    await _run_persona_survey(
-                        pid, idx, total, questions, run_id,
-                        request.survey_theme, event_queue, persona_db, history_db
-                    )
+                await _run_persona_survey(
+                    pid, idx, total, questions, run_id,
+                    request.survey_theme, event_queue, history_db
+                )
 
         tasks = [asyncio.create_task(run_with_sem(pid, i)) for i, pid in enumerate(persona_ids)]
 

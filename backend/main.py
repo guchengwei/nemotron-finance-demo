@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from db import init_db
 from routers import personas, survey, report, followup, history
 
 logging.basicConfig(
@@ -30,15 +29,22 @@ class _ReadyEndpointFilter(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(_ReadyEndpointFilter())
 
 _db_ready = threading.Event()
+_db_init_error: str | None = None
 
 
 def _init_db_background():
+    global _db_init_error
     try:
-        init_db()
+        from persona_store import init_persona_store
+        from db import _create_history_db
+        init_persona_store()
+        _create_history_db()
         _db_ready.set()
         logger.info("Databases ready.")
-    except Exception:
+    except Exception as e:
         logger.exception("Database initialization failed.")
+        _db_init_error = str(e)
+        _db_ready.set()  # Unblock frontend polling — error state will be reported
 
 
 @asynccontextmanager
@@ -85,6 +91,11 @@ async def health():
 @app.get("/ready")
 async def ready():
     if _db_ready.is_set():
+        if _db_init_error:
+            return JSONResponse(
+                {"status": "error", "detail": _db_init_error},
+                status_code=500,
+            )
         return {"status": "ready"}
     return JSONResponse({"status": "loading"}, status_code=503)
 

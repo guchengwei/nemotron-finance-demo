@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     mock_llm: bool = False
     llm_temperature: float = 0.7
     llm_max_tokens: int = 512
+    followup_max_tokens: int = 2048
     report_max_tokens: int = 4096
     llm_concurrency: int = 4
 
