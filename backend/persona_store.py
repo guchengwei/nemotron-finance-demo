@@ -5,7 +5,6 @@ All filter/sample/lookup operations are sub-millisecond on 1M rows.
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -84,6 +83,7 @@ class PersonaStore:
             if col in df.columns:
                 df = df[df[col] == financial_literacy]
             else:
+                logger.warning("financial_literacy column not found in DataFrame; returning empty result")
                 df = df.iloc[0:0]  # empty
         return df
 

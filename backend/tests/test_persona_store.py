@@ -105,3 +105,12 @@ def test_occupation_filter_uses_partial_match(store):
 
 def test_education_filter_uses_partial_match(store):
     assert store.count(education="大学") == 3
+
+
+def test_financial_literacy_filter_missing_column_returns_empty(store, caplog):
+    """When financial_literacy column is absent, return empty and emit a warning."""
+    import logging
+    with caplog.at_level(logging.WARNING, logger="persona_store"):
+        result = store.count(financial_literacy="初心者")
+    assert result == 0
+    assert "financial_literacy column not found" in caplog.text
