@@ -93,10 +93,10 @@ Guides you through all settings and writes `.env`. Presets:
 
 | Preset | Description |
 |--------|-------------|
-| `local-mock` | No GPU, mock responses, local SQLite in `./data` |
-| `local-vllm` | GPU on localhost, vLLM on port 8000 |
-| `k8s` | Kubernetes / Run:ai pod, paths under `/genai/finance/` |
-| `docker` | Docker Compose stack, vLLM service name `vllm` |
+| `local-mock` | No GPU, mock responses, repo-local SQLite in `./data` |
+| `local-vllm` | GPU on localhost, vLLM on port 8000; same default repo-local data paths |
+| `k8s` | Kubernetes / Run:ai pod; same default paths, different host/runtime settings |
+| `docker` | Docker Compose stack; same default paths, different host/runtime settings |
 | `custom` | Manual entry for every setting |
 
 ### Manual
@@ -119,8 +119,8 @@ $EDITOR .env
 | `LLM_MAX_TOKENS` | `512` | Max tokens per survey answer |
 | `REPORT_MAX_TOKENS` | `4096` | Max tokens for report generation |
 | `LLM_CONCURRENCY` | `4` | Simultaneous LLM calls (asyncio semaphore) |
-| `DATA_DIR` | `./data` | Directory for SQLite databases in local/default setups; K8s preset overrides this to `/genai/finance/data` |
-| `PERSONA_PARQUET_PATH` | _(blank)_ | Path to parquet file; blank = auto-download |
+| `DATA_DIR` | `./data` | Default directory for SQLite databases, resolved relative to the repo |
+| `PERSONA_PARQUET_PATH` | _(blank)_ | Default is blank for all presets; blank = auto-download into the default data location |
 | `DB_PATH` | `$DATA_DIR/personas.db` | Persona database (~4 GB with 1M rows) |
 | `HISTORY_DB_PATH` | `$DATA_DIR/history.db` | Survey run history database |
 | `BACKEND_HOST` | `0.0.0.0` | Uvicorn bind host |
