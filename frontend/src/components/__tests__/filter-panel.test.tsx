@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FilterPanel from '../FilterPanel'
 import { api } from '../../api'
 import { useStore } from '../../store'
@@ -10,6 +10,7 @@ vi.mock('../../api', () => ({
     getFilters: vi.fn(),
     getCount: vi.fn(),
     getSample: vi.fn(),
+    generateQuestions: vi.fn(),
     getHistory: vi.fn(),
     getHistoryRun: vi.fn(),
     generateReport: vi.fn(),
@@ -68,6 +69,10 @@ describe('FilterPanel', () => {
     mockedApi.getSample.mockResolvedValue({ total_matching: 1, sampled: [sampledPersona] })
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('loads filters and displays total count', async () => {
     render(<FilterPanel />)
 
@@ -102,7 +107,9 @@ describe('FilterPanel', () => {
 
     const sexSelect = (await screen.findAllByRole('combobox'))[0]
     await user.selectOptions(sexSelect, '男')
+    await new Promise((resolve) => setTimeout(resolve, 300))
     await user.selectOptions(sexSelect, '女')
+    await new Promise((resolve) => setTimeout(resolve, 300))
 
     second.resolve({ total_matching: 7 })
     await waitFor(() => {
@@ -110,9 +117,8 @@ describe('FilterPanel', () => {
     })
 
     first.resolve({ total_matching: 3 })
-    await waitFor(() => {
-      expect(screen.getByTestId('match-count')).toHaveTextContent('7')
-    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(screen.getByTestId('match-count')).toHaveTextContent('7')
   })
 
   it('sampling uses custom count when provided', async () => {

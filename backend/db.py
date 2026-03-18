@@ -1,6 +1,8 @@
-"""SQLite database initialization and access.
+"""Deprecated SQLite-backed history store helpers.
 
-History DB only — persona data is now in-memory via persona_store.py.
+Persona data no longer lives in SQLite. Personas are loaded from parquet into
+the pandas-backed `persona_store.py`. This module remains only for persisted
+survey history and follow-up chat state.
 """
 
 import re

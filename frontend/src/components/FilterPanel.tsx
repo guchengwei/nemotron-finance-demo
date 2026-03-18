@@ -91,20 +91,22 @@ export default function FilterPanel() {
     const controller = new AbortController()
     const requestId = latestCountRequest.current + 1
     latestCountRequest.current = requestId
-    setCountLoading(true)
-
-    api.getCount(queryParams, controller.signal).then((result) => {
-      if (latestCountRequest.current !== requestId) return
-      setMatchCount(result.total_matching)
-      setCountLoading(false)
-    }).catch((error) => {
-      if ((error as Error).name === 'AbortError') return
-      if (latestCountRequest.current !== requestId) return
-      console.error(error)
-      setCountLoading(false)
-    })
+    const timeoutId = window.setTimeout(() => {
+      setCountLoading(true)
+      api.getCount(queryParams, controller.signal).then((result) => {
+        if (latestCountRequest.current !== requestId) return
+        setMatchCount(result.total_matching)
+        setCountLoading(false)
+      }).catch((error) => {
+        if ((error as Error).name === 'AbortError') return
+        if (latestCountRequest.current !== requestId) return
+        console.error(error)
+        setCountLoading(false)
+      })
+    }, 250)
 
     return () => {
+      window.clearTimeout(timeoutId)
       controller.abort()
     }
   }, [filters, queryParams, sex, ageMin, ageMax, region, prefecture, occupation, education, financialLiteracy])

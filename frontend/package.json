@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:real-llm": "playwright test -c playwright.real-llm.config.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

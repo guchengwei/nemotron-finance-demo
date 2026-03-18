@@ -95,7 +95,7 @@ export default function ReportDashboard() {
   const theme = surveyTheme || currentHistoryRun?.survey_theme || '—'
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div data-testid="report-dashboard-screen" className="space-y-6 max-w-5xl">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

@@ -9,6 +9,7 @@ vi.mock('../../api', () => ({
   api: {
     getFilters: vi.fn(),
     getSample: vi.fn(),
+    generateQuestions: vi.fn(),
     getHistory: vi.fn(),
     getHistoryRun: vi.fn(),
     generateReport: vi.fn(),

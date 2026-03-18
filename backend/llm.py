@@ -136,7 +136,16 @@ async def _mock_stream_answer(text: str) -> AsyncGenerator[str, None]:
 
 def _strip_thinking(text: str) -> str:
     """Strip <think>...</think> blocks from non-streaming responses."""
-    return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    cleaned = re.sub(r'</?think>', '', cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
+def sanitize_answer_text(text: str) -> str:
+    """Remove leaked reasoning markup from model-visible answer text."""
+    cleaned = _strip_thinking(text)
+    cleaned = re.sub(r'</think>', '', cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
 
 
 async def _stream_split_thinking(
@@ -156,15 +165,22 @@ async def _stream_split_thinking(
         buf += delta
         while True:
             if not in_think:
+                if buf.startswith('</think>'):
+                    buf = buf[len('</think>'):]
+                    continue
                 start = buf.find('<think>')
                 if start == -1:
                     if buf:
-                        yield ('answer', buf)
+                        answer_chunk = re.sub(r'</think>', '', buf, flags=re.IGNORECASE)
+                        if answer_chunk:
+                            yield ('answer', answer_chunk)
                         buf = ""
                     break
                 # flush answer content before <think> (rare but handle it)
                 if start > 0:
-                    yield ('answer', buf[:start])
+                    answer_chunk = re.sub(r'</think>', '', buf[:start], flags=re.IGNORECASE)
+                    if answer_chunk:
+                        yield ('answer', answer_chunk)
                 buf = buf[start + len('<think>'):]
                 in_think = True
                 think_buf = ""
@@ -182,7 +198,9 @@ async def _stream_split_thinking(
     if in_think and (think_buf or buf):
         yield ('think', think_buf + buf)
     elif buf:
-        yield ('answer', buf)
+        answer_chunk = re.sub(r'</think>', '', buf, flags=re.IGNORECASE)
+        if answer_chunk:
+            yield ('answer', answer_chunk)
 
 
 async def call_llm(
@@ -207,7 +225,7 @@ async def call_llm(
             temperature=settings.llm_temperature,
             max_tokens=max_tokens or settings.llm_max_tokens,
         )
-        return _strip_thinking(resp.choices[0].message.content or "")
+        return sanitize_answer_text(resp.choices[0].message.content or "")
 
 
 async def stream_survey_answer(
@@ -288,7 +306,13 @@ async def generate_questions(survey_theme: str) -> list[str]:
 
     if settings.mock_llm:
         await asyncio.sleep(0.5)
-        return MOCK_QUESTIONS[:4]
+        theme = survey_theme.strip() or "金融サービス"
+        return [
+            f"{theme}について、全体的な関心度を教えてください（1:全く関心がない〜5:非常に関心がある）",
+            f"{theme}で最も魅力を感じる点、または期待する体験は何ですか？",
+            f"{theme}を利用する際に不安に感じる点や、事前に知りたい情報は何ですか？",
+            f"{theme}をより使いやすくするために必要だと思う改善点を教えてください。",
+        ]
 
     client = get_client()
     resp = await client.chat.completions.create(
@@ -297,7 +321,7 @@ async def generate_questions(survey_theme: str) -> list[str]:
         temperature=0.9,
         max_tokens=512,
     )
-    text = _strip_thinking(resp.choices[0].message.content or "[]")
+    text = sanitize_answer_text(resp.choices[0].message.content or "[]")
     # Strip markdown code blocks if present
     text = re.sub(r'```(?:json)?\s*', '', text).strip()
     # Try to extract JSON array from the response
@@ -333,7 +357,10 @@ async def generate_report(
 ) -> dict:
     """Generate a report from survey answers."""
     from prompts import REPORT_SYSTEM_PROMPT
-    import json_repair
+    try:
+        import json_repair
+    except ImportError:
+        json_repair = None
 
     if settings.mock_llm:
         await asyncio.sleep(1.0)
@@ -359,7 +386,9 @@ async def generate_report(
     text = _strip_thinking(resp.choices[0].message.content or "{}")
     text = re.sub(r'```(?:json)?\s*', '', text).strip()
     try:
-        return json_repair.loads(text)
+        if json_repair is not None:
+            return json_repair.loads(text)
+        return json.loads(text)
     except Exception:
         logger.error("Report JSON parse failed: %s", text[:200])
         return {}

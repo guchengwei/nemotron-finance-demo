@@ -29,6 +29,7 @@ interface AppState {
   currentRunId: string | null
   setCurrentRunId: (id: string | null) => void
   personaStates: Record<string, PersonaRunState>
+  setPersonaStates: (states: Record<string, PersonaRunState>) => void
   setPersonaState: (uuid: string, state: PersonaRunState) => void
   updatePersonaState: (uuid: string, update: Partial<PersonaRunState>) => void
   surveyComplete: boolean
@@ -82,6 +83,7 @@ export const useStore = create<AppState>((set) => ({
   currentRunId: null,
   setCurrentRunId: (currentRunId) => set({ currentRunId }),
   personaStates: {},
+  setPersonaStates: (personaStates) => set({ personaStates }),
   setPersonaState: (uuid, state) =>
     set((s) => ({ personaStates: { ...s.personaStates, [uuid]: state } })),
   updatePersonaState: (uuid, update) =>

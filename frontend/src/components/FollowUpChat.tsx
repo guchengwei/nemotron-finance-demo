@@ -16,14 +16,18 @@ interface Message {
   thinking?: string
 }
 
+function sanitizeVisibleText(text: string) {
+  return text.replace(/<\/?think>/gi, '').trim()
+}
+
 function ThinkingBlock({ thinking }: { thinking: string }) {
   return (
-    <details className="mb-1.5 group">
+    <details data-testid="followup-thinking-block" className="mb-1.5 group">
       <summary className="text-[10px] text-gray-600 cursor-pointer select-none list-none flex items-center gap-1 hover:text-gray-500 transition-colors w-fit">
         <span className="transition-transform group-open:rotate-90 inline-block">▸</span>
         <span>思考過程</span>
       </summary>
-      <div className="mt-1 text-xs text-gray-600 bg-[#0F172A] rounded p-2 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+      <div className="mt-1 text-xs text-slate-300 bg-[#0F172A] rounded p-2 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto border border-[rgba(148,163,184,0.18)]">
         {thinking}
       </div>
     </details>
@@ -41,12 +45,11 @@ export default function FollowUpChat() {
 
   const runId = currentRunId || currentHistoryRun?.id
 
-  // Load existing chat history
   useEffect(() => {
     if (!followupPersona || !currentHistoryRun) return
     const existing = currentHistoryRun.followup_chats[followupPersona.uuid] || []
     if (existing.length > 0) {
-      setMessages(existing as Message[])
+      setMessages(existing.map((msg) => ({ ...msg, content: sanitizeVisibleText(msg.content) })) as Message[])
     }
   }, [followupPersona, currentHistoryRun])
 
@@ -60,10 +63,8 @@ export default function FollowUpChat() {
     setSending(true)
 
     const userMsg: Message = { role: 'user', content: text }
-    setMessages((prev) => [...prev, userMsg])
-
     const assistantMsg: Message = { role: 'assistant', content: '', streaming: true }
-    setMessages((prev) => [...prev, assistantMsg])
+    setMessages((prev) => [...prev, userMsg, assistantMsg])
 
     cancelRef.current = startFollowupSSE(
       { run_id: runId, persona_uuid: followupPersona.uuid, question: text },
@@ -71,7 +72,7 @@ export default function FollowUpChat() {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (last.role === 'assistant' && last.streaming) {
-            return [...prev.slice(0, -1), { ...last, content: last.content + chunk }]
+            return [...prev.slice(0, -1), { ...last, content: sanitizeVisibleText(last.content + chunk) }]
           }
           return prev
         })
@@ -80,7 +81,7 @@ export default function FollowUpChat() {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (last.role === 'assistant') {
-            return [...prev.slice(0, -1), { ...last, content: full, streaming: false }]
+            return [...prev.slice(0, -1), { ...last, content: sanitizeVisibleText(full), streaming: false }]
           }
           return prev
         })
@@ -96,11 +97,11 @@ export default function FollowUpChat() {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (last.role === 'assistant' && last.streaming) {
-            return [...prev.slice(0, -1), { ...last, thinking }]
+            return [...prev.slice(0, -1), { ...last, thinking: sanitizeVisibleText(thinking) }]
           }
           return prev
         })
-      }
+      },
     )
   }
 
@@ -119,10 +120,8 @@ export default function FollowUpChat() {
   const theme = surveyTheme || currentHistoryRun?.survey_theme
 
   return (
-    <div className="flex gap-6 h-full">
-      {/* Left: persona info + survey answers */}
+    <div data-testid="followup-screen" className="flex gap-6 h-full">
       <div className="w-72 flex-shrink-0 space-y-4 overflow-y-auto">
-        {/* Persona card */}
         <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.15)] rounded-lg p-4">
           <div className="flex items-center gap-3 mb-3">
             <PersonaAvatar
@@ -138,14 +137,18 @@ export default function FollowUpChat() {
             </div>
           </div>
           <div className="text-xs text-gray-500">{followupPersona.prefecture}（{followupPersona.region}）</div>
-          <div className="mt-2">
-            <div className={`text-xs text-gray-400 ${profileExpanded ? '' : 'line-clamp-3'}`}>
+          <div className="mt-3">
+            <div
+              data-testid="followup-profile-text"
+              className={`text-xs text-gray-300 whitespace-pre-wrap transition-all ${profileExpanded ? '' : 'max-h-24 overflow-hidden'}`}
+            >
               {followupPersona.persona}
             </div>
-            {followupPersona.persona && followupPersona.persona.length > 120 && (
+            {followupPersona.persona && (
               <button
-                onClick={() => setProfileExpanded(v => !v)}
-                className="text-[10px] text-gray-600 hover:text-gray-400 mt-1 transition-colors"
+                data-testid="followup-profile-toggle"
+                onClick={() => setProfileExpanded((v) => !v)}
+                className="text-[10px] text-gray-500 hover:text-gray-300 mt-2 transition-colors"
               >
                 {profileExpanded ? '▲ 折りたたむ' : '▼ すべて表示'}
               </button>
@@ -153,7 +156,6 @@ export default function FollowUpChat() {
           </div>
         </div>
 
-        {/* Back button */}
         <button
           onClick={() => setStep(4)}
           className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
@@ -161,7 +163,6 @@ export default function FollowUpChat() {
           ← レポートに戻る
         </button>
 
-        {/* Survey context */}
         {theme && (
           <div className="bg-[#1E293B] rounded-lg p-3">
             <div className="text-[10px] text-gray-600 mb-1">調査テーマ</div>
@@ -170,9 +171,7 @@ export default function FollowUpChat() {
         )}
       </div>
 
-      {/* Right: chat */}
       <div className="flex-1 flex flex-col bg-[#1E293B] rounded-xl overflow-hidden">
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
             <div className="text-center text-gray-600 text-sm py-8">
@@ -194,13 +193,14 @@ export default function FollowUpChat() {
                   <ThinkingBlock thinking={msg.thinking} />
                 )}
                 <div
-                  className={`px-4 py-2.5 rounded-2xl text-sm ${
+                  data-testid={msg.role === 'assistant' ? 'followup-answer-bubble' : undefined}
+                  className={`px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap ${
                     msg.role === 'user'
                       ? 'bg-[#2563EB] text-black rounded-br-sm'
-                      : 'bg-[#1E2D40] text-gray-200 rounded-bl-sm'
+                      : 'bg-[#F8FAFC] text-slate-900 rounded-bl-sm border border-[rgba(37,99,235,0.15)]'
                   } ${msg.streaming ? 'cursor-blink' : ''}`}
                 >
-                  {msg.content || (msg.streaming ? '' : '（空の回答）')}
+                  {sanitizeVisibleText(msg.content) || (msg.streaming ? '' : '（空の回答）')}
                 </div>
               </div>
             </div>
@@ -208,15 +208,13 @@ export default function FollowUpChat() {
           <div ref={bottomRef} />
         </div>
 
-        {/* Suggested questions */}
         {messages.length === 0 && (
           <div className="px-4 pb-2 flex flex-wrap gap-2">
             {SUGGESTED_QUESTIONS.map((q, i) => (
               <button
                 key={i}
                 onClick={() => send(q)}
-                className="text-xs text-[#0EA5E9] border border-[rgba(0,163,224,0.2)] px-3 py-1.5 rounded-full
-                  hover:border-[#0EA5E9] hover:bg-[#0EA5E9]/5 transition-colors"
+                className="text-xs text-[#0EA5E9] border border-[rgba(0,163,224,0.2)] px-3 py-1.5 rounded-full hover:border-[#0EA5E9] hover:bg-[#0EA5E9]/5 transition-colors"
               >
                 {q}
               </button>
@@ -224,17 +222,16 @@ export default function FollowUpChat() {
           </div>
         )}
 
-        {/* Input */}
         <div className="p-4 border-t border-[rgba(255,255,255,0.05)] flex gap-3">
           <input
+            data-testid="followup-input"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
             placeholder={`${followupPersona.name} に質問する...`}
             disabled={sending}
-            className="flex-1 bg-[#1E2D40] border border-[rgba(37,99,235,0.15)] rounded-lg px-4 py-2.5 text-sm text-gray-200
-              focus:border-[#2563EB] focus:outline-none placeholder-gray-600 disabled:opacity-50"
+            className="flex-1 bg-[#1E2D40] border border-[rgba(37,99,235,0.15)] rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none placeholder-gray-600 disabled:opacity-50"
           />
           <button
             onClick={() => send(input)}

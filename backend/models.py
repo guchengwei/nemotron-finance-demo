@@ -67,6 +67,14 @@ class SurveyRunRequest(BaseModel):
     label: Optional[str] = None
 
 
+class QuestionGenerationRequest(BaseModel):
+    survey_theme: str
+
+
+class QuestionGenerationResponse(BaseModel):
+    questions: List[str]
+
+
 class SurveyAnswer(BaseModel):
     persona_uuid: str
     question_index: int

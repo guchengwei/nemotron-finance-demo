@@ -54,6 +54,78 @@ type PersonaQueryParams = {
   financial_literacy?: string
 }
 
+type SSECallbacks = {
+  onEvent: (event: string, data: unknown) => void
+  onError: (err: Error) => void
+}
+
+function createSSEProcessor({ onEvent, onError }: SSECallbacks) {
+  let buffer = ''
+  let currentEvent = ''
+  let currentData: string[] = []
+
+  const flush = () => {
+    if (!currentEvent) return
+    try {
+      const payload = currentData.join('\n')
+      const parsed = payload ? JSON.parse(payload) : null
+      onEvent(currentEvent, parsed)
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error('Malformed SSE payload'))
+    }
+    currentEvent = ''
+    currentData = []
+  }
+
+  return {
+    push(chunk: string) {
+      buffer += chunk
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const rawLine of lines) {
+        const line = rawLine.replace(/\r$/, '')
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim()
+        } else if (line.startsWith('data: ')) {
+          currentData.push(line.slice(6))
+        } else if (line === '') {
+          flush()
+        }
+      }
+    },
+    finish() {
+      if (buffer) {
+        this.push('\n')
+      }
+      flush()
+    },
+  }
+}
+
+async function streamSSE(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  callbacks: SSECallbacks,
+): Promise<void> {
+  const res = await fetch(input, init)
+  if (!res.ok || !res.body) {
+    throw new Error(`SSE request failed: ${res.status}`)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  const processor = createSSEProcessor(callbacks)
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    processor.push(decoder.decode(value, { stream: true }))
+  }
+
+  processor.finish()
+}
+
 export const api = {
   getFilters: (): Promise<FiltersResponse> => get('/personas/filters'),
 
@@ -67,6 +139,9 @@ export const api = {
     signal?: AbortSignal,
   ): Promise<PersonaSample> => get('/personas/sample', params as Record<string, string | number | undefined>, signal),
 
+  generateQuestions: (survey_theme: string): Promise<{ questions: string[] }> =>
+    post('/survey/questions', { survey_theme }),
+
   generateReport: (run_id: string): Promise<ReportResponse> =>
     post('/report/generate', { run_id }),
 
@@ -78,21 +153,21 @@ export const api = {
 
   async checkReady(): Promise<{ ready: boolean; error?: string }> {
     try {
-      const res = await fetch('/ready');
-      if (res.ok) return { ready: true };
+      const res = await fetch('/ready')
+      if (res.ok) return { ready: true }
       if (res.status === 500) {
-        const data = await res.json();
-        return { ready: false, error: data.detail || 'Database initialization failed' };
+        const data = await res.json()
+        return { ready: false, error: data.detail || 'Database initialization failed' }
       }
-      return { ready: false };
+      return { ready: false }
     } catch {
-      return { ready: false };
+      return { ready: false }
     }
   },
 
   async checkHealth(): Promise<{ status: string; mock_llm: boolean; llm_reachable: boolean }> {
-    const res = await fetch('/health');
-    return res.json();
+    const res = await fetch('/health')
+    return res.json()
   },
 }
 
@@ -104,50 +179,24 @@ export function startSurveySSE(
   let aborted = false
   const controller = new AbortController()
 
-  fetch('/api/survey/run', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-    signal: controller.signal,
-  }).then(async (res) => {
-    if (!res.ok || !res.body) {
-      onError(new Error(`Survey run failed: ${res.status}`))
-      return
-    }
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (!aborted) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      let currentEvent = ''
-      let currentData = ''
-
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7).trim()
-        } else if (line.startsWith('data: ')) {
-          currentData = line.slice(6).trim()
-        } else if (line === '' && currentEvent && currentData) {
-          try {
-            const parsed = JSON.parse(currentData)
-            onEvent(currentEvent, parsed)
-          } catch {
-            // skip malformed
-          }
-          currentEvent = ''
-          currentData = ''
-        }
-      }
-    }
-  }).catch((err) => {
-    if (!aborted) onError(err)
+  streamSSE(
+    '/api/survey/run',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    },
+    {
+      onEvent: (event, data) => {
+        if (!aborted) onEvent(event, data)
+      },
+      onError: (err) => {
+        if (!aborted) onError(err)
+      },
+    },
+  ).catch((err) => {
+    if (!aborted) onError(err instanceof Error ? err : new Error(String(err)))
   })
 
   return () => {
@@ -166,52 +215,29 @@ export function startFollowupSSE(
   let aborted = false
   const controller = new AbortController()
 
-  fetch('/api/followup/ask', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-    signal: controller.signal,
-  }).then(async (res) => {
-    if (!res.ok || !res.body) {
-      onError(new Error(`Followup failed: ${res.status}`))
-      return
-    }
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (!aborted) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      let currentEvent = ''
-      let currentData = ''
-
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7).trim()
-        } else if (line.startsWith('data: ')) {
-          currentData = line.slice(6).trim()
-        } else if (line === '' && currentEvent && currentData) {
-          try {
-            const parsed = JSON.parse(currentData)
-            if (currentEvent === 'token') onToken(parsed.text)
-            if (currentEvent === 'done') onDone(parsed.full_answer)
-            if (currentEvent === 'thinking') onThinking?.(parsed.thinking)
-          } catch {
-            // skip
-          }
-          currentEvent = ''
-          currentData = ''
-        }
-      }
-    }
-  }).catch((err) => {
-    if (!aborted) onError(err)
+  streamSSE(
+    '/api/followup/ask',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    },
+    {
+      onEvent: (currentEvent, parsed) => {
+        if (aborted || !parsed || typeof parsed !== 'object') return
+        const data = parsed as Record<string, string>
+        if (currentEvent === 'token' && data.text) onToken(data.text)
+        if (currentEvent === 'done' && data.full_answer !== undefined) onDone(data.full_answer)
+        if (currentEvent === 'thinking' && data.thinking) onThinking?.(data.thinking)
+        if (currentEvent === 'error') onError(new Error(data.error || 'Followup stream failed'))
+      },
+      onError: (err) => {
+        if (!aborted) onError(err)
+      },
+    },
+  ).catch((err) => {
+    if (!aborted) onError(err instanceof Error ? err : new Error(String(err)))
   })
 
   return () => {

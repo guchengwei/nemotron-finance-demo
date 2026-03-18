@@ -9,7 +9,7 @@ import aiosqlite
 
 from config import settings
 from models import FollowUpRequest
-from llm import stream_followup_answer
+from llm import sanitize_answer_text, stream_followup_answer
 from prompts import build_followup_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ async def _followup_stream(request: FollowUpRequest):
                     data = json.dumps({"thinking": chunk}, ensure_ascii=False)
                     yield f"event: thinking\ndata: {data}\n\n"
                 else:
-                    full_answer += chunk
+                    full_answer += sanitize_answer_text(chunk)
                     data = json.dumps({"text": chunk}, ensure_ascii=False)
                     yield f"event: token\ndata: {data}\n\n"
         except Exception as e:
@@ -99,6 +99,8 @@ async def _followup_stream(request: FollowUpRequest):
             err_data = json.dumps({"error": str(e)}, ensure_ascii=False)
             yield f"event: error\ndata: {err_data}\n\n"
             full_answer = "（回答を取得できませんでした）"
+
+        full_answer = sanitize_answer_text(full_answer)
 
         # Save assistant response
         await history_db.execute(

@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     backend_host: str = "0.0.0.0"
     backend_port: int = 8080
     cors_origins: str = '["*"]'
+    e2e_mode: bool = False
 
     @property
     def cors_origins_list(self) -> List[str]:

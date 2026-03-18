@@ -13,46 +13,64 @@ import type {
 } from '../types'
 
 export function useSurvey() {
-  const store = useStore()
   const cancelRef = useRef<(() => void) | null>(null)
   const chunkBuffer = useRef<Record<string, string>>({})
   const flushRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const startingRef = useRef(false)
+
+  const stopFlushLoop = () => {
+    if (flushRef.current) {
+      clearInterval(flushRef.current)
+      flushRef.current = null
+    }
+  }
+
+  const flushBufferedChunks = () => {
+    const s = useStore.getState()
+    for (const [pid, text] of Object.entries(chunkBuffer.current)) {
+      const ps = s.personaStates[pid]
+      if (ps && text) {
+        s.updatePersonaState(pid, { activeAnswer: (ps.activeAnswer || '') + text })
+      }
+    }
+    chunkBuffer.current = {}
+  }
 
   const startSurvey = useCallback(() => {
-    const { selectedPersonas, surveyTheme, questions, surveyLabel } = useStore.getState()
+    if (startingRef.current) return
+    startingRef.current = true
 
-    // Reset persona states
-    const initialStates: typeof store.personaStates = {}
-    for (const p of selectedPersonas) {
-      initialStates[p.uuid] = {
-        persona: p,
-        status: 'waiting',
-        answers: [],
-      }
-    }
-    store.setPersonaState = store.setPersonaState  // reference
-    for (const [uuid, state] of Object.entries(initialStates)) {
-      store.setPersonaState(uuid, state)
-    }
-    store.setSurveyComplete(false)
-    store.setSurveyCounts(0, 0)
+    cancelRef.current?.()
+    cancelRef.current = null
+    stopFlushLoop()
+    chunkBuffer.current = {}
 
-    // Start batched flush for chunks
-    if (flushRef.current) clearInterval(flushRef.current)
+    const { selectedPersonas, surveyTheme, questions, surveyLabel, setPersonaStates, setSurveyComplete, setSurveyCounts, setCurrentHistoryRun, setCurrentReport } = useStore.getState()
+
+    const initialStates = Object.fromEntries(
+      selectedPersonas.map((p) => [p.uuid, { persona: p, status: 'waiting' as const, answers: [] }]),
+    )
+    setPersonaStates(initialStates)
+    setCurrentHistoryRun(null)
+    setCurrentReport(null)
+    setSurveyComplete(false)
+    setSurveyCounts(0, 0)
+
     flushRef.current = setInterval(() => {
-      const buf = chunkBuffer.current
-      const keys = Object.keys(buf)
-      if (keys.length === 0) return
-      const s = useStore.getState()
-      for (const pid of keys) {
-        const ps = s.personaStates[pid]
-        if (ps) {
-          const current = ps.activeAnswer || ''
-          s.updatePersonaState(pid, { activeAnswer: current + buf[pid] })
-        }
-      }
-      chunkBuffer.current = {}
+      flushBufferedChunks()
     }, 100)
+
+    const finishWithError = () => {
+      const s = useStore.getState()
+      stopFlushLoop()
+      flushBufferedChunks()
+      const completedCount = Object.values(s.personaStates).filter((ps) => ps.status === 'complete').length
+      const failedCount = Math.max(1, Object.values(s.personaStates).filter((ps) => ps.status === 'error').length)
+      s.setSurveyComplete(true)
+      s.setSurveyCounts(completedCount, failedCount)
+      cancelRef.current = null
+      startingRef.current = false
+    }
 
     const cancel = startSurveySSE(
       {
@@ -67,6 +85,7 @@ export function useSurvey() {
           case 'run_created': {
             const d = data as SSERunCreated
             s.setCurrentRunId(d.run_id)
+            startingRef.current = false
             break
           }
           case 'questions_generated': {
@@ -76,19 +95,17 @@ export function useSurvey() {
           }
           case 'persona_start': {
             const d = data as SSEPersonaStart
-            s.updatePersonaState(d.persona_uuid, { status: 'active', activeAnswer: '' })
+            s.updatePersonaState(d.persona_uuid, { status: 'active', activeAnswer: '', activeQuestion: 0 })
             break
           }
           case 'persona_thinking': {
             const d = data as SSEPersonaThinking
-            s.updatePersonaState(d.persona_uuid, { activeThinking: d.thinking })
+            s.updatePersonaState(d.persona_uuid, { activeThinking: d.thinking, activeQuestion: d.question_index })
             break
           }
           case 'persona_answer_chunk': {
             const d = data as SSEPersonaAnswerChunk
-            // Buffer chunks instead of immediate store update
             chunkBuffer.current[d.persona_uuid] = (chunkBuffer.current[d.persona_uuid] || '') + d.chunk
-            // Still update activeQuestion immediately (it's cheap)
             const ps = s.personaStates[d.persona_uuid]
             if (ps && ps.activeQuestion !== d.question_index) {
               s.updatePersonaState(d.persona_uuid, { activeQuestion: d.question_index })
@@ -97,7 +114,7 @@ export function useSurvey() {
           }
           case 'persona_answer': {
             const d = data as SSEPersonaAnswer
-            // Flush any buffered chunks for this persona
+            const buffered = chunkBuffer.current[d.persona_uuid] || ''
             delete chunkBuffer.current[d.persona_uuid]
             const ps = s.personaStates[d.persona_uuid]
             if (ps) {
@@ -105,7 +122,7 @@ export function useSurvey() {
               const q = s.questions[d.question_index] || `Q${d.question_index + 1}`
               newAnswers[d.question_index] = {
                 question: q,
-                answer: d.answer,
+                answer: d.answer || buffered,
                 score: d.score || undefined,
                 thinking: d.thinking || undefined,
               }
@@ -125,58 +142,29 @@ export function useSurvey() {
           }
           case 'persona_error': {
             const d = data as { persona_uuid: string }
-            s.updatePersonaState(d.persona_uuid, { status: 'error' })
+            s.updatePersonaState(d.persona_uuid, { status: 'error', activeAnswer: '', activeThinking: undefined })
             break
           }
           case 'survey_complete': {
             const d = data as SSESurveyComplete
-            // Flush any remaining chunks
-            if (flushRef.current) {
-              clearInterval(flushRef.current)
-              flushRef.current = null
-            }
-            const buf = chunkBuffer.current
-            for (const [pid, text] of Object.entries(buf)) {
-              const ps2 = s.personaStates[pid]
-              if (ps2) s.updatePersonaState(pid, { activeAnswer: (ps2.activeAnswer || '') + text })
-            }
-            chunkBuffer.current = {}
+            stopFlushLoop()
+            flushBufferedChunks()
             s.setSurveyComplete(true)
             s.setSurveyCounts(d.completed, d.failed)
             cancelRef.current = null
+            startingRef.current = false
             break
           }
           case 'survey_error': {
-            // Server-side error: mark survey as complete with whatever we have
-            if (flushRef.current) {
-              clearInterval(flushRef.current)
-              flushRef.current = null
-            }
-            chunkBuffer.current = {}
-            const completedCount = Object.values(s.personaStates).filter(ps => ps.status === 'complete').length
-            const failedCount = Object.values(s.personaStates).filter(ps => ps.status === 'error').length
-            s.setSurveyComplete(true)
-            s.setSurveyCounts(completedCount, failedCount || 1)
-            cancelRef.current = null
+            finishWithError()
             break
           }
         }
       },
       (err) => {
         console.error('Survey SSE error:', err)
-        // On SSE connection error, mark survey as complete to prevent blank screen
-        const s = useStore.getState()
-        if (flushRef.current) {
-          clearInterval(flushRef.current)
-          flushRef.current = null
-        }
-        chunkBuffer.current = {}
-        const completedCount = Object.values(s.personaStates).filter(ps => ps.status === 'complete').length
-        const failedCount = Object.values(s.personaStates).filter(ps => ps.status === 'error').length
-        s.setSurveyComplete(true)
-        s.setSurveyCounts(completedCount, failedCount || 1)
-        cancelRef.current = null
-      }
+        finishWithError()
+      },
     )
 
     cancelRef.current = cancel
@@ -185,11 +173,9 @@ export function useSurvey() {
   const cancelSurvey = useCallback(() => {
     cancelRef.current?.()
     cancelRef.current = null
-    if (flushRef.current) {
-      clearInterval(flushRef.current)
-      flushRef.current = null
-    }
+    stopFlushLoop()
     chunkBuffer.current = {}
+    startingRef.current = false
   }, [])
 
   return { startSurvey, cancelSurvey }

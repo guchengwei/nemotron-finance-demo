@@ -7,13 +7,14 @@ import re
 import uuid
 from typing import AsyncGenerator
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 import aiosqlite
 
 from config import settings
-from models import SurveyRunRequest
-from llm import stream_survey_answer, generate_questions
+from e2e_support import get_e2e_scenario
+from models import QuestionGenerationRequest, QuestionGenerationResponse, SurveyRunRequest
+from llm import generate_questions, sanitize_answer_text, stream_survey_answer
 from prompts import build_survey_system_prompt, sex_display
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ async def _run_persona_survey(
     survey_theme: str,
     event_queue: asyncio.Queue,
     history_db: aiosqlite.Connection,
+    e2e_scenario: str | None = None,
 ):
     """Run all questions for a single persona and queue SSE events."""
     try:
@@ -97,7 +99,7 @@ async def _run_persona_survey(
                             "data": {"persona_uuid": persona_id, "question_index": q_idx, "thinking": chunk}
                         })
                     else:
-                        full_answer += chunk
+                        full_answer += sanitize_answer_text(chunk)
                         await event_queue.put({
                             "event": "persona_answer_chunk",
                             "data": {"persona_uuid": persona_id, "question_index": q_idx, "chunk": chunk}
@@ -114,6 +116,7 @@ async def _run_persona_survey(
                     },
                 })
 
+            full_answer = sanitize_answer_text(full_answer)
             score = extract_score(full_answer)
 
             # Save to history
@@ -141,6 +144,17 @@ async def _run_persona_survey(
                 }
             })
 
+            if e2e_scenario == "survey_fail_mid_run" and persona_index == 0 and q_idx == 0:
+                await event_queue.put({
+                    "event": "persona_error",
+                    "data": {
+                        "persona_uuid": persona_id,
+                        "question_index": q_idx,
+                        "error": "E2E forced survey interruption",
+                    },
+                })
+                raise RuntimeError("E2E forced survey interruption after partial output")
+
         await event_queue.put({
             "event": "persona_complete",
             "data": {"persona_uuid": persona_id, "index": persona_index}
@@ -154,7 +168,10 @@ async def _run_persona_survey(
         })
 
 
-async def _survey_stream(request: SurveyRunRequest) -> AsyncGenerator[str, None]:
+async def _survey_stream(
+    request: SurveyRunRequest,
+    e2e_scenario: str | None = None,
+) -> AsyncGenerator[str, None]:
     run_id = str(uuid.uuid4())
     persona_ids = request.persona_ids
     total = len(persona_ids)
@@ -191,7 +208,7 @@ async def _survey_stream(request: SurveyRunRequest) -> AsyncGenerator[str, None]
             async with semaphore:
                 await _run_persona_survey(
                     pid, idx, total, questions, run_id,
-                    request.survey_theme, event_queue, history_db
+                    request.survey_theme, event_queue, history_db, e2e_scenario
                 )
 
         try:
@@ -248,11 +265,19 @@ async def _survey_stream(request: SurveyRunRequest) -> AsyncGenerator[str, None]
                 logger.error("Failed to update run status for %s: %s", run_id, e)
 
 
+@router.post("/questions", response_model=QuestionGenerationResponse)
+async def create_questions(request: QuestionGenerationRequest):
+    """Generate survey questions without creating a run record."""
+    questions = await generate_questions(request.survey_theme)
+    return QuestionGenerationResponse(questions=questions)
+
+
 @router.post("/run")
-async def run_survey(request: SurveyRunRequest):
+async def run_survey(request: SurveyRunRequest, http_request: Request):
     """Run a survey across personas with SSE streaming."""
+    e2e_scenario = get_e2e_scenario(http_request)
     return StreamingResponse(
-        _survey_stream(request),
+        _survey_stream(request, e2e_scenario),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

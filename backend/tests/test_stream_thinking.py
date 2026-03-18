@@ -56,3 +56,10 @@ def test_answer_after_think():
     result = collect(chunks)
     answer_text = "".join(v for k, v in result if k == "answer")
     assert "final answer" in answer_text
+
+
+def test_stray_closing_tag_does_not_leak_into_answer():
+    chunks = ["</think>", "回答本文"]
+    result = collect(chunks)
+    answer_text = "".join(v for k, v in result if k == "answer")
+    assert answer_text == "回答本文"

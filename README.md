@@ -25,7 +25,8 @@ A web application for event booth demos showcasing **NVIDIA Nemotron-Nano-9B-v2-
 │  TypeScript         │ ◄────────────────── │  Port 8080           │
 │  Tailwind CSS       │                     │                      │
 │  Recharts + Zustand │                     │  Pandas DataFrame    │
-│  Served via backend │                     │  SQLite (history)    │
+│  Served via backend │                     │  Deprecated SQLite   │
+│                     │                     │  history store only  │
 └─────────────────────┘                     └──────────┬───────────┘
                                                        │ OpenAI API
                                                        ▼
@@ -70,6 +71,7 @@ vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese \
   --host 0.0.0.0 --port 8000 \
   --max-model-len 8192 \
   --gpu-memory-utilization 0.9 \
+  --mamba_ssm_cache_dtype float32 \
   --trust-remote-code
 
 # 3. Configure environment — choose preset "2) local-vllm"
@@ -120,9 +122,9 @@ $EDITOR .env
 | `REPORT_MAX_TOKENS` | `4096` | Max tokens for report generation |
 | `FOLLOWUP_MAX_TOKENS` | `2048` | Max tokens for deep-dive follow-up chat responses |
 | `LLM_CONCURRENCY` | `4` | Simultaneous LLM calls (asyncio semaphore) |
-| `DATA_DIR` | `./data` | Default directory for history DB and parquet file, resolved relative to the repo |
+| `DATA_DIR` | `./data` | Default directory for the deprecated history store file and persona parquet data, resolved relative to the repo |
 | `PERSONA_PARQUET_PATH` | _(blank)_ | Default is blank for all presets; blank = auto-download into the default data location |
-| `HISTORY_DB_PATH` | `$DATA_DIR/history.db` | Survey run history database |
+| `HISTORY_DB_PATH` | `$DATA_DIR/history.db` | Deprecated SQLite-backed survey history store path |
 | `BACKEND_HOST` | `0.0.0.0` | Uvicorn bind host |
 | `BACKEND_PORT` | `8080` | Uvicorn port |
 | `CORS_ORIGINS` | `["*"]` | JSON array of allowed CORS origins |
@@ -176,8 +178,9 @@ apt-get install -y nodejs
 # Launch vLLM in background
 vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese \
   --host 0.0.0.0 --port 8000 \
-  --max-model-len 8192 \
+  --max-model-len 16384 \
   --gpu-memory-utilization 0.9 \
+  --mamba_ssm_cache_dtype float32 \
   --dtype bfloat16 \
   --trust-remote-code &
 
@@ -304,7 +307,7 @@ nemotron-finance-demo/
 ├── backend/
 │   ├── main.py               # FastAPI app + lifespan
 │   ├── config.py             # Pydantic Settings
-│   ├── db.py                 # SQLite init, persona loading
+│   ├── db.py                 # Deprecated SQLite-backed history store helpers
 │   ├── llm.py                # vLLM client, mock mode, stream splitting
 │   ├── models.py             # Pydantic request/response models
 │   ├── prompts.py            # All LLM prompt templates (Japanese)

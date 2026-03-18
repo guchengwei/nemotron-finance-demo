@@ -46,6 +46,7 @@ export default function TopPickCard({ pick, persona, variant, onChat }: Props) {
       {/* Chat button */}
       {onChat && (
         <button
+          data-testid={`top-pick-chat-${pick.persona_uuid}`}
           onClick={onChat}
           className="w-full text-center text-xs text-[#0EA5E9] hover:text-[#38BDF8] py-1.5 border border-[rgba(0,163,224,0.2)] rounded hover:border-[#0EA5E9] transition-colors"
         >

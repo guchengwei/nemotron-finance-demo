@@ -9,12 +9,12 @@ const LARGE_SURVEY_THRESHOLD = 30
 
 function ThinkingBlock({ thinking }: { thinking: string }) {
   return (
-    <details className="mt-1.5 group">
+    <details data-testid="survey-thinking-block" className="mt-1.5 group">
       <summary className="text-[10px] text-gray-600 cursor-pointer select-none list-none flex items-center gap-1 hover:text-gray-500 transition-colors w-fit">
         <span className="transition-transform group-open:rotate-90 inline-block">▸</span>
         <span>思考過程</span>
       </summary>
-      <div className="mt-1 text-xs text-gray-600 bg-[#0F172A] rounded p-2 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+      <div className="mt-1 text-xs text-slate-300 bg-[#0F172A] rounded p-2 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto border border-[rgba(148,163,184,0.18)]">
         {thinking}
       </div>
     </details>
@@ -65,88 +65,78 @@ const PersonaListItem = React.memo(function PersonaListItem({
 export default function SurveyRunner() {
   const {
     personaStates, surveyComplete, surveyCompleted, surveyFailed,
-    questions, currentRunId, setCurrentReport, setStep, selectedPersonas
+    questions, currentRunId, setCurrentReport, setStep, selectedPersonas, currentHistoryRun,
   } = useStore()
 
   const feedRef = useRef<HTMLDivElement>(null)
-  const activePersonaRef = useRef<string | null>(null)
 
   const total = selectedPersonas.length
   const isLarge = total > LARGE_SURVEY_THRESHOLD
+  const restoredInterruptedRun = currentHistoryRun?.status === 'running'
+  const restoredFailedRun = currentHistoryRun?.status === 'failed'
 
-  // Find active persona (currently answering)
   const allStates = Object.values(personaStates)
   const activePersona = allStates.find((s) => s.status === 'active')
   const activeUuid = activePersona?.persona.uuid || null
 
-  // When active persona changes, update ref
-  useEffect(() => {
-    activePersonaRef.current = activeUuid
-  }, [activeUuid])
-
-  // Auto-scroll feed
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' })
   }, [activePersona?.activeAnswer, activePersona?.answers.length])
 
-  // Calculate average score
   const scores = allStates.flatMap((s) =>
-    s.answers.filter((a) => a.score !== undefined).map((a) => a.score!)
+    s.answers.filter((a) => a.score !== undefined).map((a) => a.score!),
   )
   const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : undefined
 
-  // Auto-advance to report when complete
   useEffect(() => {
-    if (surveyComplete && currentRunId) {
-      // Only auto-advance if we have at least some completed answers
-      const hasAnswers = Object.values(personaStates).some(s => s.answers.length > 0)
-      if (!hasAnswers) return
+    if (!surveyComplete || !currentRunId || surveyFailed > 0) return
+    const hasAnswers = Object.values(personaStates).some((s) => s.answers.length > 0)
+    if (!hasAnswers) return
 
-      const timer = setTimeout(async () => {
-        try {
-          const report = await api.generateReport(currentRunId)
-          setCurrentReport(report)
-          setStep(4)
-        } catch (e) {
-          console.error('Report generation failed:', e)
-          setStep(4)
-        }
-      }, 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [surveyComplete, currentRunId, personaStates, setCurrentReport, setStep])
+    const timer = setTimeout(async () => {
+      try {
+        const report = await api.generateReport(currentRunId)
+        setCurrentReport(report)
+        setStep(4)
+      } catch (e) {
+        console.error('Report generation failed:', e)
+      }
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [surveyComplete, currentRunId, personaStates, setCurrentReport, setStep, surveyFailed])
 
-  // Display target: active persona, or last completed
   const completed = allStates.filter((s) => s.status === 'complete')
-  const displayUuid = activeUuid || (completed.length > 0 ? completed[completed.length - 1].persona.uuid : undefined)
+  const errored = allStates.filter((s) => s.status === 'error')
+  const displayUuid = activeUuid || (errored[0]?.persona.uuid ?? completed[completed.length - 1]?.persona.uuid)
   const displayState = displayUuid ? personaStates[displayUuid] : null
+
+  const headerLabel = surveyComplete
+    ? surveyFailed > 0 && surveyCompleted === 0
+      ? '調査エラー'
+      : surveyFailed > 0
+        ? '一部失敗して完了'
+        : '✓ 調査完了'
+    : restoredInterruptedRun
+      ? '調査が中断されました'
+      : restoredFailedRun
+        ? '調査エラー'
+        : '調査実行中...'
 
   return (
     <div data-testid="survey-runner-screen" className="h-full flex flex-col gap-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-white">
-          {surveyComplete
-            ? surveyFailed > 0 && surveyCompleted === 0
-              ? '調査エラー'
-              : '✓ 調査完了'
-            : '調査実行中...'}
-        </h2>
+        <h2 className="text-lg font-bold text-white">{headerLabel}</h2>
         <div className="flex gap-2">
-          {surveyComplete && surveyFailed > 0 && surveyCompleted === 0 && (
-            <button
-              onClick={() => setStep(2)}
-              className="border border-[rgba(255,255,255,0.2)] text-gray-300 font-bold px-4 py-2 rounded text-sm hover:bg-[#1E2D40]"
-            >
-              ← 設定に戻る
-            </button>
-          )}
-          {surveyComplete && surveyCompleted > 0 && (
+          {(surveyComplete || restoredInterruptedRun || restoredFailedRun) && (surveyCompleted > 0 || allStates.some((s) => s.answers.length > 0)) && (
             <button
               onClick={async () => {
                 if (currentRunId) {
-                  const report = await api.generateReport(currentRunId)
-                  setCurrentReport(report)
+                  try {
+                    const report = await api.generateReport(currentRunId)
+                    setCurrentReport(report)
+                  } catch (e) {
+                    console.error('Report generation failed:', e)
+                  }
                 }
                 setStep(4)
               }}
@@ -158,7 +148,17 @@ export default function SurveyRunner() {
         </div>
       </div>
 
-      {/* Progress */}
+      {(restoredInterruptedRun || restoredFailedRun || (surveyComplete && surveyFailed > 0)) && (
+        <div
+          data-testid="survey-interruption-banner"
+          className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100"
+        >
+          {restoredInterruptedRun
+            ? 'この調査は途中で停止しました。ここでは途中経過を確認できます。'
+            : '一部の回答でエラーが発生しました。途中までの結果を確認できます。'}
+        </div>
+      )}
+
       <SurveyProgress
         completed={surveyCompleted}
         total={total}
@@ -166,9 +166,7 @@ export default function SurveyRunner() {
         averageScore={avgScore}
       />
 
-      {/* Main split view */}
       <div className="flex-1 flex gap-4 min-h-0">
-        {/* Left: persona list */}
         <div className="w-44 flex-shrink-0 bg-[#1E293B] rounded-lg overflow-y-auto">
           <div className="px-3 py-2 text-[10px] text-gray-600 uppercase tracking-wider border-b border-[rgba(255,255,255,0.05)]">
             ペルソナ一覧
@@ -191,11 +189,9 @@ export default function SurveyRunner() {
           })}
         </div>
 
-        {/* Right: live Q&A feed */}
         <div className="flex-1 bg-[#1E293B] rounded-lg flex flex-col overflow-hidden">
           {displayState ? (
             <>
-              {/* Persona header */}
               <div className="flex items-center gap-3 px-4 py-3 border-b border-[rgba(255,255,255,0.05)]">
                 <PersonaAvatar
                   name={displayState.persona.name}
@@ -214,13 +210,15 @@ export default function SurveyRunner() {
                 )}
               </div>
 
-              {/* Q&A feed */}
               <div ref={feedRef} className="flex-1 overflow-y-auto p-4 space-y-4">
                 {displayState.answers.map((ans, i) => (
                   <div key={i} className="fade-in">
                     <div className="text-xs text-gray-500 mb-1">Q{i + 1}: {ans.question}</div>
                     {ans.thinking && <ThinkingBlock thinking={ans.thinking} />}
-                    <div className="bg-[#1E2D40] rounded-lg p-3 text-sm text-gray-200">
+                    <div
+                      data-testid="survey-answer-block"
+                      className="bg-[#1E2D40] rounded-lg p-3 text-sm text-gray-100 border border-[rgba(37,99,235,0.12)]"
+                    >
                       {ans.score !== undefined && (
                         <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded mr-2 text-white ${scoreBg(ans.score)}`}>
                           {ans.score}
@@ -231,14 +229,12 @@ export default function SurveyRunner() {
                   </div>
                 ))}
 
-                {/* Error state */}
-                {displayState.status === 'error' && displayState.answers.length === 0 && (
-                  <div className="text-sm text-red-400 bg-red-900/20 rounded-lg p-3">
-                    LLM応答エラーが発生しました。サーバー接続を確認してください。
+                {displayState.status === 'error' && (
+                  <div className="text-sm text-red-300 bg-red-900/20 rounded-lg p-3 border border-red-500/20">
+                    このペルソナの回答は途中で停止しました。
                   </div>
                 )}
 
-                {/* Active streaming answer */}
                 {displayState.status === 'active' && displayState.activeAnswer !== undefined && (
                   <div className="fade-in">
                     <div className="text-xs text-gray-500 mb-1">
@@ -247,11 +243,14 @@ export default function SurveyRunner() {
                     {displayState.activeThinking && (
                       <ThinkingBlock thinking={displayState.activeThinking} />
                     )}
-                    <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded-lg p-3 text-sm mt-1">
+                    <div
+                      data-testid="survey-active-answer-block"
+                      className="bg-[#F8FAFC] text-slate-900 border border-[rgba(37,99,235,0.25)] rounded-lg p-3 text-sm mt-1"
+                    >
                       {isLarge ? (
-                        <span className="text-gray-200">{displayState.activeAnswer || <span className="text-gray-600">回答中...</span>}</span>
+                        <span>{displayState.activeAnswer || <span className="text-slate-500">回答中...</span>}</span>
                       ) : (
-                        <span className={`text-gray-200 ${displayState.activeAnswer ? 'cursor-blink' : 'text-gray-600'}`}>
+                        <span className={displayState.activeAnswer ? 'cursor-blink' : 'text-slate-500'}>
                           {displayState.activeAnswer || '入力中...'}
                         </span>
                       )}
@@ -261,8 +260,8 @@ export default function SurveyRunner() {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
-              調査開始を待っています...
+            <div className="flex items-center justify-center h-full text-sm text-gray-500">
+              表示できる回答がまだありません
             </div>
           )}
         </div>

@@ -7,6 +7,7 @@ vi.mock('../../api', () => ({
     getFilters: vi.fn(),
     getSample: vi.fn(),
     getCount: vi.fn(),
+    generateQuestions: vi.fn(),
     getHistory: vi.fn(),
     getHistoryRun: vi.fn(),
     deleteHistoryRun: vi.fn(),

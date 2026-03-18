@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { api } from '../api'
 import { useStore } from '../store'
 import { useSurvey } from '../hooks/useSurvey'
 
@@ -25,48 +26,8 @@ export default function SurveyConfig() {
     setGenError(null)
     setGeneratingQuestions(true)
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 15000)
-      const res = await fetch('/api/survey/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona_ids: [], survey_theme: surveyTheme, questions: null }),
-        signal: controller.signal,
-      })
-      clearTimeout(timeout)
-      const reader = res.body?.getReader()
-      if (!reader) return
-      const dec = new TextDecoder()
-      let buf = ''
-      let currentEvent = ''
-      let currentData = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += dec.decode(value, { stream: true })
-        const lines = buf.split('\n')
-        buf = lines.pop() || ''
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            currentEvent = line.slice(7).trim()
-          } else if (line.startsWith('data: ')) {
-            currentData = line.slice(6).trim()
-          } else if (line === '' && currentEvent && currentData) {
-            if (currentEvent === 'questions_generated') {
-              const data = JSON.parse(currentData)
-              setQuestions(data.questions)
-              reader.cancel()
-              return
-            }
-            if (currentEvent === 'survey_complete') {
-              reader.cancel()
-              return
-            }
-            currentEvent = ''
-            currentData = ''
-          }
-        }
-      }
+      const response = await api.generateQuestions(surveyTheme)
+      setQuestions(response.questions)
     } catch {
       setGenError('質問の生成に失敗しました。LLMサーバーの接続を確認してください。')
     } finally {
@@ -108,6 +69,7 @@ export default function SurveyConfig() {
           調査テーマ <span className="text-red-500">*</span>
         </label>
         <textarea
+          data-testid="survey-theme-input"
           value={surveyTheme}
           onChange={(e) => setSurveyTheme(e.target.value)}
           placeholder={DEFAULT_THEME}
@@ -119,6 +81,7 @@ export default function SurveyConfig() {
       <div>
         <label className="block text-xs font-semibold text-gray-400 mb-2">ラベル（任意）</label>
         <input
+          data-testid="survey-label-input"
           type="text"
           value={surveyLabel}
           onChange={(e) => setSurveyLabel(e.target.value)}
@@ -131,6 +94,7 @@ export default function SurveyConfig() {
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-semibold text-gray-400">質問項目</label>
           <button
+            data-testid="generate-questions-button"
             onClick={generateQuestions}
             disabled={!surveyTheme || generatingQuestions}
             className="text-xs text-[#0EA5E9] hover:text-[#38BDF8] disabled:opacity-50 transition-colors"
@@ -152,6 +116,7 @@ export default function SurveyConfig() {
               <span className="text-xs text-gray-600 mt-2.5 w-4 flex-shrink-0">{i + 1}</span>
               {editingIdx === i ? (
                 <textarea
+                  data-testid={`survey-question-${i}`}
                   autoFocus
                   value={q}
                   onChange={(e) => updateQuestion(i, e.target.value)}
@@ -161,6 +126,7 @@ export default function SurveyConfig() {
                 />
               ) : (
                 <button
+                  data-testid={`survey-question-${i}`}
                   onClick={() => setEditingIdx(i)}
                   className="flex-1 text-left bg-[#1E2D40] border border-[rgba(37,99,235,0.1)] rounded px-3 py-2 text-sm text-gray-300 hover:border-[rgba(37,99,235,0.4)] transition-colors"
                 >
@@ -168,6 +134,7 @@ export default function SurveyConfig() {
                 </button>
               )}
               <button
+                data-testid="survey-question-remove"
                 onClick={() => removeQuestion(i)}
                 className="mt-1.5 text-gray-600 hover:text-red-400 transition-colors text-lg leading-none"
               >
