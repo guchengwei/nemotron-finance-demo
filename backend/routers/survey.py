@@ -117,6 +117,14 @@ async def _run_persona_survey(
             except Exception as e:
                 logger.error("LLM error for persona %s q%d: %s", persona_id, q_idx, e)
                 full_answer = "（回答を取得できませんでした）"
+                await event_queue.put({
+                    "event": "persona_error",
+                    "data": {
+                        "persona_uuid": persona_id,
+                        "question_index": q_idx,
+                        "error": str(e),
+                    },
+                })
 
             score = extract_score(full_answer)
 
