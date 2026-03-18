@@ -85,14 +85,20 @@ async def _followup_stream(request: FollowUpRequest):
         messages = chat_history + [{"role": "user", "content": request.question}]
         full_answer = ""
 
-        async for kind, chunk in stream_followup_answer(system_prompt, messages):
-            if kind == 'think':
-                data = json.dumps({"thinking": chunk}, ensure_ascii=False)
-                yield f"event: thinking\ndata: {data}\n\n"
-            else:
-                full_answer += chunk
-                data = json.dumps({"text": chunk}, ensure_ascii=False)
-                yield f"event: token\ndata: {data}\n\n"
+        try:
+            async for kind, chunk in stream_followup_answer(system_prompt, messages):
+                if kind == 'think':
+                    data = json.dumps({"thinking": chunk}, ensure_ascii=False)
+                    yield f"event: thinking\ndata: {data}\n\n"
+                else:
+                    full_answer += chunk
+                    data = json.dumps({"text": chunk}, ensure_ascii=False)
+                    yield f"event: token\ndata: {data}\n\n"
+        except Exception as e:
+            logger.error("Followup LLM error for %s: %s", request.persona_uuid, e)
+            err_data = json.dumps({"error": str(e)}, ensure_ascii=False)
+            yield f"event: error\ndata: {err_data}\n\n"
+            full_answer = "（回答を取得できませんでした）"
 
         # Save assistant response
         await history_db.execute(
