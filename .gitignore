@@ -33,3 +33,6 @@ backend/data/*.parquet
 
 # Test artifacts
 frontend/test-results/
+
+# Git worktrees
+.worktrees/
