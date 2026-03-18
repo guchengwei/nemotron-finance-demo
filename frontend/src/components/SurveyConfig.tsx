@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../store'
 import { useSurvey } from '../hooks/useSurvey'
 
+
 const DEFAULT_THEME = 'AIを活用した資産運用アドバイザリーサービスの導入に対する金融機関顧客の反応'
 
 export default function SurveyConfig() {
@@ -12,13 +13,16 @@ export default function SurveyConfig() {
   } = useStore()
   const { startSurvey } = useSurvey()
 
+  const llmStatus = useStore(s => s.llmStatus)
   const [generatingQuestions, setGeneratingQuestions] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
 
   const estimatedMinutes = Math.ceil(selectedPersonas.length * questions.length * 3 / 60)
 
   const generateQuestions = async () => {
     if (!surveyTheme) return
+    setGenError(null)
     setGeneratingQuestions(true)
     try {
       const controller = new AbortController()
@@ -64,7 +68,7 @@ export default function SurveyConfig() {
         }
       }
     } catch {
-      // ignore
+      setGenError('質問の生成に失敗しました。LLMサーバーの接続を確認してください。')
     } finally {
       setGeneratingQuestions(false)
     }
@@ -134,6 +138,14 @@ export default function SurveyConfig() {
             {generatingQuestions ? '生成中...' : '✨ AIに質問を生成させる'}
           </button>
         </div>
+        {llmStatus && !llmStatus.llm_reachable && !llmStatus.mock_llm && (
+          <p className="text-yellow-400 text-xs mb-2">
+            LLMサーバーに接続できません。モックモードでの実行を検討してください。
+          </p>
+        )}
+        {genError && (
+          <p className="text-red-400 text-xs mt-2">{genError}</p>
+        )}
         <div className="space-y-2">
           {questions.map((q, i) => (
             <div key={i} className="flex items-start gap-2">
