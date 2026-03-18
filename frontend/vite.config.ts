@@ -10,6 +10,17 @@ export default defineConfig({
     exclude: ['e2e/**', '**/node_modules/**'],
   },
   plugins: [react()],
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          charts: ['recharts'],
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
