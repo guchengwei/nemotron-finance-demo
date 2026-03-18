@@ -118,7 +118,7 @@ export default function ReportDashboard() {
           )}
           <div className="flex-1">
             {report.group_tendency && (
-              <div className="mb-3">
+              <div data-testid="report-group-tendency" className="mb-3">
                 <div className="text-xs font-semibold text-[#2563EB] mb-1">グループ傾向</div>
                 <div className="text-sm text-gray-300 leading-relaxed">{report.group_tendency}</div>
               </div>
@@ -129,7 +129,7 @@ export default function ReportDashboard() {
 
       {/* Conclusion */}
       {report.conclusion && (
-        <div className="bg-[#1E293B] border-l-4 border-[#2563EB] rounded-r-lg px-5 py-4">
+        <div data-testid="report-conclusion" className="bg-[#1E293B] border-l-4 border-[#2563EB] rounded-r-lg px-5 py-4">
           <div className="text-xs font-semibold text-[#2563EB] mb-2">総合結論・推奨アクション</div>
           <div className="text-sm text-gray-200 leading-relaxed">{report.conclusion}</div>
         </div>
@@ -140,7 +140,7 @@ export default function ReportDashboard() {
 
       {/* Top picks */}
       {report.top_picks && report.top_picks.length > 0 && (
-        <div>
+        <div data-testid="report-top-picks">
           <h3 className="text-sm font-bold text-white mb-3">注目回答者</h3>
           <div className="grid grid-cols-3 gap-4">
             {report.top_picks.slice(0, 3).map((pick, i) => {

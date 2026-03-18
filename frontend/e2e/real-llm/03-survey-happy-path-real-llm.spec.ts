@@ -21,6 +21,15 @@ test('single-person survey completes with separated answer rendering and a repor
 
   await expect(page.getByTestId('report-dashboard-screen')).toBeVisible({ timeout: 240_000 })
 
+  const groupTendency = await textOf(page.getByTestId('report-group-tendency'))
+  const conclusion = await textOf(page.getByTestId('report-conclusion'))
+  expect((groupTendency || conclusion).trim().length).toBeGreaterThan(0)
+
+  const topPickCards = page.locator('[data-testid^="top-pick-chat-"]')
+  if (await topPickCards.count()) {
+    await expect(topPickCards.first()).toBeVisible()
+  }
+
   const answerBlocks = page.getByTestId('survey-answer-block')
   if (await answerBlocks.count()) {
     const answerText = await textOf(answerBlocks.first())
