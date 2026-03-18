@@ -1,6 +1,5 @@
 import sqlite3
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -12,8 +11,10 @@ from db import PERSONA_DDL, _create_history_db
 def history_db(tmp_path):
     """Create a minimal history DB for seed tests."""
     db_path = str(tmp_path / "history.db")
-    with patch.object(settings, "history_db_path", db_path):
-        _create_history_db()
+    orig = settings.history_db_path
+    settings.history_db_path = db_path
+    _create_history_db()
+    settings.history_db_path = orig
     return db_path
 
 
@@ -37,13 +38,16 @@ def persona_db(tmp_path):
 
 def test_seed_history_opens_configured_db(persona_db, history_db):
     """seed_history must use settings.db_path, not a relative default."""
-    with patch.object(settings, "db_path", persona_db), \
-         patch.object(settings, "history_db_path", history_db):
-        from scripts.seed_demo_history import seed_history
-        import importlib
+    orig_db = settings.db_path
+    orig_hist = settings.history_db_path
+    settings.db_path = persona_db
+    settings.history_db_path = history_db
+    try:
         import scripts.seed_demo_history as mod
-        importlib.reload(mod)
         mod.seed_history()
+    finally:
+        settings.db_path = orig_db
+        settings.history_db_path = orig_hist
 
     conn = sqlite3.connect(history_db)
     count = conn.execute("SELECT COUNT(*) FROM survey_runs").fetchone()[0]

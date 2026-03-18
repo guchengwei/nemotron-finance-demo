@@ -15,8 +15,10 @@ def test_settings_resolves_db_path_under_repo_data_dir():
     with patch.dict(os.environ, env_clear, clear=False):
         import importlib
         import config as cfg
+        original_settings = cfg.settings
         importlib.reload(cfg)
         resolved = Path(cfg.settings.db_path).resolve()
+        cfg.settings = original_settings
 
     assert str(resolved).startswith(str(expected_data_dir)), (
         f"db_path {resolved} is not under {expected_data_dir}"
