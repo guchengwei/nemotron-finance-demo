@@ -14,7 +14,7 @@ vi.mock('../../api', () => ({
     getHistoryRun: vi.fn(),
     generateReport: vi.fn(),
     deleteHistoryRun: vi.fn(),
-    checkReady: vi.fn().mockResolvedValue(true),
+    checkReady: vi.fn().mockResolvedValue({ ready: true }),
     checkHealth: vi.fn().mockResolvedValue({ status: 'ok', mock_llm: true, llm_reachable: true }),
   },
 }))
@@ -26,9 +26,7 @@ vi.mock('../../hooks/useSurvey', () => ({
   }),
 }))
 
-const mockedApi = api as typeof api & {
-  getCount: ReturnType<typeof vi.fn>
-}
+const mockedApi = api as unknown as Record<string, ReturnType<typeof vi.fn>>
 
 const filtersResponse = {
   sex: ['男', '女'],
