@@ -75,6 +75,20 @@ export const api = {
   getHistoryRun: (run_id: string): Promise<SurveyRunDetail> => get(`/history/${run_id}`),
 
   deleteHistoryRun: (run_id: string): Promise<void> => del(`/history/${run_id}`),
+
+  async checkReady(): Promise<boolean> {
+    try {
+      const res = await fetch('/ready');
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async checkHealth(): Promise<{ status: string; mock_llm: boolean; llm_reachable: boolean }> {
+    const res = await fetch('/health');
+    return res.json();
+  },
 }
 
 export function startSurveySSE(

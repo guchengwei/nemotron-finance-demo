@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from './store'
 import { api } from './api'
 import { useSurvey } from './hooks/useSurvey'
@@ -77,6 +77,40 @@ function WelcomeScreen() {
 
 export default function App() {
   const { currentStep, resetVersion } = useStore()
+  const dbReady = useStore(s => s.dbReady)
+  const setDbReady = useStore(s => s.setDbReady)
+  const setLlmStatus = useStore(s => s.setLlmStatus)
+
+  useEffect(() => {
+    if (dbReady) return;
+    let cancelled = false;
+    const poll = async () => {
+      while (!cancelled) {
+        const ready = await api.checkReady();
+        if (ready && !cancelled) {
+          setDbReady(true);
+          const health = await api.checkHealth();
+          setLlmStatus(health);
+          return;
+        }
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [dbReady, setDbReady, setLlmStatus]);
+
+  if (!dbReady) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-[#76B900] border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-gray-300">データベースを準備中...</p>
+          <p className="text-gray-500 text-sm mt-2">初回は数分かかる場合があります</p>
+        </div>
+      </div>
+    );
+  }
 
   const renderStep = () => {
     switch (currentStep) {

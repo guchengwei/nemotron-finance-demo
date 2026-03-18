@@ -12,6 +12,7 @@ function scoreColor(score?: number): string {
 
 export default function Sidebar() {
   const { history, setHistory, setStep, setCurrentReport, setCurrentHistoryRun, resetSurvey } = useStore()
+  const dbReady = useStore(s => s.dbReady)
 
   useEffect(() => {
     api.getHistory().then((r) => setHistory(r.runs)).catch(console.error)
@@ -47,8 +48,9 @@ export default function Sidebar() {
       <div className="p-3">
         <button
           data-testid="new-survey-button"
+          disabled={!dbReady}
           onClick={() => resetSurvey()}
-          className="w-full bg-[#76B900] hover:bg-[#8fd100] text-black text-sm font-bold py-2 px-3 rounded transition-colors"
+          className={`w-full bg-[#76B900] hover:bg-[#8fd100] text-black text-sm font-bold py-2 px-3 rounded transition-colors ${!dbReady ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           ＋ 新規調査
         </button>

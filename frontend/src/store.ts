@@ -48,6 +48,11 @@ interface AppState {
   currentHistoryRun: SurveyRunDetail | null
   setCurrentHistoryRun: (r: SurveyRunDetail | null) => void
 
+  dbReady: boolean
+  setDbReady: (ready: boolean) => void
+  llmStatus: { mock_llm: boolean; llm_reachable: boolean } | null
+  setLlmStatus: (status: { mock_llm: boolean; llm_reachable: boolean }) => void
+
   resetVersion: number
   resetSurvey: () => void
 }
@@ -102,6 +107,11 @@ export const useStore = create<AppState>((set) => ({
   setHistory: (history) => set({ history }),
   currentHistoryRun: null,
   setCurrentHistoryRun: (currentHistoryRun) => set({ currentHistoryRun }),
+
+  dbReady: false,
+  setDbReady: (dbReady) => set({ dbReady }),
+  llmStatus: null,
+  setLlmStatus: (llmStatus) => set({ llmStatus }),
 
   resetVersion: 0,
   resetSurvey: () =>
