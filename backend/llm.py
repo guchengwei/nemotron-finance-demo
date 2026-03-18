@@ -302,6 +302,18 @@ async def generate_questions(survey_theme: str) -> list[str]:
     return MOCK_QUESTIONS[:3]
 
 
+async def check_llm_health() -> bool:
+    """Return True if vLLM endpoint is reachable, False otherwise."""
+    if settings.mock_llm:
+        return True
+    try:
+        client = get_client()
+        await client.models.list()
+        return True
+    except Exception:
+        return False
+
+
 async def generate_report(
     survey_theme: str,
     persona_count: int,

@@ -73,7 +73,13 @@ app.include_router(history.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "mock_llm": settings.mock_llm}
+    from llm import check_llm_health
+    reachable = await check_llm_health()
+    return {
+        "status": "ok",
+        "mock_llm": settings.mock_llm,
+        "llm_reachable": reachable,
+    }
 
 
 @app.get("/ready")
