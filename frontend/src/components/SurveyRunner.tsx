@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { useStore } from '../store'
 import { api } from '../api'
 import PersonaAvatar from './PersonaAvatar'
@@ -21,7 +21,7 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
   )
 }
 
-function PersonaListItem({
+const PersonaListItem = React.memo(function PersonaListItem({
   name,
   age,
   sex,
@@ -44,8 +44,7 @@ function PersonaListItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-3 py-2 flex items-center gap-2 rounded transition-colors
-        ${isActive ? 'bg-[#76B900]/10 border border-[rgba(118,185,0,0.3)]' : 'hover:bg-[#1c1c2e]'}`}
+      className={`w-full text-left px-3 py-2 flex items-center gap-2 rounded transition-colors ${isActive ? 'bg-[#76B900]/10 border border-[rgba(118,185,0,0.3)]' : 'hover:bg-[#1c1c2e]'}`}
     >
       <span className={`text-xs ${statusColor} ${status === 'active' ? 'pulse-green' : ''}`}>
         {statusIcon}
@@ -61,7 +60,7 @@ function PersonaListItem({
       )}
     </button>
   )
-}
+})
 
 export default function SurveyRunner() {
   const {
@@ -213,6 +212,13 @@ export default function SurveyRunner() {
                     {ans.thinking && <ThinkingBlock thinking={ans.thinking} />}
                   </div>
                 ))}
+
+                {/* Error state */}
+                {displayState.status === 'error' && displayState.answers.length === 0 && (
+                  <div className="text-sm text-red-400 bg-red-900/20 rounded-lg p-3">
+                    LLM応答エラーが発生しました。サーバー接続を確認してください。
+                  </div>
+                )}
 
                 {/* Active streaming answer */}
                 {displayState.status === 'active' && displayState.activeAnswer !== undefined && (

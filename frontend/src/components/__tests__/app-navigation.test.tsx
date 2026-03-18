@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App'
 import { api } from '../../api'
+import { useStore } from '../../store'
 
 vi.mock('../../api', () => ({
   api: {
@@ -12,6 +13,8 @@ vi.mock('../../api', () => ({
     getHistoryRun: vi.fn(),
     generateReport: vi.fn(),
     deleteHistoryRun: vi.fn(),
+    checkReady: vi.fn().mockResolvedValue(true),
+    checkHealth: vi.fn().mockResolvedValue({ status: 'ok', mock_llm: true, llm_reachable: true }),
   },
 }))
 
@@ -65,6 +68,7 @@ function deferred<T>() {
 
 describe('App navigation', () => {
   beforeEach(() => {
+    useStore.setState({ dbReady: true })
     mockedApi.getHistory.mockResolvedValue({ runs: [] })
     mockedApi.getFilters.mockResolvedValue(filtersResponse)
     mockedApi.getSample.mockResolvedValue({ total_matching: 1, sampled: [samplePersona] })

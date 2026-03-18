@@ -14,6 +14,8 @@ vi.mock('../../api', () => ({
     getHistoryRun: vi.fn(),
     generateReport: vi.fn(),
     deleteHistoryRun: vi.fn(),
+    checkReady: vi.fn().mockResolvedValue(true),
+    checkHealth: vi.fn().mockResolvedValue({ status: 'ok', mock_llm: true, llm_reachable: true }),
   },
 }))
 
@@ -59,6 +61,7 @@ const sampledPersona = {
 
 describe('Sidebar new survey', () => {
   beforeEach(() => {
+    useStore.setState({ dbReady: true })
     mockedApi.getHistory.mockResolvedValue({ runs: [] })
     mockedApi.getFilters.mockResolvedValue(filtersResponse)
     mockedApi.getCount.mockResolvedValue({ total_matching: 100 })
@@ -87,6 +90,7 @@ describe('Sidebar new survey', () => {
   it('new survey returns from later step to step one', async () => {
     const user = userEvent.setup()
     useStore.setState({
+      dbReady: true,
       currentStep: 4,
       currentReport: {
         run_id: 'run-1',
