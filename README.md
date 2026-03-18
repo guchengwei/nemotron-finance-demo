@@ -24,7 +24,7 @@ A web application for event booth demos showcasing **NVIDIA Nemotron-Nano-9B-v2-
 │  Vite + React 18    │                     │  FastAPI + Python    │
 │  TypeScript         │ ◄────────────────── │  Port 8080           │
 │  Tailwind CSS       │                     │                      │
-│  Recharts + Zustand │                     │  SQLite (personas)   │
+│  Recharts + Zustand │                     │  Pandas DataFrame    │
 │  Served via backend │                     │  SQLite (history)    │
 └─────────────────────┘                     └──────────┬───────────┘
                                                        │ OpenAI API
@@ -93,7 +93,7 @@ Guides you through all settings and writes `.env`. Presets:
 
 | Preset | Description |
 |--------|-------------|
-| `local-mock` | No GPU, mock responses, repo-local SQLite in `./data` |
+| `local-mock` | No GPU, mock responses, repo-local data directory `./data` |
 | `local-vllm` | GPU on localhost, vLLM on port 8000; same default repo-local data paths |
 | `k8s` | Kubernetes / Run:ai pod; same default paths, different host/runtime settings |
 | `docker` | Docker Compose stack; same default paths, different host/runtime settings |
@@ -118,10 +118,10 @@ $EDITOR .env
 | `LLM_TEMPERATURE` | `0.7` | Generation temperature |
 | `LLM_MAX_TOKENS` | `512` | Max tokens per survey answer |
 | `REPORT_MAX_TOKENS` | `4096` | Max tokens for report generation |
+| `FOLLOWUP_MAX_TOKENS` | `2048` | Max tokens for deep-dive follow-up chat responses |
 | `LLM_CONCURRENCY` | `4` | Simultaneous LLM calls (asyncio semaphore) |
-| `DATA_DIR` | `./data` | Default directory for SQLite databases, resolved relative to the repo |
+| `DATA_DIR` | `./data` | Default directory for history DB and parquet file, resolved relative to the repo |
 | `PERSONA_PARQUET_PATH` | _(blank)_ | Default is blank for all presets; blank = auto-download into the default data location |
-| `DB_PATH` | `$DATA_DIR/personas.db` | Persona database (~4 GB with 1M rows) |
 | `HISTORY_DB_PATH` | `$DATA_DIR/history.db` | Survey run history database |
 | `BACKEND_HOST` | `0.0.0.0` | Uvicorn bind host |
 | `BACKEND_PORT` | `8080` | Uvicorn port |
@@ -218,18 +218,18 @@ MOCK_LLM=true docker compose up app
 
 ---
 
-## First Run — Persona Database
+## First Run — Persona Data
 
-On first startup the backend checks for the persona database. If it doesn't exist:
+On startup the backend loads the persona parquet file into an in-memory pandas DataFrame:
 
-1. **Auto-download** (no `PERSONA_PARQUET_PATH` set): downloads the dataset from HuggingFace Hub (`nvidia/Nemotron-Personas-Japan`, ~1.7 GB parquet) and loads all 1M rows into SQLite (~4 GB).
-2. **From local parquet** (`PERSONA_PARQUET_PATH` set): loads directly from the specified file.
+1. **Auto-download** (no `PERSONA_PARQUET_PATH` set): downloads the dataset from HuggingFace Hub (`nvidia/Nemotron-Personas-Japan`, ~1.7 GB parquet) and loads all 1M rows into memory.
+2. **From local parquet** (`PERSONA_PARQUET_PATH` set): loads directly from the specified file into memory.
 
-This one-time load takes 5–15 minutes. Subsequent starts skip this step if the database exists.
+This one-time download takes 5–15 minutes. On subsequent starts the parquet file is loaded directly from disk into memory (no re-download needed).
 
-To pre-load before the event:
+To pre-download before the event:
 ```bash
-# Manually trigger DB init
+# Manually trigger parquet download/init
 cd backend
 source venv/bin/activate
 python -c "import asyncio; from db import init_db; asyncio.run(init_db())"

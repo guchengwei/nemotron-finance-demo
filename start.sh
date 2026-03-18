@@ -37,9 +37,15 @@ for i in $(seq 1 120); do
         wait "$BACKEND_PID"
         exit 1
     fi
-    if curl -fsS http://127.0.0.1:8080/ready >/dev/null 2>&1; then
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/ready 2>/dev/null || true)
+    if [ "$STATUS" = "200" ]; then
         echo " ready."
         break
+    fi
+    if [ "$STATUS" = "500" ]; then
+        echo
+        echo "ERROR: Database initialization failed. Check logs for details."
+        exit 1
     fi
     sleep 5
     echo -n "."
