@@ -15,7 +15,7 @@ from config import settings
 from db import _create_history_db
 
 
-def _persona_row(index: int) -> tuple[dict, dict, str, int, str, str]:
+def _persona_row(index: int) -> tuple[dict, dict, str, int, int, str]:
     persona_uuid = str(uuid4())
     name = f"テスト人物{index:02d}"
     age = 24 + (index % 30)
@@ -171,3 +171,54 @@ def test_report_generate_uses_nested_literacy_and_caches(report_generate_client,
 
     cached = json.loads(cached_json)
     assert cached == {key: value for key, value in first_body.items() if key != "run_id"}
+
+
+def test_polarity_persistence_cold_start_to_warm_start(report_generate_client):
+    """Polarity data is persisted after first report and loaded on second run."""
+    client, history_db = report_generate_client
+    run_id_1 = "run-polarity-cold"
+    run_id_2 = "run-polarity-warm"
+
+    # Seed two separate runs with enough personas for polarity learning (>= 2)
+    _seed_report_run(history_db, run_id_1, 5)
+    _seed_report_run(history_db, run_id_2, 5)
+
+    async def fake_llm(*args, **kwargs):
+        return ""
+
+    async def fake_top_picks(*args, **kwargs):
+        return []
+
+    with (
+        patch("llm.generate_report_group_tendency", side_effect=fake_llm),
+        patch("llm.generate_report_conclusion", side_effect=fake_llm),
+        patch("llm.generate_report_top_picks", side_effect=fake_top_picks),
+    ):
+        # First report — cold start
+        resp1 = client.post("/api/report/generate", json={"run_id": run_id_1})
+        assert resp1.status_code == 200
+
+        # Verify token_polarities table was created and populated
+        conn = sqlite3.connect(history_db)
+        try:
+            table_exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='token_polarities'"
+            ).fetchone()
+            assert table_exists, "token_polarities table should exist after first report"
+
+            row_count = conn.execute("SELECT COUNT(*) FROM token_polarities").fetchone()[0]
+            assert row_count > 0, "token_polarities table should have entries after learning"
+        finally:
+            conn.close()
+
+        # Second report — warm start (reads historical polarities)
+        resp2 = client.post("/api/report/generate", json={"run_id": run_id_2})
+        assert resp2.status_code == 200
+
+        # Verify polarity table grew (merged fresh + historical)
+        conn = sqlite3.connect(history_db)
+        try:
+            row_count_2 = conn.execute("SELECT COUNT(*) FROM token_polarities").fetchone()[0]
+            assert row_count_2 >= row_count, "polarity table should have same or more entries after warm start"
+        finally:
+            conn.close()
