@@ -288,6 +288,45 @@ async def _stream_split_thinking(
             yield ('answer', answer_chunk)
 
 
+async def _stream_split_reasoning(
+    raw,  # vLLM streaming response (AsyncIterable of chunks)
+) -> AsyncGenerator[tuple[str, str], None]:
+    """Split vLLM streaming response using reasoning / reasoning_content fields.
+
+    With --reasoning-parser active, delta.reasoning holds thinking and
+    delta.content holds the clean answer. Both can appear in the same chunk
+    (transition chunk), so both fields are checked independently (not elif).
+    Buffers all reasoning into one ('think', full_text) emission, streams
+    answer as ('answer', chunk).
+    """
+    think_buf = ""
+    think_emitted = False
+
+    async for chunk in raw:
+        if not chunk.choices:
+            continue  # final usage-only chunk
+        delta = chunk.choices[0].delta
+        reasoning = (
+            getattr(delta, 'reasoning', None)
+            or getattr(delta, 'reasoning_content', None)
+        )
+        content = delta.content
+
+        # Process both independently — they can appear in the same chunk
+        if reasoning:
+            think_buf += reasoning
+        if content:
+            # Emit buffered thinking once before first answer chunk
+            if think_buf and not think_emitted:
+                yield ('think', think_buf)
+                think_emitted = True
+            yield ('answer', content)
+
+    # Edge case: model thought but produced no answer (generation truncated)
+    if think_buf and not think_emitted:
+        yield ('think', think_buf)
+
+
 async def call_llm(
     system_prompt: str,
     user_message: str,
@@ -348,13 +387,7 @@ async def stream_survey_answer(
             **({"extra_body": extra_body} if extra_body else {}),
         )
 
-        async def _chunks() -> AsyncGenerator[str, None]:
-            async for chunk in raw:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
-
-        async for item in _stream_split_thinking(_chunks()):
+        async for item in _stream_split_reasoning(raw):
             yield item
 
 
@@ -385,13 +418,7 @@ async def stream_followup_answer(
             **({"extra_body": extra_body} if extra_body else {}),
         )
 
-        async def _chunks() -> AsyncGenerator[str, None]:
-            async for chunk in raw:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
-
-        async for item in _stream_split_thinking(_chunks()):
+        async for item in _stream_split_reasoning(raw):
             yield item
 
 

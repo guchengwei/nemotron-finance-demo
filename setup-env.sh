@@ -203,9 +203,19 @@ case "$PRESET" in
   local-vllm)
     echo "  Make sure vLLM is running before starting the app:"
     echo
+    echo "    # Download the reasoning parser plugin first (requires vLLM >= 0.11.2):"
+    echo "    curl -L -o nemotron_nano_v2_reasoning_parser.py \\"
+    echo "      'https://huggingface.co/nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese/resolve/ee128dd4c1e13bc1e990d93eefb2271f5fbd3a32/nemotron_nano_v2_reasoning_parser.py'"
+    echo
     echo "    vllm serve $VLLM_MODEL \\"
     echo "      --host 0.0.0.0 --port 8000 \\"
-    echo "      --max-model-len 8192 --gpu-memory-utilization 0.9"
+    echo "      --trust-remote-code \\"
+    echo "      --max-model-len 131072 \\"
+    echo "      --max-num-seqs 64 \\"
+    echo "      --gpu-memory-utilization 0.90 \\"
+    echo "      --reasoning-parser-plugin nemotron_nano_v2_reasoning_parser.py \\"
+    echo "      --reasoning-parser nemotron_nano_v2 \\"
+    echo "      --mamba-ssm-cache-dtype float32"
     echo
     echo "  Then:"
     echo "    ./start.sh"
@@ -213,10 +223,20 @@ case "$PRESET" in
   k8s)
     echo "  Inside a Run:ai / K8s pod:"
     echo
+    echo "    # Download the reasoning parser plugin first (requires vLLM >= 0.11.2):"
+    echo "    curl -L -o nemotron_nano_v2_reasoning_parser.py \\"
+    echo "      'https://huggingface.co/nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese/resolve/ee128dd4c1e13bc1e990d93eefb2271f5fbd3a32/nemotron_nano_v2_reasoning_parser.py'"
+    echo
     echo "    # Launch vLLM (background)"
     echo "    vllm serve $VLLM_MODEL \\"
     echo "      --host 0.0.0.0 --port 8000 \\"
-    echo "      --max-model-len 8192 --gpu-memory-utilization 0.9 &"
+    echo "      --trust-remote-code \\"
+    echo "      --max-model-len 131072 \\"
+    echo "      --max-num-seqs 64 \\"
+    echo "      --gpu-memory-utilization 0.90 \\"
+    echo "      --reasoning-parser-plugin nemotron_nano_v2_reasoning_parser.py \\"
+    echo "      --reasoning-parser nemotron_nano_v2 \\"
+    echo "      --mamba-ssm-cache-dtype float32 &"
     echo
     echo "    # Wait for model to load, then:"
     echo "    ./start.sh"
