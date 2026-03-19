@@ -55,7 +55,7 @@ def test_learn_token_polarities_positive_words_get_positive_polarity(monkeypatch
     all_texts = [["便利 サービス"], ["便利 機能"], ["便利 システム"]]
     q1_scores = [4, 5, 4]
 
-    polarities, counts = text_analysis.learn_token_polarities(all_texts, q1_scores)
+    polarities, _ = text_analysis.learn_token_polarities(all_texts, q1_scores)
 
     assert "便利" in polarities, f"'便利' should be in polarities: {polarities}"
     assert polarities["便利"] > 0, f"'便利' should have positive polarity, got {polarities['便利']}"
@@ -68,7 +68,7 @@ def test_learn_token_polarities_negative_words_get_negative_polarity(monkeypatch
     all_texts = [["不安 要素"], ["不安 感じる"], ["不安 リスク"]]
     q1_scores = [1, 2, 1]
 
-    polarities, counts = text_analysis.learn_token_polarities(all_texts, q1_scores)
+    polarities, _ = text_analysis.learn_token_polarities(all_texts, q1_scores)
 
     assert "不安" in polarities, f"'不安' should be in polarities: {polarities}"
     assert polarities["不安"] < 0, f"'不安' should have negative polarity, got {polarities['不安']}"
@@ -82,7 +82,7 @@ def test_learn_token_polarities_min_frequency_threshold(monkeypatch):
     all_texts = [["rare common"], ["common only2"]]
     q1_scores = [3, 3]
 
-    polarities, counts = text_analysis.learn_token_polarities(all_texts, q1_scores)
+    polarities, _ = text_analysis.learn_token_polarities(all_texts, q1_scores)
 
     assert "rare" not in polarities, f"'rare' (1 persona) should not appear: {polarities}"
     assert "common" in polarities, f"'common' (2 personas) should appear: {polarities}"
