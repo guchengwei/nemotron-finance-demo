@@ -29,7 +29,6 @@ const filtersResponse = {
   prefectures: ['東京都', '大阪府'],
   occupations_top50: ['会社員', '公務員'],
   education_levels: ['大学卒', '高校卒'],
-  financial_literacy: ['初心者', '中級者'],
   total_count: 100,
 }
 

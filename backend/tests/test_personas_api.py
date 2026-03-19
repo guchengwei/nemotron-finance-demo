@@ -48,7 +48,7 @@ def test_count_endpoint_honors_combined_filters(client):
 def test_count_endpoint_returns_zero_when_no_match(client):
   response = client.get(
     '/api/personas/count',
-    params={'region': '関西', 'financial_literacy': '初心者'},
+    params={'region': '北海道'},
   )
 
   assert response.status_code == 200

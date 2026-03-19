@@ -51,7 +51,6 @@ type PersonaQueryParams = {
   region?: string
   occupation?: string
   education?: string
-  financial_literacy?: string
 }
 
 type SSECallbacks = {

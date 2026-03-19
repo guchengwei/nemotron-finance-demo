@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { api } from '../api'
 import PersonaAvatar from './PersonaAvatar'
@@ -31,6 +31,7 @@ const PersonaListItem = React.memo(function PersonaListItem({
   sex,
   status,
   score,
+  financialLiteracy,
   isActive,
   onClick,
 }: {
@@ -39,6 +40,7 @@ const PersonaListItem = React.memo(function PersonaListItem({
   sex: string
   status: string
   score?: number
+  financialLiteracy?: string
   isActive: boolean
   onClick: () => void
 }) {
@@ -56,6 +58,9 @@ const PersonaListItem = React.memo(function PersonaListItem({
       <PersonaAvatar name={name} age={age} sex={sex} size={24} />
       <div className="flex-1 min-w-0">
         <div className="truncate text-xs text-fin-ink">{name}</div>
+        {financialLiteracy && (
+          <div className="truncate text-[10px] text-fin-muted">{financialLiteracy}</div>
+        )}
       </div>
       {score !== undefined && (
         <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold text-fin-surface ${scoreBg(score)}`}>
@@ -73,6 +78,7 @@ export default function SurveyRunner() {
   } = useStore()
 
   const feedRef = useRef<HTMLDivElement>(null)
+  const [manualDisplayUuid, setManualDisplayUuid] = useState<string | null>(null)
 
   const total = selectedPersonas.length
   const isLarge = total > LARGE_SURVEY_THRESHOLD
@@ -82,6 +88,13 @@ export default function SurveyRunner() {
   const allStates = Object.values(personaStates)
   const activePersona = allStates.find((s) => s.status === 'active')
   const activeUuid = activePersona?.persona.uuid || null
+
+  // Clear manual selection when the manually-selected persona becomes active (auto-follow resumes)
+  useEffect(() => {
+    if (manualDisplayUuid && activeUuid === manualDisplayUuid) {
+      setManualDisplayUuid(null)
+    }
+  }, [activeUuid, manualDisplayUuid])
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' })
@@ -111,7 +124,8 @@ export default function SurveyRunner() {
 
   const completed = allStates.filter((s) => s.status === 'complete')
   const errored = allStates.filter((s) => s.status === 'error')
-  const displayUuid = activeUuid || (errored[0]?.persona.uuid ?? completed[completed.length - 1]?.persona.uuid)
+  const autoDisplayUuid = activeUuid || (errored[0]?.persona.uuid ?? completed[completed.length - 1]?.persona.uuid)
+  const displayUuid = manualDisplayUuid || autoDisplayUuid
   const displayState = displayUuid ? personaStates[displayUuid] : null
 
   const headerLabel = surveyComplete
@@ -186,8 +200,9 @@ export default function SurveyRunner() {
                 sex={p.sex}
                 status={state?.status || 'waiting'}
                 score={firstScore}
+                financialLiteracy={p.financial_extension?.financial_literacy}
                 isActive={p.uuid === displayUuid}
-                onClick={() => {}}
+                onClick={() => setManualDisplayUuid(p.uuid)}
               />
             )
           })}

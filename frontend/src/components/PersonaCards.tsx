@@ -58,6 +58,13 @@ export default function PersonaCards({ personas, maxVisible = 20 }: Props) {
             </div>
             <div className="mb-1 truncate text-[11px] font-medium text-fin-accent">{p.occupation}</div>
             <div className="truncate text-[10px] text-fin-muted">{p.prefecture}（{p.region}）</div>
+            {p.financial_extension?.financial_literacy && (
+              <div className="mt-1">
+                <span className="rounded-full bg-fin-panel border border-fin-border px-1.5 py-0.5 text-[10px] text-fin-muted">
+                  {p.financial_extension.financial_literacy}
+                </span>
+              </div>
+            )}
             <div className="mt-1 line-clamp-2 text-[10px] text-fin-muted/90">{p.persona.slice(0, 60)}...</div>
             <SkillTags listStr={p.skills_and_expertise_list} />
           </button>
