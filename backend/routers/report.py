@@ -373,7 +373,7 @@ def _top_demographic_signal(demographic_breakdown: dict) -> str:
     return f"{labels.get(label, label)}では{group}の反応が比較的強めです。"
 
 
-def _extract_motifs(answers: list[dict], token_polarities: dict[str, float] | None = None) -> tuple[str, str]:
+def _extract_motifs(answers: list[dict]) -> tuple[str, str]:
     """Extract positive/negative motifs using learned token polarities."""
     texts = [_strip_score_prefix(a.get("answer", "")) for a in answers]
     scores: list[int | None] = [a.get("score") for a in answers]
@@ -468,16 +468,18 @@ def build_fallback_top_picks(persona_records: dict[str, dict], token_polarities:
 
 
 def _repair_top_pick(candidate: dict, persona_records: dict[str, dict]) -> dict | None:
-    if not isinstance(candidate, dict):
-        return None
     uuid = candidate.get("persona_uuid")
     if not isinstance(uuid, str) or uuid not in persona_records:
         return None
     record = persona_records[uuid]
-    persona_name = candidate.get("persona_name") if isinstance(candidate.get("persona_name"), str) else ""
-    persona_summary = candidate.get("persona_summary") if isinstance(candidate.get("persona_summary"), str) else ""
-    highlight_reason = candidate.get("highlight_reason") if isinstance(candidate.get("highlight_reason"), str) else ""
-    highlight_quote = candidate.get("highlight_quote") if isinstance(candidate.get("highlight_quote"), str) else ""
+    _pname = candidate.get("persona_name")
+    _psum = candidate.get("persona_summary")
+    _hreason = candidate.get("highlight_reason")
+    _hquote = candidate.get("highlight_quote")
+    persona_name: str = _pname if isinstance(_pname, str) else ""
+    persona_summary: str = _psum if isinstance(_psum, str) else ""
+    highlight_reason: str = _hreason if isinstance(_hreason, str) else ""
+    highlight_quote: str = _hquote if isinstance(_hquote, str) else ""
 
     return {
         "persona_uuid": uuid,
@@ -514,9 +516,10 @@ async def generate_report_endpoint(request: ReportRequest):
         db.row_factory = aiosqlite.Row
 
         # Load run
-        run_rows = await db.execute_fetchall(
+        _run_rows = await db.execute_fetchall(
             "SELECT * FROM survey_runs WHERE id = ?", [request.run_id]
         )
+        run_rows: list = list(_run_rows)
         if not run_rows:
             raise HTTPException(status_code=404, detail="Run not found")
         run = dict(run_rows[0])
@@ -564,10 +567,10 @@ async def generate_report_endpoint(request: ReportRequest):
             [_strip_score_prefix(a.get("answer", "")) for a in record.get("answers", [])]
             for record in persona_records.values()
         ]
-        q1_scores = [record.get("score") for record in persona_records.values() if record.get("score") is not None]
+        q1_scores: list[int] = [int(record["score"]) for record in persona_records.values() if record.get("score") is not None]
         # Only learn if we have enough personas with scores
         if len(q1_scores) >= 2:
-            fresh_polarities, fresh_counts = text_analysis.learn_token_polarities(all_texts_by_persona, q1_scores)
+            fresh_polarities, fresh_counts = text_analysis.learn_token_polarities(all_texts_by_persona, q1_scores)  # type: ignore[arg-type]
             historical_counts: dict[str, int] = {lemma: text_analysis.SEED_COUNTS.get(lemma, 1) for lemma in historical_polarities}
             token_polarities = text_analysis.merge_polarities(fresh_polarities, fresh_counts, historical_polarities, historical_counts)
         else:
