@@ -6,8 +6,10 @@ Written on 2026-03-19 UTC for follow-up investigation.
 
 - Report generation works in automated e2e.
 - vLLM was restarted with `--enable-prefix-caching`.
-- A forced real `/api/report/generate` run still showed `Prefix cache hit rate: 0.0%` in vLLM logs.
+- An initial forced real `/api/report/generate` run showed `Prefix cache hit rate: 0.0%` in vLLM logs.
 - A second `/api/report/generate` for the same run did not hit vLLM at all because backend DB caching returned the stored report.
+- App-side request construction is not the leading suspect anymore: the 3 report subcalls were later verified to share a long post-template token prefix.
+- After restarting vLLM with `--enable-prompt-tokens-details` and measuring direct model calls, prefix caching was confirmed for the third report subcall.
 
 ## What Was Verified
 
@@ -97,6 +99,51 @@ Important observations:
 - The report-generation flow did make 3 real model calls after prefix caching was enabled.
 - vLLM still reported `Prefix cache hit rate: 0.0%`.
 - This evidence was collected after a clean forced regeneration, not from a backend-cached response.
+- This log line alone does not distinguish runtime limitation from measurement gap; request-level `cached_tokens` requires `--enable-prompt-tokens-details`.
+
+## Follow-up Investigation Added After Initial Capture
+
+- A new diagnostic script now exists at `backend/scripts/measure_report_prefix_cache.py`.
+- It rebuilds the exact 3 report requests sent to vLLM, measures post-template token prefix overlap, records request-level `cached_tokens`, and snapshots `/metrics` before and after the sequence.
+- Use that script for future APC investigation instead of relying on backend logs alone.
+
+## Fresh Direct vLLM Measurement
+
+On 2026-03-19 UTC, vLLM was restarted with:
+
+```text
+vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese --host 0.0.0.0 --port 8000 --trust-remote-code --max-model-len 131072 --max-num-seqs 64 --gpu-memory-utilization 0.90 --reasoning-parser-plugin nemotron_nano_v2_reasoning_parser.py --reasoning-parser nemotron_nano_v2 --mamba-ssm-cache-dtype float32 --enable-prefix-caching --enable-prompt-tokens-details
+```
+
+Then the direct diagnostic script was run against the same real history DB run:
+
+```bash
+python backend/scripts/measure_report_prefix_cache.py \
+  --run-id 28e1033e-a2f3-4418-a1b2-815dfc43bbf7 \
+  --history-db /gen-ai/finance/nemotron-finance-demo/data/history.db
+```
+
+Observed output:
+
+```text
+prompt_token_lengths: {'group_tendency': 953, 'conclusion': 1074, 'top_picks': 3716}
+common_prefix_lengths: {'group_vs_conclusion': 905, 'group_vs_top_picks': 905, 'conclusion_vs_top_picks': 905}
+request_cached_tokens: {'group_tendency': None, 'conclusion': None, 'top_picks': 2816}
+metrics_delta: {'vllm:kv_cache_usage_perc': 0.0, 'vllm:prefix_cache_hits_total': 2816.0, 'vllm:prefix_cache_queries_total': 5749.0, 'vllm:prompt_tokens_total': 5749.0}
+```
+
+At the same time, vLLM logged a non-zero hit rate:
+
+```text
+Prefix cache hit rate: 24.4%
+```
+
+Interpretation:
+
+- The app-side shared prefix is real and large.
+- Prefix caching is not universally zero on this model/runtime.
+- In this measured run, cache reuse appeared on the `top_picks` request, not on the first two requests.
+- Earlier `0.0%` observations were incomplete because request-level prompt token details were not enabled.
 
 ## Backend Cache Behavior
 
@@ -150,4 +197,5 @@ That differs from the automated e2e test, which expects this field to be non-emp
 
 - Do not use repeated `/api/report/generate` calls on an already-cached run as evidence for prefix-cache behavior. Backend caching masks model activity.
 - Use a run with `report_json = NULL`, or clear it before each measurement.
-- Capture both backend logs and vLLM logs in the same observation window.
+- Prefer request-level `cached_tokens` plus `/metrics` deltas over raw log interpretation.
+- Capture both backend logs and vLLM metrics in the same observation window.

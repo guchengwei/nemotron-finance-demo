@@ -5,6 +5,7 @@ injected. Adds 0.5-2s random delay to simulate streaming.
 """
 
 import asyncio
+from functools import lru_cache
 import json
 import logging
 import random
@@ -18,6 +19,7 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 REPORT_ALLOWED_KEYS = {"group_tendency", "conclusion", "top_picks"}
+REPORT_EXTRA_BODY = {"chat_template_kwargs": {"enable_thinking": False}}
 
 # Semaphore for concurrency control
 _semaphore: asyncio.Semaphore | None = None
@@ -639,33 +641,140 @@ async def generate_report(
 
 # -- Split report generation (3 focused calls with KV-cache shared prefix) ----
 
+
+class _TopPickItem(BaseModel):
+    persona_uuid: str
+    persona_name: str
+    persona_summary: str
+    highlight_reason: str
+    highlight_quote: str
+
+
+class _TopPicksResponse(BaseModel):
+    picks: list[_TopPickItem]
+
+
+def extract_cached_tokens(resp: Any) -> int | None:
+    """Return cached prompt tokens when prompt token details are enabled."""
+    usage = getattr(resp, "usage", None)
+    prompt_details = getattr(usage, "prompt_tokens_details", None)
+    cached = getattr(prompt_details, "cached_tokens", None)
+    return cached if isinstance(cached, int) else None
+
+
+@lru_cache(maxsize=1)
+def _get_report_tokenizer():
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained(
+        settings.vllm_model,
+        trust_remote_code=True,
+        local_files_only=True,
+    )
+
+
+def render_chat_prompt_token_ids(messages: list[dict[str, str]]) -> list[int]:
+    """Render messages through the model chat template and return prompt token ids."""
+    rendered = _get_report_tokenizer().apply_chat_template(
+        messages,
+        tokenize=True,
+        add_generation_prompt=True,
+    )
+    return list(rendered["input_ids"])
+
+
+def _report_messages(shared_system: str, user_content: str) -> list[dict[str, str]]:
+    return [
+        {"role": "system", "content": shared_system},
+        {"role": "user", "content": user_content},
+    ]
+
+
+def build_report_request_specs(
+    shared_system: str,
+    group_tendency: str,
+    top_pick_candidates: str,
+) -> list[dict[str, Any]]:
+    """Build the exact 3 report requests sent to vLLM."""
+    from prompts import REPORT_CONCLUSION_USER, REPORT_GROUP_TENDENCY_USER, REPORT_TOP_PICKS_USER
+
+    return [
+        {
+            "name": "group_tendency",
+            "messages": _report_messages(shared_system, REPORT_GROUP_TENDENCY_USER),
+            "temperature": 0.3,
+            "max_tokens": 500,
+            "extra_body": dict(REPORT_EXTRA_BODY),
+        },
+        {
+            "name": "conclusion",
+            "messages": _report_messages(
+                shared_system,
+                REPORT_CONCLUSION_USER.format(
+                    group_tendency=group_tendency or "（傾向データなし）"
+                ),
+            ),
+            "temperature": 0.3,
+            "max_tokens": 3000,
+            "extra_body": dict(REPORT_EXTRA_BODY),
+        },
+        {
+            "name": "top_picks",
+            "messages": _report_messages(
+                shared_system,
+                REPORT_TOP_PICKS_USER.format(
+                    top_pick_candidates=top_pick_candidates
+                ),
+            ),
+            "temperature": 0.3,
+            "max_tokens": 800,
+            "extra_body": {
+                **REPORT_EXTRA_BODY,
+                "structured_outputs": {
+                    "json": _TopPicksResponse.model_json_schema()
+                },
+            },
+        },
+    ]
+
+
+def _report_request_spec(
+    name: str,
+    shared_system: str,
+    group_tendency: str = "",
+    top_pick_candidates: str = "",
+) -> dict[str, Any]:
+    for spec in build_report_request_specs(
+        shared_system=shared_system,
+        group_tendency=group_tendency,
+        top_pick_candidates=top_pick_candidates,
+    ):
+        if spec["name"] == name:
+            return spec
+    raise KeyError(f"Unknown report request spec: {name}")
+
 async def generate_report_group_tendency(
     shared_system: str,
 ) -> str:
     """Generate group_tendency as plain text. Returns empty string on failure."""
-    from prompts import REPORT_GROUP_TENDENCY_USER
-
     if settings.mock_llm:
         await asyncio.sleep(0.3)
         return MOCK_REPORT["group_tendency"]
 
     client = get_client()
-    extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
+    spec = _report_request_spec("group_tendency", shared_system)
     try:
         resp = await client.chat.completions.create(
             model=settings.vllm_model,
-            messages=[
-                {"role": "system", "content": shared_system},
-                {"role": "user", "content": REPORT_GROUP_TENDENCY_USER},
-            ],
-            temperature=0.3,
-            max_tokens=500,
-            extra_body=extra_body,
+            messages=spec["messages"],
+            temperature=spec["temperature"],
+            max_tokens=spec["max_tokens"],
+            extra_body=spec["extra_body"],
         )
         raw = sanitize_answer_text(resp.choices[0].message.content or "")
-        cached = resp.usage and getattr(resp.usage, "prompt_tokens_details", None)
-        if cached:
-            logger.info("group_tendency cached_tokens=%s", getattr(cached, "cached_tokens", "?"))
+        cached_tokens = extract_cached_tokens(resp)
+        if cached_tokens is not None:
+            logger.info("group_tendency cached_tokens=%s", cached_tokens)
         return _strip_thinking(raw).strip()
     except Exception as e:
         logger.error("generate_report_group_tendency failed: %s", e)
@@ -677,30 +786,28 @@ async def generate_report_conclusion(
     group_tendency: str,
 ) -> str:
     """Generate conclusion as plain text. Returns empty string on failure."""
-    from prompts import REPORT_CONCLUSION_USER
-
     if settings.mock_llm:
         await asyncio.sleep(0.3)
         return MOCK_REPORT["conclusion"]
 
     client = get_client()
-    extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
-    user_content = REPORT_CONCLUSION_USER.format(group_tendency=group_tendency or "（傾向データなし）")
+    spec = _report_request_spec(
+        "conclusion",
+        shared_system,
+        group_tendency=group_tendency,
+    )
     try:
         resp = await client.chat.completions.create(
             model=settings.vllm_model,
-            messages=[
-                {"role": "system", "content": shared_system},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.3,
-            max_tokens=3000,
-            extra_body=extra_body,
+            messages=spec["messages"],
+            temperature=spec["temperature"],
+            max_tokens=spec["max_tokens"],
+            extra_body=spec["extra_body"],
         )
         raw = sanitize_answer_text(resp.choices[0].message.content or "")
-        cached = resp.usage and getattr(resp.usage, "prompt_tokens_details", None)
-        if cached:
-            logger.info("conclusion cached_tokens=%s", getattr(cached, "cached_tokens", "?"))
+        cached_tokens = extract_cached_tokens(resp)
+        if cached_tokens is not None:
+            logger.info("conclusion cached_tokens=%s", cached_tokens)
         return _strip_thinking(raw).strip()
     except Exception as e:
         logger.error("generate_report_conclusion failed: %s", e)
@@ -712,44 +819,27 @@ async def generate_report_top_picks(
     top_pick_candidates: str,
 ) -> list[dict]:
     """Generate top_picks using structured output. Returns list of pick dicts."""
-    from prompts import REPORT_TOP_PICKS_USER
-    from pydantic import BaseModel as _BaseModel
-
     if settings.mock_llm:
         await asyncio.sleep(0.3)
         return MOCK_REPORT.get("top_picks", [])
 
-    class _TopPickItem(_BaseModel):
-        persona_uuid: str
-        persona_name: str
-        persona_summary: str
-        highlight_reason: str
-        highlight_quote: str
-
-    class _TopPicksResponse(_BaseModel):
-        picks: list[_TopPickItem]
-
-    user_content = REPORT_TOP_PICKS_USER.format(top_pick_candidates=top_pick_candidates)
-    schema = _TopPicksResponse.model_json_schema()
     client = get_client()
-    extra_body: dict = {
-        "structured_outputs": {"json": schema},
-        "chat_template_kwargs": {"enable_thinking": False},
-    }
+    spec = _report_request_spec(
+        "top_picks",
+        shared_system,
+        top_pick_candidates=top_pick_candidates,
+    )
     try:
         resp = await client.chat.completions.create(
             model=settings.vllm_model,
-            messages=[
-                {"role": "system", "content": shared_system},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.3,
-            max_tokens=800,
-            extra_body=extra_body,
+            messages=spec["messages"],
+            temperature=spec["temperature"],
+            max_tokens=spec["max_tokens"],
+            extra_body=spec["extra_body"],
         )
-        cached = resp.usage and getattr(resp.usage, "prompt_tokens_details", None)
-        if cached:
-            logger.info("top_picks cached_tokens=%s", getattr(cached, "cached_tokens", "?"))
+        cached_tokens = extract_cached_tokens(resp)
+        if cached_tokens is not None:
+            logger.info("top_picks cached_tokens=%s", cached_tokens)
         raw = resp.choices[0].message.content or ""
         try:
             import json_repair

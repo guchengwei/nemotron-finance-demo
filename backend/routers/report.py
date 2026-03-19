@@ -593,7 +593,8 @@ async def generate_report_endpoint(request: ReportRequest):
         question_aggregation = _build_question_aggregation(answers, questions)
         top_pick_candidates = _build_top_pick_candidates(persona_records, questions)
 
-        # Build shared system prefix for KV-cache efficiency
+        # Keep the 3 report subcalls structurally cache-eligible; actual APC
+        # behavior must be verified against the active vLLM model/runtime.
         from prompts import REPORT_SHARED_SYSTEM
         questions_formatted = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
         shared_system = REPORT_SHARED_SYSTEM.format(
@@ -603,7 +604,8 @@ async def generate_report_endpoint(request: ReportRequest):
             question_aggregation=question_aggregation,
         )
 
-        # 3 sequential LLM calls (KV cache hit on calls 2+3 due to shared system prefix)
+        # 3 sequential LLM calls. Shared prompt prefix alone is not proof that
+        # prefix caching will work on the active model/runtime.
         group_tendency_raw = await llm.generate_report_group_tendency(shared_system)
         conclusion_raw = await llm.generate_report_conclusion(shared_system, group_tendency_raw)
         top_picks_raw = await llm.generate_report_top_picks(shared_system, top_pick_candidates)
