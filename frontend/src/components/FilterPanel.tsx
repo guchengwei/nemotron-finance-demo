@@ -4,6 +4,17 @@ import { api } from '../api'
 import type { Persona } from '../types'
 import PersonaCards from './PersonaCards'
 
+const REGION_PREFECTURE_MAP: Record<string, string[]> = {
+  '北海道': ['北海道'],
+  '東北': ['青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県'],
+  '関東': ['茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県'],
+  '中部': ['新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県', '岐阜県', '静岡県', '愛知県'],
+  '近畿': ['三重県', '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県'],
+  '中国': ['鳥取県', '島根県', '岡山県', '広島県', '山口県'],
+  '四国': ['徳島県', '香川県', '愛媛県', '高知県'],
+  '九州': ['福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県'],
+}
+
 const COUNT_PRESETS = [
   { label: '高速デモ (8名)', value: 8 },
   { label: '標準 (30名)', value: 30 },
@@ -30,6 +41,7 @@ export default function FilterPanel() {
   const [countLoading, setCountLoading] = useState(false)
   const [personas, setPersonas] = useState<Persona[]>([])
   const latestCountRequest = useRef(0)
+  const autoRandomized = useRef(false)
 
   const queryParams = useMemo(() => ({
     sex: sex || undefined,
@@ -67,6 +79,12 @@ export default function FilterPanel() {
       active = false
     }
   }, [filters, setFilters])
+
+  useEffect(() => {
+    if (!filters || autoRandomized.current) return
+    autoRandomized.current = true
+    randomizeFilters()
+  }, [filters])
 
   useEffect(() => {
     if (!filters) return
@@ -118,6 +136,51 @@ export default function FilterPanel() {
     return Math.min(200, Math.max(1, parsed))
   })()
 
+  const randomizeFilters = () => {
+    if (!filters) return
+
+    // Pick a random region from available regions
+    const availableRegions = filters.regions
+    const randomRegion = availableRegions[Math.floor(Math.random() * availableRegions.length)]
+    setRegion(randomRegion)
+
+    // Find matching prefectures from our map
+    const matchingMapKey = Object.keys(REGION_PREFECTURE_MAP).find(k => randomRegion.includes(k))
+    const regionPrefectures = matchingMapKey ? REGION_PREFECTURE_MAP[matchingMapKey] : []
+
+    // Pick a random prefecture within the region (or leave empty ~30% of the time)
+    if (regionPrefectures.length > 0 && Math.random() > 0.3) {
+      const availablePrefectures = regionPrefectures.filter(p => filters.prefectures.includes(p))
+      if (availablePrefectures.length > 0) {
+        setPrefecture(availablePrefectures[Math.floor(Math.random() * availablePrefectures.length)])
+      } else {
+        setPrefecture('')
+      }
+    } else {
+      setPrefecture('')
+    }
+
+    // Random sex (empty ~30% of the time)
+    if (Math.random() > 0.3 && filters.sex.length > 0) {
+      setSex(filters.sex[Math.floor(Math.random() * filters.sex.length)])
+    } else {
+      setSex('')
+    }
+
+    // Random age range
+    const ageStarts = [20, 25, 30, 35, 40]
+    const ageSpans = [15, 20, 25, 30]
+    const start = ageStarts[Math.floor(Math.random() * ageStarts.length)]
+    const span = ageSpans[Math.floor(Math.random() * ageSpans.length)]
+    setAgeMin(start)
+    setAgeMax(Math.min(80, start + span))
+
+    // Clear other fields
+    setFinancialLiteracy('')
+    setOccupation('')
+    setEducation('')
+  }
+
   const handleSample = async () => {
     setSampling(true)
     try {
@@ -150,7 +213,15 @@ export default function FilterPanel() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold tracking-[-0.03em] text-fin-ink">ペルソナ選択</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-bold tracking-[-0.03em] text-fin-ink">ペルソナ選択</h2>
+          <button
+            onClick={() => randomizeFilters()}
+            className="rounded-full border border-fin-border bg-fin-surface px-3 py-1 text-xs font-medium text-fin-ink transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent"
+          >
+            ランダム
+          </button>
+        </div>
         <div className="text-sm text-fin-muted">
           該当: <span data-testid="match-count" className={`text-base font-bold tabular-nums text-fin-accent transition-opacity duration-200 ${countLoading ? 'opacity-50' : ''}`}>
             {countLoading && (
@@ -223,9 +294,15 @@ export default function FilterPanel() {
               className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors focus:border-fin-accent focus:outline-none"
             >
               <option value="">すべての都道府県</option>
-              {filters.prefectures.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
+              {(() => {
+                const matchingMapKey = region ? Object.keys(REGION_PREFECTURE_MAP).find(k => region.includes(k)) : null
+                const filteredPrefectures = matchingMapKey
+                  ? filters.prefectures.filter(p => REGION_PREFECTURE_MAP[matchingMapKey].includes(p))
+                  : filters.prefectures
+                return filteredPrefectures.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))
+              })()}
             </select>
           </div>
 

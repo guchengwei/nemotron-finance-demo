@@ -145,7 +145,8 @@ def _strip_thinking(text: str) -> str:
 def sanitize_answer_text(text: str) -> str:
     """Remove leaked reasoning markup from model-visible answer text."""
     cleaned = _strip_thinking(text)
-    cleaned = re.sub(r'</think>', '', cleaned, flags=re.IGNORECASE)
+    # Aggressively strip any residual think tag fragments
+    cleaned = re.sub(r'</?think[^>]*>', '', cleaned, flags=re.IGNORECASE)
     return cleaned.strip()
 
 
@@ -316,6 +317,7 @@ async def stream_survey_answer(
     system_prompt: str,
     question: str,
     question_index: int,
+    enable_thinking: bool = True,
 ) -> AsyncGenerator[tuple[str, str], None]:
     """Stream a survey answer. Yields ('think', full_text) then ('answer', chunk) tuples."""
     async with get_semaphore():
@@ -326,6 +328,10 @@ async def stream_survey_answer(
             return
 
         client = get_client()
+        extra_body = {}
+        if not enable_thinking:
+            extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+
         raw = await client.chat.completions.create(
             model=settings.vllm_model,
             messages=[
@@ -335,6 +341,7 @@ async def stream_survey_answer(
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_tokens,
             stream=True,
+            **({"extra_body": extra_body} if extra_body else {}),
         )
 
         async def _chunks() -> AsyncGenerator[str, None]:
@@ -350,6 +357,7 @@ async def stream_survey_answer(
 async def stream_followup_answer(
     system_prompt: str,
     messages: list[dict],
+    enable_thinking: bool = True,
 ) -> AsyncGenerator[tuple[str, str], None]:
     """Stream a follow-up chat response. Yields ('think', full_text) then ('answer', chunk) tuples."""
     async with get_semaphore():
@@ -360,12 +368,17 @@ async def stream_followup_answer(
             return
 
         client = get_client()
+        extra_body = {}
+        if not enable_thinking:
+            extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+
         raw = await client.chat.completions.create(
             model=settings.vllm_model,
             messages=[{"role": "system", "content": system_prompt}] + messages,
             temperature=settings.llm_temperature,
             max_tokens=settings.followup_max_tokens,
             stream=True,
+            **({"extra_body": extra_body} if extra_body else {}),
         )
 
         async def _chunks() -> AsyncGenerator[str, None]:
@@ -378,7 +391,7 @@ async def stream_followup_answer(
             yield item
 
 
-async def generate_questions(survey_theme: str) -> list[str]:
+async def generate_questions(survey_theme: str, enable_thinking: bool = True) -> list[str]:
     """Generate survey questions from theme."""
     from prompts import QUESTION_GEN_PROMPT
     variation_seed = random.randint(1, 10000)
@@ -398,12 +411,18 @@ async def generate_questions(survey_theme: str) -> list[str]:
         ]
 
     client = get_client()
-    resp = await client.chat.completions.create(
-        model=settings.vllm_model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.9,
-        max_tokens=512,
-    )
+    extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
+    try:
+        resp = await client.chat.completions.create(
+            model=settings.vllm_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.9,
+            max_tokens=1024,
+            extra_body=extra_body,
+        )
+    except Exception as e:
+        logger.error("Question generation LLM call failed: %s", e)
+        return MOCK_QUESTIONS[:3]
     text = sanitize_answer_text(resp.choices[0].message.content or "[]")
     # Strip markdown code blocks if present
     text = re.sub(r'```(?:json)?\s*', '', text).strip()
@@ -461,12 +480,18 @@ async def generate_report_raw(
     )
 
     client = get_client()
-    resp = await client.chat.completions.create(
-        model=settings.vllm_model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=settings.report_max_tokens,
-    )
+    extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
+    try:
+        resp = await client.chat.completions.create(
+            model=settings.vllm_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=settings.report_max_tokens,
+            extra_body=extra_body,
+        )
+    except Exception as e:
+        logger.error("Report generation LLM call failed: %s", e)
+        return ""
     return sanitize_answer_text(resp.choices[0].message.content or "")
 
 

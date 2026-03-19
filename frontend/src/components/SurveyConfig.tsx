@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api'
-import { useStore } from '../store'
+import { useStore, SURVEY_PRESETS } from '../store'
 import { useSurvey } from '../hooks/useSurvey'
 
 
@@ -10,7 +10,7 @@ export default function SurveyConfig() {
   const {
     selectedPersonas, surveyTheme, setSurveyTheme,
     questions, setQuestions, surveyLabel, setSurveyLabel,
-    setStep,
+    setStep, enableThinking, setEnableThinking,
   } = useStore()
   const { startSurvey } = useSurvey()
 
@@ -18,6 +18,7 @@ export default function SurveyConfig() {
   const [generatingQuestions, setGeneratingQuestions] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
+  const [selectedPreset, setSelectedPreset] = useState<string>('')
 
   const estimatedMinutes = Math.ceil(selectedPersonas.length * questions.length * 3 / 60)
 
@@ -50,6 +51,16 @@ export default function SurveyConfig() {
     setEditingIdx(questions.length)
   }
 
+  const handlePresetChange = (presetId: string) => {
+    setSelectedPreset(presetId)
+    if (!presetId) return
+    const preset = SURVEY_PRESETS.find(p => p.id === presetId)
+    if (preset) {
+      setSurveyTheme(preset.theme)
+      setQuestions(preset.questions)
+    }
+  }
+
   const handleStart = () => {
     setStep(3)
     startSurvey()
@@ -62,6 +73,20 @@ export default function SurveyConfig() {
         <div className="text-sm text-fin-muted">
           {selectedPersonas.length}名選択済み
         </div>
+      </div>
+
+      <div>
+        <label className="mb-2 block text-xs font-semibold text-fin-muted">プリセット</label>
+        <select
+          value={selectedPreset}
+          onChange={(e) => handlePresetChange(e.target.value)}
+          className="w-full rounded-full border border-fin-border bg-fin-surface px-4 py-3 text-sm text-fin-ink shadow-card transition-colors focus:border-fin-accent focus:outline-none"
+        >
+          <option value="">カスタム</option>
+          {SURVEY_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
       </div>
 
       <div>
@@ -88,6 +113,19 @@ export default function SurveyConfig() {
           placeholder="例: 投信オンライン_40代男性_東京"
           className="w-full rounded-full border border-fin-border bg-fin-surface px-4 py-3 text-sm text-fin-ink shadow-card transition-colors placeholder:text-fin-muted focus:border-fin-accent focus:outline-none"
         />
+      </div>
+
+      <div className="flex items-center justify-between rounded-[1.5rem] border border-fin-border bg-fin-surface px-4 py-3 shadow-card">
+        <div>
+          <div className="text-sm font-medium text-fin-ink">モデル思考モード</div>
+          <div className="text-xs text-fin-muted">ONにすると推論が深くなりますが、回答に時間がかかります</div>
+        </div>
+        <button
+          onClick={() => setEnableThinking(!enableThinking)}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enableThinking ? 'bg-fin-accent' : 'bg-fin-border'}`}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-fin-surface shadow transition-transform ${enableThinking ? 'translate-x-6' : 'translate-x-1'}`} />
+        </button>
       </div>
 
       <div>

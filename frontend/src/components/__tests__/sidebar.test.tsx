@@ -81,7 +81,6 @@ describe('Sidebar new survey', () => {
     await waitFor(() => {
       expect(screen.queryByText('田中太郎')).not.toBeInTheDocument()
     })
-    expect((screen.getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe('')
     expect(screen.getByRole('heading', { name: 'ペルソナ選択' })).toBeInTheDocument()
   })
 

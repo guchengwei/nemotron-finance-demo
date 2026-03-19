@@ -68,6 +68,7 @@ async def _run_persona_survey(
     event_queue: asyncio.Queue,
     history_db: aiosqlite.Connection,
     e2e_scenario: str | None = None,
+    enable_thinking: bool = True,
 ):
     """Run all questions for a single persona and queue SSE events."""
     try:
@@ -91,7 +92,7 @@ async def _run_persona_survey(
             full_answer = ""
             full_thinking = ""
             try:
-                async for kind, chunk in stream_survey_answer(persona, system_prompt, question, q_idx):
+                async for kind, chunk in stream_survey_answer(persona, system_prompt, question, q_idx, enable_thinking=enable_thinking):
                     if kind == 'think':
                         full_thinking = chunk
                         await event_queue.put({
@@ -179,8 +180,9 @@ async def _survey_stream(
     async with aiosqlite.connect(settings.history_db_path) as history_db:
         # Resolve questions
         questions = request.questions or []
+        enable_thinking = request.enable_thinking if request.enable_thinking is not None else True
         if not questions:
-            questions = await generate_questions(request.survey_theme)
+            questions = await generate_questions(request.survey_theme, enable_thinking=enable_thinking)
             yield f"event: questions_generated\ndata: {json.dumps({'questions': questions}, ensure_ascii=False)}\n\n"
 
         # Create run record
@@ -208,7 +210,8 @@ async def _survey_stream(
             async with semaphore:
                 await _run_persona_survey(
                     pid, idx, total, questions, run_id,
-                    request.survey_theme, event_queue, history_db, e2e_scenario
+                    request.survey_theme, event_queue, history_db, e2e_scenario,
+                    enable_thinking=enable_thinking,
                 )
 
         try:
@@ -268,7 +271,7 @@ async def _survey_stream(
 @router.post("/questions", response_model=QuestionGenerationResponse)
 async def create_questions(request: QuestionGenerationRequest):
     """Generate survey questions without creating a run record."""
-    questions = await generate_questions(request.survey_theme)
+    questions = await generate_questions(request.survey_theme, enable_thinking=request.enable_thinking if request.enable_thinking is not None else True)
     return QuestionGenerationResponse(questions=questions)
 
 

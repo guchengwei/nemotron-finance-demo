@@ -65,10 +65,12 @@ class SurveyRunRequest(BaseModel):
     survey_theme: str
     questions: Optional[List[str]] = None
     label: Optional[str] = None
+    enable_thinking: Optional[bool] = True
 
 
 class QuestionGenerationRequest(BaseModel):
     survey_theme: str
+    enable_thinking: Optional[bool] = True
 
 
 class QuestionGenerationResponse(BaseModel):

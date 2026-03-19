@@ -2,8 +2,6 @@ import { expect, test } from '@playwright/test'
 import { filtersFixture } from './fixtures/personas'
 
 test('filter hit count updates for latest dropdown selection', async ({ page }) => {
-  let requestIndex = 0
-
   await page.route('**/api/personas/filters', async (route) => {
     await route.fulfill({
       status: 200,
@@ -21,8 +19,10 @@ test('filter hit count updates for latest dropdown selection', async ({ page }) 
   })
 
   await page.route('**/api/personas/count**', async (route) => {
-    requestIndex += 1
-    if (requestIndex === 1) {
+    const url = new URL(route.request().url())
+    const sex = url.searchParams.get('sex')
+
+    if (sex === '男') {
       await new Promise((resolve) => setTimeout(resolve, 250))
       await route.fulfill({
         status: 200,

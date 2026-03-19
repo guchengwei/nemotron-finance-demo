@@ -59,6 +59,7 @@ export interface SurveyRunRequest {
   survey_theme: string
   questions?: string[]
   label?: string
+  enable_thinking?: boolean
 }
 
 export interface TopPick {

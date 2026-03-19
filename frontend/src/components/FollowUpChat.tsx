@@ -200,7 +200,11 @@ export default function FollowUpChat() {
                       : 'rounded-bl-sm border border-fin-border bg-fin-panel text-fin-ink'
                   } ${msg.streaming ? 'cursor-blink' : ''}`}
                 >
-                  {sanitizeVisibleText(msg.content) || (msg.streaming ? '' : '（空の回答）')}
+                  {sanitizeVisibleText(msg.content) || (msg.streaming ? (
+                    <span className="thinking-dots text-fin-accent">
+                      <span>思考中</span><span>.</span><span>.</span><span>.</span>
+                    </span>
+                  ) : '（空の回答）')}
                 </div>
               </div>
             </div>

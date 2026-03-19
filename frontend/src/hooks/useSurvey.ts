@@ -45,7 +45,7 @@ export function useSurvey() {
     stopFlushLoop()
     chunkBuffer.current = {}
 
-    const { selectedPersonas, surveyTheme, questions, surveyLabel, setPersonaStates, setSurveyComplete, setSurveyCounts, setCurrentHistoryRun, setCurrentReport } = useStore.getState()
+    const { selectedPersonas, surveyTheme, questions, surveyLabel, enableThinking, setPersonaStates, setSurveyComplete, setSurveyCounts, setCurrentHistoryRun, setCurrentReport } = useStore.getState()
 
     const initialStates = Object.fromEntries(
       selectedPersonas.map((p) => [p.uuid, { persona: p, status: 'waiting' as const, answers: [] }]),
@@ -78,6 +78,7 @@ export function useSurvey() {
         survey_theme: surveyTheme,
         questions,
         label: surveyLabel || undefined,
+        enable_thinking: enableThinking,
       },
       (event, data) => {
         const s = useStore.getState()

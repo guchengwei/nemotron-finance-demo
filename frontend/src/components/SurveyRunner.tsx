@@ -5,6 +5,10 @@ import PersonaAvatar from './PersonaAvatar'
 import SurveyProgress from './SurveyProgress'
 import { scoreBg } from '../utils/scoreParser'
 
+function sanitizeVisibleText(text: string) {
+  return text.replace(/<\/?think[^>]*>/gi, '').trim()
+}
+
 const LARGE_SURVEY_THRESHOLD = 30
 
 function ThinkingBlock({ thinking }: { thinking: string }) {
@@ -89,7 +93,7 @@ export default function SurveyRunner() {
   const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : undefined
 
   useEffect(() => {
-    if (!surveyComplete || !currentRunId || surveyFailed > 0) return
+    if (!surveyComplete || !currentRunId || surveyCompleted === 0) return
     const hasAnswers = Object.values(personaStates).some((s) => s.answers.length > 0)
     if (!hasAnswers) return
 
@@ -224,7 +228,7 @@ export default function SurveyRunner() {
                           {ans.score}
                         </span>
                       )}
-                      {ans.answer}
+                      {sanitizeVisibleText(ans.answer)}
                     </div>
                   </div>
                 ))}
@@ -248,10 +252,18 @@ export default function SurveyRunner() {
                       className="mt-1 rounded-[1.25rem] border border-fin-accent/25 bg-fin-surface p-3 text-sm text-fin-ink shadow-card"
                     >
                       {isLarge ? (
-                        <span>{displayState.activeAnswer || <span className="text-fin-muted">回答中...</span>}</span>
+                        <span>{sanitizeVisibleText(displayState.activeAnswer || '') || (
+                          <span className="thinking-dots text-fin-accent">
+                            <span>思考中</span><span>.</span><span>.</span><span>.</span>
+                          </span>
+                        )}</span>
                       ) : (
-                        <span className={displayState.activeAnswer ? 'cursor-blink' : 'text-fin-muted'}>
-                          {displayState.activeAnswer || '入力中...'}
+                        <span className={displayState.activeAnswer ? 'cursor-blink' : ''}>
+                          {sanitizeVisibleText(displayState.activeAnswer || '') || (
+                            <span className="thinking-dots text-fin-accent">
+                              <span>思考中</span><span>.</span><span>.</span><span>.</span>
+                            </span>
+                          )}
                         </span>
                       )}
                     </div>
