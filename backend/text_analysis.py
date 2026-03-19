@@ -1,7 +1,7 @@
 import logging
 import sqlite3
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,8 @@ _SEED_POLARITIES: dict[str, float] = {
     "便利": 1.0, "簡単": 0.8, "安心": 0.7, "期待": 0.6, "魅力": 0.8,
     "不安": -1.0, "懸念": -0.8, "難しい": -0.7, "複雑": -0.6, "リスク": -0.5,
 }
-_SEED_COUNTS: dict[str, int] = {lemma: 1 for lemma in _SEED_POLARITIES}
+# Sample count of 1 per seed entry — diluted quickly as real data accumulates
+SEED_COUNTS: dict[str, int] = {lemma: 1 for lemma in _SEED_POLARITIES}
 
 
 def _fallback_tokenize(text: str) -> list[str]:
@@ -39,7 +40,7 @@ def tokenize(text: str) -> list[str]:
 
     global _tagger
     if _tagger is None:
-        _tagger = fugashi.Tagger()
+        _tagger = fugashi.Tagger()  # type: ignore[attr-defined]
 
     results = []
     for word in _tagger(text):
@@ -215,7 +216,7 @@ def save_polarities(
         )
         conn.commit()
 
-        updated_at = datetime.utcnow().isoformat()
+        updated_at = datetime.now(timezone.utc).isoformat()
 
         for lemma, fresh_polarity in polarities.items():
             n = sample_counts.get(lemma, 1)
@@ -257,12 +258,15 @@ def load_polarities(db_path: str) -> dict[str, float]:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='token_polarities'"
         ).fetchone()
         if not table_exists:
-            return {}
+            # Cold start: seed lexicon acts as the initial prior (sample_count=1 each)
+            return dict(_SEED_POLARITIES)
 
         rows = conn.execute(
             "SELECT lemma, polarity FROM token_polarities WHERE tokenizer_version = ?",
             (TOKENIZER_VERSION,),
         ).fetchall()
+        if not rows:
+            return dict(_SEED_POLARITIES)
         return {lemma: polarity for lemma, polarity in rows}
     finally:
         conn.close()
