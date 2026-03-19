@@ -41,7 +41,6 @@ export interface FiltersResponse {
   prefectures: string[]
   occupations_top50: string[]
   education_levels: string[]
-  financial_literacy: string[]
   total_count: number
 }
 

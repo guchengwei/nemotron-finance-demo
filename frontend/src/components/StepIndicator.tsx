@@ -14,7 +14,7 @@ export default function StepIndicator() {
   const canNavigateTo = (step: Step): boolean => {
     if (step === 1) return true
     if (step === 2) return useStore.getState().selectedPersonas.length > 0
-    if (step === 3) return false  // only via survey start
+    if (step === 3) return Object.keys(useStore.getState().personaStates).length > 0
     if (step === 4) return surveyComplete || useStore.getState().currentReport !== null
     if (step === 5) return useStore.getState().currentReport !== null
     return false

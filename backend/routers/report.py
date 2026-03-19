@@ -139,6 +139,122 @@ def _build_candidate_personas_block(persona_records: dict[str, dict], max_person
     return "\n\n".join(blocks)
 
 
+def _extract_answer_themes(answers: list[dict]) -> list[str]:
+    """Extract top keyword themes from answers."""
+    keywords = {
+        "使いやす": "使いやすさ", "便利": "利便性", "効率": "効率化",
+        "透明": "透明性", "安心": "安心感", "不安": "不安感",
+        "懸念": "懸念", "手数料": "手数料", "セキュリティ": "セキュリティ",
+        "難し": "操作負荷", "複雑": "複雑さ", "期待": "期待感",
+        "リスク": "リスク", "老後": "老後資金", "投資": "投資",
+    }
+    counts: dict[str, int] = defaultdict(int)
+    for a in answers:
+        text = _strip_score_prefix(a.get("answer", ""))
+        for needle, label in keywords.items():
+            if needle in text:
+                counts[label] += 1
+    return [label for label, _ in sorted(counts.items(), key=lambda x: x[1], reverse=True)]
+
+
+def _pick_representative_excerpts(answers: list[dict], n: int = 5) -> list[str]:
+    """Pick representative answer excerpts — stratified by score if Q1."""
+    scored = [(a.get("score"), a) for a in answers if a.get("answer")]
+    has_scores = any(s is not None for s, _ in scored)
+    if has_scores:
+        buckets: dict = {1: [], 2: [], 3: [], 4: [], 5: []}
+        for s, a in scored:
+            if s in buckets:
+                buckets[s].append(a)
+        selected = []
+        for score in [5, 1, 3, 4, 2]:
+            if buckets.get(score):
+                selected.append(buckets[score][0])
+            if len(selected) >= n:
+                break
+    else:
+        selected = [a for _, a in scored[:n]]
+    excerpts = []
+    for a in selected:
+        text = _clip_text(_strip_score_prefix(a.get("answer", "")), 80)
+        if text:
+            excerpts.append(text)
+    return excerpts
+
+
+def _build_question_aggregation(answers: list[dict], questions: list[str]) -> str:
+    """Aggregate ALL answers per question into stats + themes. Scales to any survey size."""
+    q_answers: dict[int, list] = defaultdict(list)
+    for a in answers:
+        q_answers[a["question_index"]].append(a)
+
+    lines = []
+    for q_idx, question in enumerate(questions):
+        q_list = q_answers.get(q_idx, [])
+        lines.append(f"Q{q_idx+1}: {question}")
+        lines.append(f"  回答数: {len(q_list)}")
+
+        if q_idx == 0:
+            scores = [a["score"] for a in q_list if a.get("score") is not None]
+            if scores:
+                dist = {str(i): scores.count(i) for i in range(1, 6)}
+                avg = round(sum(scores) / len(scores), 1)
+                lines.append(f"  平均スコア: {avg}, 分布: {dist}")
+
+        themes = _extract_answer_themes(q_list)
+        if themes:
+            lines.append(f"  主要テーマ: {', '.join(themes[:5])}")
+
+        representative = _pick_representative_excerpts(q_list, n=4)
+        for excerpt in representative:
+            lines.append(f"  - {excerpt}")
+
+    return "\n".join(lines)
+
+
+def _build_top_pick_candidates(persona_records: dict[str, dict], questions: list[str], max_candidates: int = 10) -> str:
+    """Pre-select diverse candidates using Python scoring; give LLM full Q&A."""
+    all_records = list(persona_records.values())
+    if not all_records:
+        return ""
+
+    scored = []
+    for record in all_records:
+        scored.append({
+            "uuid": record["persona_uuid"],
+            "record": record,
+            "sentiment": _record_sentiment_score(record),
+            "concern": _record_concern_score(record),
+            "uniqueness": _record_uniqueness_score(record),
+        })
+
+    candidates: list[str] = []
+    for axis in ["sentiment", "concern", "uniqueness"]:
+        top = sorted(scored, key=lambda x: x[axis], reverse=True)
+        for item in top:
+            if item["uuid"] not in candidates:
+                candidates.append(item["uuid"])
+            if len(candidates) >= max_candidates:
+                break
+
+    blocks = []
+    for uuid in candidates:
+        record = persona_records[uuid]
+        block = [
+            f"persona_uuid: {uuid}",
+            f"summary: {record['persona_summary']}",
+            f"score: {record.get('score', 'N/A')}",
+        ]
+        for ans in record.get("answers", []):
+            q_text = questions[ans["question_index"]] if ans["question_index"] < len(questions) else f"Q{ans['question_index']+1}"
+            answer_text = _strip_score_prefix(ans.get("answer", ""))[:200]
+            block.append(f"Q: {q_text}")
+            block.append(f"A: {answer_text}")
+        blocks.append("\n".join(block))
+
+    return "\n\n".join(blocks)
+
+
 def _aggregate_scores(answers: list[dict]) -> dict:
     """Python-side aggregation for large surveys."""
     scores = [a["score"] for a in answers if a.get("score") is not None and a["question_index"] == 0]
@@ -181,9 +297,8 @@ def _aggregate_scores(answers: list[dict]) -> dict:
         sex_raw = p.get("sex", "")
         by_sex[sex_display(sex_raw)].append(a["score"])
 
-        lit = p.get("financial_literacy") or (
-            json.loads(a.get("persona_full_json") or "{}").get("financial_literacy")
-        )
+        fe = p.get("financial_extension") or {}
+        lit = p.get("financial_literacy") or fe.get("financial_literacy")
         if lit:
             by_lit[lit].append(a["score"])
 
@@ -473,25 +588,25 @@ async def generate_report_endpoint(request: ReportRequest):
         # Aggregate scores in Python
         aggregated = _aggregate_scores(answers)
 
-        if large_survey:
-            # 2-pass: Python aggregation + LLM qualitative on subset
-            answers_summary = _build_answers_summary(answers, questions, max_answers=20)
-        else:
-            answers_summary = _build_answers_summary(answers, questions, max_answers=len(answers))
+        # New data preparation: aggregated per question + pre-scored top-pick candidates
         persona_records = _build_persona_records(answers)
-        candidate_personas = _build_candidate_personas_block(
-            persona_records,
-            max_personas=20 if large_survey else len(persona_records),
-        )
+        question_aggregation = _build_question_aggregation(answers, questions)
+        top_pick_candidates = _build_top_pick_candidates(persona_records, questions)
 
-        # LLM for qualitative parts
-        llm_result = await llm.generate_report(
+        # Build shared system prefix for KV-cache efficiency
+        from prompts import REPORT_SHARED_SYSTEM
+        questions_formatted = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
+        shared_system = REPORT_SHARED_SYSTEM.format(
             survey_theme=run["survey_theme"],
             persona_count=persona_count,
-            questions=questions,
-            answers_summary=answers_summary,
-            candidate_personas=candidate_personas,
+            questions_formatted=questions_formatted,
+            question_aggregation=question_aggregation,
         )
+
+        # 3 sequential LLM calls (KV cache hit on calls 2+3 due to shared system prefix)
+        group_tendency_raw = await llm.generate_report_group_tendency(shared_system)
+        conclusion_raw = await llm.generate_report_conclusion(shared_system, group_tendency_raw)
+        top_picks_raw = await llm.generate_report_top_picks(shared_system, top_pick_candidates)
 
         fallback_group_tendency = build_fallback_group_tendency(
             aggregated["overall_score"],
@@ -499,20 +614,20 @@ async def generate_report_endpoint(request: ReportRequest):
             aggregated["demographic_breakdown"],
         )
         fallback_conclusion = build_fallback_conclusion(aggregated["overall_score"], answers)
-        merged_top_picks = _merge_top_picks(llm_result.get("top_picks", []), persona_records)
-        if not llm_result.get("group_tendency"):
+        merged_top_picks = _merge_top_picks(top_picks_raw, persona_records)
+        if not group_tendency_raw:
             logger.warning("report fallback used for group_tendency")
-        if not llm_result.get("conclusion"):
+        if not conclusion_raw:
             logger.warning("report fallback used for conclusion")
-        if len(merged_top_picks) != len(llm_result.get("top_picks", []) or []):
-            logger.warning("report fallback used for top_picks")
+        if len(merged_top_picks) != len(top_picks_raw):
+            logger.warning("report fallback used for top_picks (merged %d from %d)", len(merged_top_picks), len(top_picks_raw))
 
         report_data = {
             "run_id": request.run_id,
             "overall_score": aggregated["overall_score"],
             "score_distribution": aggregated["score_distribution"],
-            "group_tendency": llm_result.get("group_tendency") or fallback_group_tendency,
-            "conclusion": llm_result.get("conclusion") or fallback_conclusion,
+            "group_tendency": group_tendency_raw or fallback_group_tendency,
+            "conclusion": conclusion_raw or fallback_conclusion,
             "top_picks": [TopPick(**pick) for pick in merged_top_picks],
             "demographic_breakdown": aggregated["demographic_breakdown"],
         }

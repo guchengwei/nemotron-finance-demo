@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useStore } from '../store'
 import { api } from '../api'
 import DemographicCharts from './DemographicCharts'
@@ -27,32 +27,39 @@ export default function ReportDashboard() {
   } = useStore()
 
   const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const triggerGenerate = useCallback(() => {
+    if (!currentRunId) return
+    setGenerating(true)
+    setError(null)
+    api.generateReport(currentRunId)
+      .then(setCurrentReport)
+      .catch((e: Error) => setError(e.message || 'レポート生成に失敗しました'))
+      .finally(() => setGenerating(false))
+  }, [currentRunId, setCurrentReport])
 
   useEffect(() => {
     if (!currentReport && currentRunId) {
-      setGenerating(true)
-      api.generateReport(currentRunId)
-        .then(setCurrentReport)
-        .catch(console.error)
-        .finally(() => setGenerating(false))
+      triggerGenerate()
     }
-  }, [currentReport, currentRunId, setCurrentReport])
+  }, [currentReport, currentRunId, triggerGenerate])
 
   const report = currentReport
 
-  const handleChatWithPersona = (uuid: string) => {
-    // Find persona from selected or from history
-    const persona = selectedPersonas.find((p) => p.uuid === uuid) ||
-      currentHistoryRun?.answers.find((a) => a.persona_uuid === uuid)
-        ? (() => {
-            try {
-              return JSON.parse(currentHistoryRun!.answers.find((a) => a.persona_uuid === uuid)!.persona_full_json)
-            } catch { return null }
-          })()
-        : null
-    if (persona) setFollowupPersona(persona)
-    setStep(5)
-  }
+  const handleChatWithPersona = useCallback((uuid: string) => {
+    let persona = selectedPersonas.find((p) => p.uuid === uuid) ?? null
+    if (!persona && currentHistoryRun) {
+      const answer = currentHistoryRun.answers.find((a) => a.persona_uuid === uuid)
+      if (answer) {
+        try { persona = JSON.parse(answer.persona_full_json) } catch { /* skip */ }
+      }
+    }
+    if (persona) {
+      setFollowupPersona(persona)
+      setStep(5)
+    }
+  }, [selectedPersonas, currentHistoryRun, setFollowupPersona, setStep])
 
   const handleDownload = () => {
     if (!report) return
@@ -67,8 +74,23 @@ export default function ReportDashboard() {
 
   if (generating) {
     return (
-      <div className="flex items-center justify-center h-32">
+      <div className="flex flex-col items-center justify-center h-32 gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-fin-accent/20 border-t-fin-accent" />
         <div className="text-sm text-fin-muted">レポートを生成中...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-32 gap-3">
+        <div className="text-sm text-fin-danger">{error}</div>
+        <button
+          onClick={triggerGenerate}
+          className="rounded-full border border-fin-accent px-4 py-2 text-xs text-fin-accent hover:bg-fin-accentSoft"
+        >
+          再試行
+        </button>
       </div>
     )
   }
@@ -134,7 +156,7 @@ export default function ReportDashboard() {
 
       <DemographicCharts report={report} />
 
-      {report.top_picks && report.top_picks.length > 0 && (
+      {report.top_picks && report.top_picks.length > 0 ? (
         <div data-testid="report-top-picks">
           <h3 className="mb-3 text-sm font-bold text-fin-ink">注目回答者</h3>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -151,6 +173,10 @@ export default function ReportDashboard() {
               )
             })}
           </div>
+        </div>
+      ) : (
+        <div className="rounded-[1.5rem] border border-fin-warning/30 bg-fin-warning/10 px-4 py-3 text-sm text-fin-warning">
+          注目回答者を特定できませんでした。回答データが少ない可能性があります。
         </div>
       )}
     </div>

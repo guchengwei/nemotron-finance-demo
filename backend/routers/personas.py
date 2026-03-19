@@ -30,14 +30,12 @@ async def get_count(
     region: Optional[str] = Query(None),
     occupation: Optional[str] = Query(None),
     education: Optional[str] = Query(None),
-    financial_literacy: Optional[str] = Query(None),
 ):
     store = get_store()
     total = store.count(
         sex=sex, age_min=age_min, age_max=age_max,
         region=region, prefecture=prefecture,
         occupation=occupation, education=education,
-        financial_literacy=financial_literacy,
     )
     return CountResponse(total_matching=total)
 
@@ -51,7 +49,6 @@ async def get_sample(
     region: Optional[str] = Query(None),
     occupation: Optional[str] = Query(None),
     education: Optional[str] = Query(None),
-    financial_literacy: Optional[str] = Query(None),
     count: int = Query(8, ge=1, le=200),
 ):
     store = get_store()
@@ -60,7 +57,6 @@ async def get_sample(
         sex=sex, age_min=age_min, age_max=age_max,
         region=region, prefecture=prefecture,
         occupation=occupation, education=education,
-        financial_literacy=financial_literacy,
     )
 
     # Enrich personas lacking cached financial extension

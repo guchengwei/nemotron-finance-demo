@@ -35,7 +35,6 @@ const filtersResponse = {
   prefectures: ['東京都'],
   occupations_top50: ['会社員'],
   education_levels: ['大学卒'],
-  financial_literacy: ['初心者', '中級者'],
   total_count: 120,
 }
 

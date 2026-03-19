@@ -24,7 +24,7 @@ def _persona_json(uuid: str, name: str, age: int, sex: str, occupation: str, pre
             "sex": sex,
             "occupation": occupation,
             "prefecture": prefecture,
-            "financial_literacy": literacy,
+            "financial_extension": {"financial_literacy": literacy},
         },
         ensure_ascii=False,
     )
@@ -138,13 +138,24 @@ def report_client(tmp_path):
     settings.mock_llm = original_mock
 
 
-def test_report_endpoint_uses_fallbacks_when_llm_returns_prose_only(report_client):
+def test_report_endpoint_uses_fallbacks_when_llm_returns_empty(report_client):
+    """When all split LLM calls return empty, Python fallbacks fill in the gaps."""
     client, history_db = report_client
 
-    async def fake_raw(*args, **kwargs):
-        return "全体として慎重な意見もありましたが、便利さへの期待もあります。"
+    async def fake_group_tendency(*args, **kwargs):
+        return ""
 
-    with patch("llm.generate_report_raw", side_effect=fake_raw):
+    async def fake_conclusion(*args, **kwargs):
+        return ""
+
+    async def fake_top_picks(*args, **kwargs):
+        return []
+
+    with (
+        patch("llm.generate_report_group_tendency", side_effect=fake_group_tendency),
+        patch("llm.generate_report_conclusion", side_effect=fake_conclusion),
+        patch("llm.generate_report_top_picks", side_effect=fake_top_picks),
+    ):
         response = client.post("/api/report/generate", json={"run_id": "run-report"})
 
     assert response.status_code == 200
@@ -165,21 +176,20 @@ def test_report_endpoint_uses_fallbacks_when_llm_returns_prose_only(report_clien
 def test_report_endpoint_preserves_partial_json_and_repairs_missing_fields(report_client):
     client, _ = report_client
 
-    async def fake_raw(*args, **kwargs):
-        return json.dumps(
-            {
-                "group_tendency": "若年層は期待と不安が混在しています。",
-                "top_picks": [
-                    {
-                        "persona_uuid": "p1",
-                        "highlight_reason": "前向きな期待が強い",
-                    }
-                ],
-            },
-            ensure_ascii=False,
-        )
+    async def fake_group_tendency(*args, **kwargs):
+        return "若年層は期待と不安が混在しています。"
 
-    with patch("llm.generate_report_raw", side_effect=fake_raw):
+    async def fake_conclusion(*args, **kwargs):
+        return ""
+
+    async def fake_top_picks(*args, **kwargs):
+        return [{"persona_uuid": "p1", "highlight_reason": "前向きな期待が強い"}]
+
+    with (
+        patch("llm.generate_report_group_tendency", side_effect=fake_group_tendency),
+        patch("llm.generate_report_conclusion", side_effect=fake_conclusion),
+        patch("llm.generate_report_top_picks", side_effect=fake_top_picks),
+    ):
         response = client.post("/api/report/generate", json={"run_id": "run-report"})
 
     body = response.json()
@@ -195,32 +205,35 @@ def test_report_endpoint_preserves_partial_json_and_repairs_missing_fields(repor
 def test_report_endpoint_rejects_fabricated_top_pick_uuids(report_client):
     client, _ = report_client
 
-    async def fake_raw(*args, **kwargs):
-        return json.dumps(
-            {
-                "group_tendency": "全体では前向き寄りです。",
-                "conclusion": "安全性説明を補強すると良いです。",
-                "top_picks": [
-                    {
-                        "persona_uuid": "fake-uuid",
-                        "persona_name": "架空",
-                        "persona_summary": "架空",
-                        "highlight_reason": "架空",
-                        "highlight_quote": "架空",
-                    },
-                    {
-                        "persona_uuid": "p2",
-                        "persona_name": "佐藤花子",
-                        "persona_summary": "佐藤花子、29歳、女性、公務員、東京都",
-                        "highlight_reason": "懸念が具体的",
-                        "highlight_quote": "手数料やセキュリティが不安です。",
-                    },
-                ],
-            },
-            ensure_ascii=False,
-        )
+    async def fake_group_tendency(*args, **kwargs):
+        return "全体では前向き寄りです。"
 
-    with patch("llm.generate_report_raw", side_effect=fake_raw):
+    async def fake_conclusion(*args, **kwargs):
+        return "安全性説明を補強すると良いです。"
+
+    async def fake_top_picks(*args, **kwargs):
+        return [
+            {
+                "persona_uuid": "fake-uuid",
+                "persona_name": "架空",
+                "persona_summary": "架空",
+                "highlight_reason": "架空",
+                "highlight_quote": "架空",
+            },
+            {
+                "persona_uuid": "p2",
+                "persona_name": "佐藤花子",
+                "persona_summary": "佐藤花子、29歳、女性、公務員、東京都",
+                "highlight_reason": "懸念が具体的",
+                "highlight_quote": "手数料やセキュリティが不安です。",
+            },
+        ]
+
+    with (
+        patch("llm.generate_report_group_tendency", side_effect=fake_group_tendency),
+        patch("llm.generate_report_conclusion", side_effect=fake_conclusion),
+        patch("llm.generate_report_top_picks", side_effect=fake_top_picks),
+    ):
         response = client.post("/api/report/generate", json={"run_id": "run-report"})
 
     body = response.json()

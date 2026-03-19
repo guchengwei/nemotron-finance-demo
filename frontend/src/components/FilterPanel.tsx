@@ -31,7 +31,6 @@ export default function FilterPanel() {
   const [prefecture, setPrefecture] = useState('')
   const [occupation, setOccupation] = useState('')
   const [education, setEducation] = useState('')
-  const [financialLiteracy, setFinancialLiteracy] = useState('')
   const [count, setCount] = useState(8)
   const [customCount, setCustomCount] = useState('')
 
@@ -51,8 +50,7 @@ export default function FilterPanel() {
     prefecture: prefecture || undefined,
     occupation: occupation || undefined,
     education: education || undefined,
-    financial_literacy: financialLiteracy || undefined,
-  }), [sex, ageMin, ageMax, region, prefecture, occupation, education, financialLiteracy])
+  }), [sex, ageMin, ageMax, region, prefecture, occupation, education])
 
   useEffect(() => {
     let active = true
@@ -96,8 +94,7 @@ export default function FilterPanel() {
       !region &&
       !prefecture &&
       !occupation &&
-      !education &&
-      !financialLiteracy
+      !education
     )
 
     if (isDefaultFilterState) {
@@ -127,7 +124,7 @@ export default function FilterPanel() {
       window.clearTimeout(timeoutId)
       controller.abort()
     }
-  }, [filters, queryParams, sex, ageMin, ageMax, region, prefecture, occupation, education, financialLiteracy])
+  }, [filters, queryParams, sex, ageMin, ageMax, region, prefecture, occupation, education])
 
   const resolvedCount = (() => {
     if (!customCount.trim()) return count
@@ -176,7 +173,6 @@ export default function FilterPanel() {
     setAgeMax(Math.min(80, start + span))
 
     // Clear other fields
-    setFinancialLiteracy('')
     setOccupation('')
     setEducation('')
   }
@@ -337,19 +333,6 @@ export default function FilterPanel() {
             </select>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-fin-muted">金融リテラシー</label>
-            <select
-              value={financialLiteracy}
-              onChange={(e) => setFinancialLiteracy(e.target.value)}
-              className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors focus:border-fin-accent focus:outline-none"
-            >
-              <option value="">すべて</option>
-              {filters.financial_literacy.map((level) => (
-                <option key={level} value={level}>{level}</option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
 

@@ -52,7 +52,6 @@ class PersonaStore:
             "prefectures": prefectures,
             "occupations_top50": occ_counts,
             "education_levels": education_levels,
-            "financial_literacy": ["初心者", "中級者", "上級者", "専門家"],
             "total_count": len(df),
         }
 
@@ -65,7 +64,6 @@ class PersonaStore:
         prefecture: Optional[str] = None,
         occupation: Optional[str] = None,
         education: Optional[str] = None,
-        financial_literacy: Optional[str] = None,
     ) -> pd.DataFrame:
         df = self._df
         if sex:
@@ -82,13 +80,6 @@ class PersonaStore:
             df = df[df["occupation"].str.contains(occupation, na=False)]
         if education:
             df = df[df["education_level"].str.contains(education, na=False)]
-        if financial_literacy:
-            col = "financial_literacy"
-            if col in df.columns:
-                df = df[df[col] == financial_literacy]
-            else:
-                logger.warning("financial_literacy column not found in DataFrame; returning empty result")
-                df = df.iloc[0:0]  # empty
         return df
 
     def count(self, **filters) -> int:

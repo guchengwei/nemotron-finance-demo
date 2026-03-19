@@ -637,6 +637,135 @@ async def generate_report(
     return normalize_report_qualitative(parsed)
 
 
+# -- Split report generation (3 focused calls with KV-cache shared prefix) ----
+
+async def generate_report_group_tendency(
+    shared_system: str,
+) -> str:
+    """Generate group_tendency as plain text. Returns empty string on failure."""
+    from prompts import REPORT_GROUP_TENDENCY_USER
+
+    if settings.mock_llm:
+        await asyncio.sleep(0.3)
+        return MOCK_REPORT["group_tendency"]
+
+    client = get_client()
+    extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
+    try:
+        resp = await client.chat.completions.create(
+            model=settings.vllm_model,
+            messages=[
+                {"role": "system", "content": shared_system},
+                {"role": "user", "content": REPORT_GROUP_TENDENCY_USER},
+            ],
+            temperature=0.3,
+            max_tokens=500,
+            extra_body=extra_body,
+        )
+        raw = sanitize_answer_text(resp.choices[0].message.content or "")
+        cached = resp.usage and getattr(resp.usage, "prompt_tokens_details", None)
+        if cached:
+            logger.info("group_tendency cached_tokens=%s", getattr(cached, "cached_tokens", "?"))
+        return _strip_thinking(raw).strip()
+    except Exception as e:
+        logger.error("generate_report_group_tendency failed: %s", e)
+        return ""
+
+
+async def generate_report_conclusion(
+    shared_system: str,
+    group_tendency: str,
+) -> str:
+    """Generate conclusion as plain text. Returns empty string on failure."""
+    from prompts import REPORT_CONCLUSION_USER
+
+    if settings.mock_llm:
+        await asyncio.sleep(0.3)
+        return MOCK_REPORT["conclusion"]
+
+    client = get_client()
+    extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
+    user_content = REPORT_CONCLUSION_USER.format(group_tendency=group_tendency or "（傾向データなし）")
+    try:
+        resp = await client.chat.completions.create(
+            model=settings.vllm_model,
+            messages=[
+                {"role": "system", "content": shared_system},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.3,
+            max_tokens=3000,
+            extra_body=extra_body,
+        )
+        raw = sanitize_answer_text(resp.choices[0].message.content or "")
+        cached = resp.usage and getattr(resp.usage, "prompt_tokens_details", None)
+        if cached:
+            logger.info("conclusion cached_tokens=%s", getattr(cached, "cached_tokens", "?"))
+        return _strip_thinking(raw).strip()
+    except Exception as e:
+        logger.error("generate_report_conclusion failed: %s", e)
+        return ""
+
+
+async def generate_report_top_picks(
+    shared_system: str,
+    top_pick_candidates: str,
+) -> list[dict]:
+    """Generate top_picks using structured output. Returns list of pick dicts."""
+    from prompts import REPORT_TOP_PICKS_USER
+    from pydantic import BaseModel as _BaseModel
+
+    if settings.mock_llm:
+        await asyncio.sleep(0.3)
+        return MOCK_REPORT.get("top_picks", [])
+
+    class _TopPickItem(_BaseModel):
+        persona_uuid: str
+        persona_name: str
+        persona_summary: str
+        highlight_reason: str
+        highlight_quote: str
+
+    class _TopPicksResponse(_BaseModel):
+        picks: list[_TopPickItem]
+
+    user_content = REPORT_TOP_PICKS_USER.format(top_pick_candidates=top_pick_candidates)
+    schema = _TopPicksResponse.model_json_schema()
+    client = get_client()
+    extra_body: dict = {
+        "structured_outputs": {"json": schema},
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    try:
+        resp = await client.chat.completions.create(
+            model=settings.vllm_model,
+            messages=[
+                {"role": "system", "content": shared_system},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.3,
+            max_tokens=800,
+            extra_body=extra_body,
+        )
+        cached = resp.usage and getattr(resp.usage, "prompt_tokens_details", None)
+        if cached:
+            logger.info("top_picks cached_tokens=%s", getattr(cached, "cached_tokens", "?"))
+        raw = resp.choices[0].message.content or ""
+        try:
+            import json_repair
+        except ImportError:
+            json_repair = None  # type: ignore[assignment]
+        data = json_repair.loads(raw) if json_repair else json.loads(raw)
+        if isinstance(data, dict) and "picks" in data:
+            return [item if isinstance(item, dict) else {} for item in data["picks"]]
+        if isinstance(data, list):
+            return data
+        return []
+    except Exception as e:
+        logger.error("generate_report_top_picks failed: %s", e)
+        return []
+
+
 # -- Financial extension generation -------------------------------------------
 
 _FINANCIAL_BATCH_SIZE = 8

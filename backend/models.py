@@ -66,7 +66,6 @@ class FiltersResponse(BaseModel):
     prefectures: List[str]
     occupations_top50: List[str]
     education_levels: List[str]
-    financial_literacy: List[str]
     total_count: int
 
 

@@ -135,6 +135,40 @@ REPORT_SYSTEM_PROMPT = """あなたは金融マーケティングリサーチの
 }}
 """
 
+# Shared system prefix reused across all 3 split report calls (KV cache prefix)
+REPORT_SHARED_SYSTEM = """あなたは金融マーケティングリサーチのシニアアナリストです。
+テーマ: {survey_theme}
+回答者数: {persona_count}名
+質問一覧:
+{questions_formatted}
+
+全回答者の集計結果:
+{question_aggregation}
+"""
+
+REPORT_GROUP_TENDENCY_USER = "集計結果を踏まえ、グループ全体の傾向を200文字以内で述べてください。テキストのみ。JSONや説明文は不要です。"
+
+REPORT_CONCLUSION_USER = """グループ傾向: {group_tendency}
+
+上記を踏まえ、総合結論・金融機関が取るべき推奨アクションを詳しく述べてください。テキストのみ。JSONや説明文は不要です。"""
+
+REPORT_TOP_PICKS_USER = """以下はPythonスコアリングで選出した候補者の詳細です:
+
+{top_pick_candidates}
+
+この中から注目回答者3名(前向き1名・懸念1名・独自視点1名)を選出し、JSON配列のみを出力してください。他の文章は一切不要です。
+
+出力例:
+[
+  {{
+    "persona_uuid": "候補のuuid（一字も変えない）",
+    "persona_name": "氏名",
+    "persona_summary": "属性要約",
+    "highlight_reason": "注目理由",
+    "highlight_quote": "回答の短い引用（50文字以内）"
+  }}
+]"""
+
 FOLLOWUP_ADDITION = """
 あなたは先ほどのアンケートに回答した人物です。以下がアンケートでの回答内容です。
 この回答と一貫性を保ちつつ、追加の質問に答えてください。

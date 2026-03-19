@@ -54,16 +54,17 @@ async def _followup_stream(request: FollowUpRequest):
         )
         chat_history = [{"role": r["role"], "content": r["content"]} for r in chat_rows]
 
-        # Get financial extension from persona data
+        # Get financial extension from persona data (may be nested under financial_extension)
+        fe = persona.get("financial_extension") or {}
         fin_ext = None
-        if persona.get("financial_literacy"):
+        if persona.get("financial_literacy") or fe.get("financial_literacy"):
             fin_ext = {
-                "financial_literacy": persona.get("financial_literacy"),
-                "investment_experience": persona.get("investment_experience"),
-                "financial_concerns": persona.get("financial_concerns"),
-                "annual_income_bracket": persona.get("annual_income_bracket"),
-                "asset_bracket": persona.get("asset_bracket"),
-                "primary_bank_type": persona.get("primary_bank_type"),
+                "financial_literacy": persona.get("financial_literacy") or fe.get("financial_literacy"),
+                "investment_experience": persona.get("investment_experience") or fe.get("investment_experience"),
+                "financial_concerns": persona.get("financial_concerns") or fe.get("financial_concerns"),
+                "annual_income_bracket": persona.get("annual_income_bracket") or fe.get("annual_income_bracket"),
+                "asset_bracket": persona.get("asset_bracket") or fe.get("asset_bracket"),
+                "primary_bank_type": persona.get("primary_bank_type") or fe.get("primary_bank_type"),
             }
 
         # Build system prompt

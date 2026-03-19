@@ -129,7 +129,7 @@ export function useSurvey() {
               }
               s.updatePersonaState(d.persona_uuid, {
                 answers: newAnswers,
-                activeAnswer: '',
+                activeAnswer: undefined,
                 activeThinking: undefined,
                 activeQuestion: undefined,
               })
