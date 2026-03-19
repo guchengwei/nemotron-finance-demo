@@ -25,6 +25,13 @@ PRESET="${1:-}"
 [[ "$PRESET" == --preset=* ]] && PRESET="${PRESET#--preset=}"
 [[ "$PRESET" == "--preset" ]] && { PRESET="${2:-}"; shift; } 2>/dev/null || true
 
+# Check for MeCab (required for Japanese text analysis)
+if ! command -v mecab &>/dev/null; then
+  echo "Warning: MeCab not found. Install it for Japanese text analysis:"
+  echo "    sudo apt-get install -y mecab libmecab-dev"
+  echo "    (Or on macOS: brew install mecab)"
+fi
+
 # ── greeting ─────────────────────────────────────────────────────────────────
 clear
 echo "${bold}Nemotron Financial Survey Demo — Environment Setup${reset}"
