@@ -15,22 +15,22 @@ export function parseScore(text: string): number | null {
 
 export function scoreColor(score: number): string {
   switch (score) {
-    case 1: return '#ef4444'  // red
-    case 2: return '#f97316'  // orange
-    case 3: return '#eab308'  // yellow
-    case 4: return '#86efac'  // light green
-    case 5: return '#2563EB'  // nvidia green
-    default: return '#888'
+    case 1: return '#A14B45'
+    case 2: return '#A86A32'
+    case 3: return '#B58A57'
+    case 4: return '#3F7A5D'
+    case 5: return '#1F6A5A'
+    default: return '#70685C'
   }
 }
 
 export function scoreBg(score: number): string {
   switch (score) {
-    case 1: return 'bg-red-600'
-    case 2: return 'bg-orange-500'
-    case 3: return 'bg-yellow-500'
-    case 4: return 'bg-green-400'
-    case 5: return 'bg-[#2563EB]'
-    default: return 'bg-gray-600'
+    case 1: return 'bg-fin-danger'
+    case 2: return 'bg-fin-warning'
+    case 3: return 'bg-fin-bronze'
+    case 4: return 'bg-fin-success'
+    case 5: return 'bg-fin-accent'
+    default: return 'bg-fin-muted'
   }
 }

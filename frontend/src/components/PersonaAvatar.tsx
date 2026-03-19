@@ -16,8 +16,8 @@ function hashStr(s: string): number {
 }
 
 const COLORS = [
-  '#2563EB', '#0EA5E9', '#4ade80', '#60a5fa', '#a78bfa',
-  '#f472b6', '#fb923c', '#34d399', '#38bdf8', '#818cf8',
+  '#1F6A5A', '#4C7B62', '#8F7B56', '#B58A57', '#C7AA84',
+  '#9F6B57', '#5F7F77', '#7E8D78', '#D1B38A', '#916753',
 ]
 
 export default function PersonaAvatar({ name, age, sex, size = 40 }: Props) {
@@ -50,8 +50,8 @@ export default function PersonaAvatar({ name, age, sex, size = 40 }: Props) {
         textAnchor="middle"
         fontSize="14"
         fontWeight="bold"
-        fill="white"
-        fontFamily="Noto Sans JP, sans-serif"
+        fill="#FBF8F2"
+        fontFamily="Outfit, Noto Sans JP, sans-serif"
       >
         {initials}
       </text>

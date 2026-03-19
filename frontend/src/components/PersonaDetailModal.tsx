@@ -10,8 +10,8 @@ function Section({ title, content }: { title: string; content?: string }) {
   if (!content) return null
   return (
     <div className="mb-4">
-      <div className="text-xs font-semibold text-[#2563EB] mb-1">{title}</div>
-      <div className="text-sm text-gray-300 leading-relaxed">{content}</div>
+      <div className="mb-1 text-xs font-semibold tracking-[0.12em] text-fin-accent">{title}</div>
+      <div className="text-sm leading-relaxed text-fin-ink">{content}</div>
     </div>
   )
 }
@@ -23,59 +23,55 @@ export default function PersonaDetailModal({ persona, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-fin-ink/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded-lg w-full max-w-2xl max-h-[85vh] overflow-y-auto"
+        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-fin-border bg-fin-surface shadow-panel"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center gap-3 p-5 border-b border-[rgba(37,99,235,0.1)] sticky top-0 bg-[#1E2D40]">
+        <div className="sticky top-0 flex items-center gap-3 border-b border-fin-border bg-fin-surface/95 p-5 backdrop-blur">
           <PersonaAvatar name={persona.name} age={persona.age} sex={persona.sex} size={48} />
           <div className="flex-1">
-            <div className="text-lg font-bold text-white">{persona.name}</div>
-            <div className="text-sm text-gray-400">
+            <div className="text-lg font-bold text-fin-ink">{persona.name}</div>
+            <div className="text-sm text-fin-muted">
               {persona.age}歳 · {sexDisplay} · {persona.prefecture}（{persona.region}）
             </div>
-            <div className="text-sm text-[#2563EB]">{persona.occupation}</div>
+            <div className="text-sm text-fin-accent">{persona.occupation}</div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-white text-2xl leading-none"
+            className="text-2xl leading-none text-fin-muted transition-colors hover:text-fin-accent"
           >
             ×
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-5">
-          {/* Basic info */}
           <div className="grid grid-cols-2 gap-2 mb-5 text-sm">
-            <div className="bg-[#1E293B] rounded p-2">
-              <span className="text-gray-500">学歴: </span>
-              <span className="text-gray-200">{persona.education_level}</span>
+            <div className="rounded-2xl bg-fin-panel px-3 py-2">
+              <span className="text-fin-muted">学歴: </span>
+              <span className="text-fin-ink">{persona.education_level}</span>
             </div>
-            <div className="bg-[#1E293B] rounded p-2">
-              <span className="text-gray-500">婚姻: </span>
-              <span className="text-gray-200">{persona.marital_status}</span>
+            <div className="rounded-2xl bg-fin-panel px-3 py-2">
+              <span className="text-fin-muted">婚姻: </span>
+              <span className="text-fin-ink">{persona.marital_status}</span>
             </div>
           </div>
 
-          {/* Financial extension */}
           {persona.financial_extension && (
-            <div className="bg-[#1E293B] rounded-lg p-4 mb-5 border border-[rgba(37,99,235,0.15)]">
-              <div className="text-xs font-semibold text-[#2563EB] mb-3">金融プロファイル</div>
+            <div className="mb-5 rounded-[1.5rem] border border-fin-border bg-fin-panel/70 p-4">
+              <div className="mb-3 text-xs font-semibold tracking-[0.12em] text-fin-accent">金融プロファイル</div>
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="text-gray-500">リテラシー: </span><span className="text-white">{persona.financial_extension.financial_literacy}</span></div>
-                <div><span className="text-gray-500">年収帯: </span><span className="text-white">{persona.financial_extension.annual_income_bracket}</span></div>
-                <div><span className="text-gray-500">資産帯: </span><span className="text-white">{persona.financial_extension.asset_bracket}</span></div>
-                <div><span className="text-gray-500">取引先: </span><span className="text-white">{persona.financial_extension.primary_bank_type}</span></div>
+                <div><span className="text-fin-muted">リテラシー: </span><span className="text-fin-ink">{persona.financial_extension.financial_literacy}</span></div>
+                <div><span className="text-fin-muted">年収帯: </span><span className="text-fin-ink">{persona.financial_extension.annual_income_bracket}</span></div>
+                <div><span className="text-fin-muted">資産帯: </span><span className="text-fin-ink">{persona.financial_extension.asset_bracket}</span></div>
+                <div><span className="text-fin-muted">取引先: </span><span className="text-fin-ink">{persona.financial_extension.primary_bank_type}</span></div>
                 {persona.financial_extension.investment_experience && (
-                  <div className="col-span-2"><span className="text-gray-500">投資経験: </span><span className="text-gray-300">{persona.financial_extension.investment_experience}</span></div>
+                  <div className="col-span-2"><span className="text-fin-muted">投資経験: </span><span className="text-fin-ink">{persona.financial_extension.investment_experience}</span></div>
                 )}
                 {persona.financial_extension.financial_concerns && (
-                  <div className="col-span-2"><span className="text-gray-500">懸念事項: </span><span className="text-gray-300">{persona.financial_extension.financial_concerns}</span></div>
+                  <div className="col-span-2"><span className="text-fin-muted">懸念事項: </span><span className="text-fin-ink">{persona.financial_extension.financial_concerns}</span></div>
                 )}
               </div>
             </div>

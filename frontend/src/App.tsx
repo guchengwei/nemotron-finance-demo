@@ -42,9 +42,9 @@ function QuickDemoButton() {
       data-testid="quick-demo-button"
       onClick={handleQuickDemo}
       disabled={loading}
-      className="bg-[#0EA5E9] hover:bg-[#0284C7] disabled:opacity-70 text-white font-bold px-6 py-3 rounded-lg text-sm transition-colors"
+      className="rounded-full bg-fin-accent px-6 py-3 text-sm font-semibold text-fin-surface transition-all duration-200 hover:-translate-y-0.5 hover:bg-fin-accentStrong disabled:opacity-70"
     >
-      {loading ? '起動中...' : '⚡ デモを実行'}
+      {loading ? '起動中...' : 'デモを実行'}
     </button>
   )
 }
@@ -53,20 +53,20 @@ function WelcomeScreen() {
   return (
     <div className="flex flex-col items-center justify-center h-64 gap-6 text-center">
       <div>
-        <div className="text-2xl font-black text-white mb-2">
+        <div className="mb-2 text-balance text-3xl font-extrabold tracking-[-0.04em] text-fin-ink">
           Nemotron Financial Survey Demo
         </div>
-        <div className="text-gray-500 text-sm max-w-md">
+        <div className="mx-auto max-w-md text-sm leading-6 text-fin-muted">
           NVIDIA Nemotron-Personas-Japan × Nemotron-Nano-9B-v2 を使用した<br />
           金融サービスAIリサーチデモ
         </div>
       </div>
-      <div className="flex gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row">
         <QuickDemoButton />
         <button
           data-testid="custom-survey-button"
           onClick={() => useStore.getState().setStep(2)}
-          className="border border-[rgba(37,99,235,0.3)] text-[#2563EB] hover:bg-[#2563EB]/10 font-bold px-6 py-3 rounded-lg text-sm transition-colors"
+          className="rounded-full border border-fin-border bg-fin-surface px-6 py-3 text-sm font-semibold text-fin-ink transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent"
         >
           カスタム調査を始める
         </button>
@@ -108,19 +108,19 @@ export default function App() {
 
   if (!dbReady) {
     return (
-      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
-        <div className="text-center">
+      <div className="flex min-h-screen items-center justify-center bg-fin-canvas px-6">
+        <div className="rounded-[2rem] border border-fin-border bg-fin-surface px-10 py-12 text-center shadow-panel">
           {dbError ? (
             <>
-              <div className="w-8 h-8 mx-auto mb-4 text-red-500 text-2xl">!</div>
-              <p className="text-red-400">データベースの初期化に失敗しました</p>
-              <p className="text-gray-500 text-sm mt-2 max-w-md">{dbError}</p>
+              <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-fin-danger/10 text-2xl text-fin-danger">!</div>
+              <p className="font-semibold text-fin-danger">データベースの初期化に失敗しました</p>
+              <p className="mt-2 max-w-md text-sm text-fin-muted">{dbError}</p>
             </>
           ) : (
             <>
-              <div className="animate-spin w-8 h-8 border-2 border-[#2563EB] border-t-transparent rounded-full mx-auto mb-4" />
-              <p className="text-gray-300">データベースを準備中...</p>
-              <p className="text-gray-500 text-sm mt-2">初回は数分かかる場合があります</p>
+              <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-fin-accent/20 border-t-fin-accent" />
+              <p className="font-medium text-fin-ink">データベースを準備中...</p>
+              <p className="mt-2 text-sm text-fin-muted">初回は数分かかる場合があります</p>
             </>
           )}
         </div>

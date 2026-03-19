@@ -8,15 +8,13 @@ interface Props {
 
 export default function Layout({ children }: Props) {
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0F172A]">
+    <div className="flex min-h-screen overflow-hidden bg-fin-canvas text-fin-ink">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
-        <header className="flex-shrink-0 bg-[#1E293B] border-b border-[rgba(37,99,235,0.1)] px-6 py-3">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex-shrink-0 border-b border-fin-border/80 bg-fin-surface/90 px-8 py-5 backdrop-blur">
           <StepIndicator />
         </header>
-        {/* Main content */}
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto px-8 py-8">
           {children}
         </main>
       </div>

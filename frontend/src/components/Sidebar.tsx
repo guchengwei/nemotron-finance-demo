@@ -4,11 +4,11 @@ import { api } from '../api'
 import type { Persona, PersonaRunState, SurveyRunDetail } from '../types'
 
 function scoreColor(score?: number): string {
-  if (!score) return 'bg-gray-700 text-gray-400'
-  if (score >= 4.5) return 'bg-[#2563EB] text-black'
-  if (score >= 3.5) return 'bg-green-700 text-white'
-  if (score >= 2.5) return 'bg-yellow-600 text-white'
-  return 'bg-red-700 text-white'
+  if (!score) return 'bg-fin-panel text-fin-muted'
+  if (score >= 4.5) return 'bg-fin-accent text-fin-surface'
+  if (score >= 3.5) return 'bg-fin-success text-fin-surface'
+  if (score >= 2.5) return 'bg-fin-warning text-fin-surface'
+  return 'bg-fin-danger text-fin-surface'
 }
 
 function buildPersonaStates(detail: SurveyRunDetail) {
@@ -125,36 +125,36 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-56 flex-shrink-0 bg-[#1E293B] border-r border-[rgba(37,99,235,0.1)] flex flex-col h-full">
-      <div className="p-4 border-b border-[rgba(37,99,235,0.1)]">
+    <aside className="flex h-full w-64 flex-shrink-0 flex-col border-r border-fin-border/90 bg-fin-surface/95 backdrop-blur">
+      <div className="border-b border-fin-border/80 px-5 py-5">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-[#2563EB] rounded flex items-center justify-center">
-            <span className="text-black text-xs font-black">N</span>
+          <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-fin-accent text-xs font-black text-fin-surface shadow-card">
+            <span>N</span>
           </div>
           <div>
-            <div className="text-xs font-bold text-[#2563EB]">NEMOTRON</div>
-            <div className="text-[10px] text-gray-500">Financial Survey</div>
+            <div className="text-xs font-bold tracking-[0.2em] text-fin-accent">NEMOTRON</div>
+            <div className="text-[10px] text-fin-muted">Financial Survey</div>
           </div>
         </div>
       </div>
 
-      <div className="p-3">
+      <div className="p-4">
         <button
           data-testid="new-survey-button"
           disabled={!dbReady}
           onClick={() => resetSurvey()}
-          className={`w-full bg-[#2563EB] hover:bg-[#3B82F6] text-black text-sm font-bold py-2 px-3 rounded transition-colors ${!dbReady ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`w-full rounded-full bg-fin-accent px-4 py-3 text-sm font-semibold text-fin-surface transition-all duration-200 hover:-translate-y-0.5 hover:bg-fin-accentStrong ${!dbReady ? 'cursor-not-allowed opacity-50' : ''}`}
         >
           ＋ 新規調査
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="px-3 py-1 text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+        <div className="px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-fin-muted">
           調査履歴
         </div>
         {history.length === 0 ? (
-          <div className="px-3 py-4 text-xs text-gray-600 text-center">
+          <div className="px-4 py-6 text-center text-xs text-fin-muted">
             履歴はありません
           </div>
         ) : (
@@ -163,30 +163,30 @@ export default function Sidebar() {
               key={run.id}
               data-testid={`history-run-${run.id}`}
               onClick={() => loadRun(run.id)}
-              className="relative w-full text-left px-3 py-2 hover:bg-[#1E2D40] border-b border-[rgba(255,255,255,0.03)] transition-colors group"
+              className="group relative mx-3 mb-2 w-[calc(100%-1.5rem)] rounded-2xl border border-transparent bg-fin-surface px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-border hover:bg-fin-panel/60"
             >
-              <div className="flex items-center justify-between mb-1">
+              <div className="mb-2 flex items-center justify-between">
                 <span
                   data-testid={`history-run-status-${run.id}`}
-                  className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${scoreColor(run.overall_score)}`}
+                  className={`rounded-full px-2 py-1 text-[10px] font-bold ${scoreColor(run.overall_score)}`}
                 >
                   {run.overall_score ? `${run.overall_score}★` : run.status === 'running' ? '実行中' : '—'}
                 </span>
-                <span className="text-[10px] text-gray-600">
+                <span className="text-[10px] tabular-nums text-fin-muted">
                   {run.persona_count}名
                 </span>
               </div>
-              <div className="text-xs text-gray-300 line-clamp-2 group-hover:text-white transition-colors">
+              <div className="line-clamp-2 text-xs text-fin-ink transition-colors group-hover:text-fin-accentStrong">
                 {run.label || run.survey_theme}
               </div>
-              <div className="text-[10px] text-gray-600 mt-0.5">
+              <div className="mt-1 text-[10px] tabular-nums text-fin-muted">
                 {new Date(run.created_at).toLocaleDateString('ja-JP')}
               </div>
               <div
                 data-testid={`delete-run-${run.id}`}
                 role="button"
                 onClick={(e) => deleteRun(e, run.id)}
-                className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:text-red-400 hover:bg-red-400/10 opacity-0 group-hover:opacity-100 transition-all text-xs"
+                className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full text-xs text-fin-muted opacity-0 transition-all hover:bg-fin-danger/10 hover:text-fin-danger group-hover:opacity-100"
                 title="削除"
               >
                 {deleting === run.id ? '...' : '×'}

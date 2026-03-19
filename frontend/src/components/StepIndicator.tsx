@@ -21,7 +21,7 @@ export default function StepIndicator() {
   }
 
   return (
-    <div className="flex items-center gap-0">
+    <div className="flex flex-wrap items-center gap-2">
       {STEPS.map((step, i) => {
         const isActive = step.id === currentStep
         const isDone = step.id < currentStep
@@ -32,25 +32,25 @@ export default function StepIndicator() {
             <button
               onClick={() => canNav && setStep(step.id)}
               disabled={!canNav}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors
+              className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-all duration-200
                 ${isActive
-                  ? 'bg-[#2563EB] text-black'
+                  ? 'border-fin-accent bg-fin-accent text-fin-surface'
                   : isDone && canNav
-                  ? 'text-[#2563EB] hover:bg-[#2563EB]/10 cursor-pointer'
+                  ? 'border-fin-accent/20 bg-fin-accentSoft text-fin-accent hover:-translate-y-0.5'
                   : canNav
-                  ? 'text-gray-400 hover:bg-white/5 cursor-pointer'
-                  : 'text-gray-600 cursor-not-allowed'
+                  ? 'border-fin-border bg-fin-surface text-fin-muted hover:-translate-y-0.5 hover:border-fin-accent/40 hover:text-fin-accent'
+                  : 'cursor-not-allowed border-fin-border/70 bg-fin-surface text-fin-muted/70'
                 }`}
             >
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
-                ${isActive ? 'bg-black/20' : isDone ? 'bg-[#2563EB]/20' : 'bg-white/10'}`}
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold
+                ${isActive ? 'bg-white/15' : isDone ? 'bg-fin-surface/80' : 'bg-fin-panel/70'}`}
               >
                 {isDone ? '✓' : step.id}
               </span>
               {step.label}
             </button>
             {i < STEPS.length - 1 && (
-              <span className="text-gray-700 mx-1">›</span>
+              <span className="mx-2 text-fin-muted">›</span>
             )}
           </div>
         )

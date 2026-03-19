@@ -9,12 +9,12 @@ function ScoreCircle({ score }: { score: number }) {
   const color = scoreColor(Math.round(score))
   return (
     <div
-      className="w-24 h-24 rounded-full border-4 flex items-center justify-center"
+      className="flex h-24 w-24 items-center justify-center rounded-full border-4 bg-fin-surface"
       style={{ borderColor: color }}
     >
       <div className="text-center">
         <div className="text-3xl font-black" style={{ color }}>{score.toFixed(1)}</div>
-        <div className="text-[10px] text-gray-500">/ 5.0</div>
+        <div className="text-[10px] text-fin-muted">/ 5.0</div>
       </div>
     </div>
   )
@@ -68,7 +68,7 @@ export default function ReportDashboard() {
   if (generating) {
     return (
       <div className="flex items-center justify-center h-32">
-        <div className="text-gray-500 text-sm">レポートを生成中...</div>
+        <div className="text-sm text-fin-muted">レポートを生成中...</div>
       </div>
     )
   }
@@ -76,15 +76,15 @@ export default function ReportDashboard() {
   if (!report) {
     return (
       <div className="flex flex-col items-center justify-center h-32 gap-3">
-        <div className="text-gray-500 text-sm">レポートがありません</div>
+        <div className="text-sm text-fin-muted">レポートがありません</div>
         {(currentHistoryRun?.status === 'running' || currentHistoryRun?.status === 'failed') && (
-          <div className="text-xs text-gray-600">
+          <div className="text-xs text-fin-muted">
             この調査は{currentHistoryRun.status === 'running' ? '実行中に中断' : '失敗'}しました
           </div>
         )}
         <button
           onClick={() => setStep(1)}
-          className="text-xs text-[#0EA5E9] hover:underline"
+          className="text-xs text-fin-accent hover:underline"
         >
           ← 新規調査を開始
         </button>
@@ -96,22 +96,20 @@ export default function ReportDashboard() {
 
   return (
     <div data-testid="report-dashboard-screen" className="space-y-6 max-w-5xl">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
         <div>
-          <h2 className="text-xl font-bold text-white mb-1">調査レポート</h2>
-          <div className="text-sm text-gray-400 max-w-2xl">{theme}</div>
+          <h2 className="mb-1 text-xl font-bold tracking-[-0.03em] text-fin-ink">調査レポート</h2>
+          <div className="max-w-2xl text-sm text-fin-muted">{theme}</div>
         </div>
         <button
           onClick={handleDownload}
-          className="text-xs text-gray-500 hover:text-gray-300 border border-[rgba(255,255,255,0.1)] px-3 py-1.5 rounded transition-colors"
+          className="rounded-full border border-fin-border px-3 py-2 text-xs text-fin-muted transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent"
         >
           JSON ダウンロード
         </button>
       </div>
 
-      {/* Score overview */}
-      <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.1)] rounded-xl p-6">
+      <div className="rounded-[1.75rem] border border-fin-border bg-fin-surface p-6 shadow-card">
         <div className="flex items-center gap-8">
           {report.overall_score !== undefined && (
             <ScoreCircle score={report.overall_score} />
@@ -119,30 +117,27 @@ export default function ReportDashboard() {
           <div className="flex-1">
             {report.group_tendency && (
               <div data-testid="report-group-tendency" className="mb-3">
-                <div className="text-xs font-semibold text-[#2563EB] mb-1">グループ傾向</div>
-                <div className="text-sm text-gray-300 leading-relaxed">{report.group_tendency}</div>
+                <div className="mb-1 text-xs font-semibold tracking-[0.12em] text-fin-accent">グループ傾向</div>
+                <div className="text-sm leading-relaxed text-fin-ink">{report.group_tendency}</div>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Conclusion */}
       {report.conclusion && (
-        <div data-testid="report-conclusion" className="bg-[#1E293B] border-l-4 border-[#2563EB] rounded-r-lg px-5 py-4">
-          <div className="text-xs font-semibold text-[#2563EB] mb-2">総合結論・推奨アクション</div>
-          <div className="text-sm text-gray-200 leading-relaxed">{report.conclusion}</div>
+        <div data-testid="report-conclusion" className="rounded-[1.5rem] border border-fin-border bg-fin-panel/70 px-5 py-4">
+          <div className="mb-2 text-xs font-semibold tracking-[0.12em] text-fin-accent">総合結論・推奨アクション</div>
+          <div className="text-sm leading-relaxed text-fin-ink">{report.conclusion}</div>
         </div>
       )}
 
-      {/* Charts */}
       <DemographicCharts report={report} />
 
-      {/* Top picks */}
       {report.top_picks && report.top_picks.length > 0 && (
         <div data-testid="report-top-picks">
-          <h3 className="text-sm font-bold text-white mb-3">注目回答者</h3>
-          <div className="grid grid-cols-3 gap-4">
+          <h3 className="mb-3 text-sm font-bold text-fin-ink">注目回答者</h3>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {report.top_picks.slice(0, 3).map((pick, i) => {
               const persona = selectedPersonas.find((p) => p.uuid === pick.persona_uuid)
               return (

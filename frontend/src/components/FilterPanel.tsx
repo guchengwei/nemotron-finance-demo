@@ -138,7 +138,7 @@ export default function FilterPanel() {
   if (filtersLoading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <div data-testid="filters-loading" className="text-gray-500 text-sm">データベース読み込み中...</div>
+        <div data-testid="filters-loading" className="text-sm text-fin-muted">データベース読み込み中...</div>
       </div>
     )
   }
@@ -150,26 +150,26 @@ export default function FilterPanel() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">ペルソナ選択</h2>
-        <div className="text-sm text-gray-400">
-          該当: <span data-testid="match-count" className={`text-[#2563EB] font-bold text-base transition-opacity duration-200 ${countLoading ? 'opacity-50' : ''}`}>
+        <h2 className="text-xl font-bold tracking-[-0.03em] text-fin-ink">ペルソナ選択</h2>
+        <div className="text-sm text-fin-muted">
+          該当: <span data-testid="match-count" className={`text-base font-bold tabular-nums text-fin-accent transition-opacity duration-200 ${countLoading ? 'opacity-50' : ''}`}>
             {countLoading && (
-              <span className="inline-block w-3 h-3 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin mr-1 align-middle" />
+              <span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-fin-accent/20 border-t-fin-accent align-middle" />
             )}
             {matchCount !== null ? matchCount.toLocaleString() : '—'}
           </span> 件
-          <span className="text-gray-600 ml-2">/ {filters.total_count.toLocaleString()} 総数</span>
+          <span className="ml-2 text-fin-muted/80">/ {filters.total_count.toLocaleString()} 総数</span>
         </div>
       </div>
 
-      <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.1)] rounded-lg p-4">
+      <div className="rounded-[1.75rem] border border-fin-border bg-fin-surface p-5 shadow-card">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">性別</label>
+            <label className="mb-1 block text-xs font-medium text-fin-muted">性別</label>
             <select
               value={sex}
               onChange={(e) => setSex(e.target.value)}
-              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
+              className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors focus:border-fin-accent focus:outline-none"
             >
               <option value="">すべて</option>
               {filters.sex.map((s) => (
@@ -179,7 +179,7 @@ export default function FilterPanel() {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">年齢 ({ageMin}〜{ageMax}歳)</label>
+            <label className="mb-1 block text-xs font-medium text-fin-muted">年齢 ({ageMin}〜{ageMax}歳)</label>
             <div className="flex gap-2">
               <input
                 type="number"
@@ -187,26 +187,26 @@ export default function FilterPanel() {
                 min={18}
                 max={ageMax}
                 onChange={(e) => setAgeMin(Number.parseInt(e.target.value, 10) || 18)}
-                className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
+                className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors focus:border-fin-accent focus:outline-none"
               />
-              <span className="text-gray-500 self-center">〜</span>
+              <span className="self-center text-fin-muted">〜</span>
               <input
                 type="number"
                 value={ageMax}
                 min={ageMin}
                 max={100}
                 onChange={(e) => setAgeMax(Number.parseInt(e.target.value, 10) || 80)}
-                className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
+                className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors focus:border-fin-accent focus:outline-none"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">地域</label>
+            <label className="mb-1 block text-xs font-medium text-fin-muted">地域</label>
             <select
               value={region}
               onChange={(e) => { setRegion(e.target.value); setPrefecture('') }}
-              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
+              className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors focus:border-fin-accent focus:outline-none"
             >
               <option value="">すべての地域</option>
               {filters.regions.map((r) => (
@@ -216,11 +216,11 @@ export default function FilterPanel() {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">都道府県</label>
+            <label className="mb-1 block text-xs font-medium text-fin-muted">都道府県</label>
             <select
               value={prefecture}
               onChange={(e) => setPrefecture(e.target.value)}
-              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
+              className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors focus:border-fin-accent focus:outline-none"
             >
               <option value="">すべての都道府県</option>
               {filters.prefectures.map((p) => (
@@ -230,14 +230,14 @@ export default function FilterPanel() {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">職業</label>
+            <label className="mb-1 block text-xs font-medium text-fin-muted">職業</label>
             <input
               type="text"
               value={occupation}
               onChange={(e) => setOccupation(e.target.value)}
               placeholder="職業を入力..."
               list="occupation-list"
-              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none placeholder-gray-600"
+              className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors placeholder:text-fin-muted focus:border-fin-accent focus:outline-none"
             />
             <datalist id="occupation-list">
               {filters.occupations_top50.map((o) => (
@@ -247,11 +247,11 @@ export default function FilterPanel() {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">学歴</label>
+            <label className="mb-1 block text-xs font-medium text-fin-muted">学歴</label>
             <select
               value={education}
               onChange={(e) => setEducation(e.target.value)}
-              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
+              className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors focus:border-fin-accent focus:outline-none"
             >
               <option value="">すべての学歴</option>
               {filters.education_levels.map((level) => (
@@ -261,11 +261,11 @@ export default function FilterPanel() {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">金融リテラシー</label>
+            <label className="mb-1 block text-xs font-medium text-fin-muted">金融リテラシー</label>
             <select
               value={financialLiteracy}
               onChange={(e) => setFinancialLiteracy(e.target.value)}
-              className="w-full bg-[#1E293B] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1.5 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none"
+              className="w-full rounded-xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink transition-colors focus:border-fin-accent focus:outline-none"
             >
               <option value="">すべて</option>
               {filters.financial_literacy.map((level) => (
@@ -277,16 +277,16 @@ export default function FilterPanel() {
       </div>
 
       <div>
-        <div className="text-xs text-gray-500 mb-2">サンプル数</div>
+        <div className="mb-2 text-xs font-medium text-fin-muted">サンプル数</div>
         <div className="flex flex-wrap gap-2">
           {COUNT_PRESETS.map((preset) => (
             <button
               key={preset.value}
               onClick={() => { setCount(preset.value); setCustomCount('') }}
-              className={`px-4 py-2 rounded text-sm font-medium transition-colors
+              className={`rounded-full border px-4 py-2 text-sm font-medium transition-all duration-200
                 ${count === preset.value && !customCount
-                  ? 'bg-[#2563EB] text-black'
-                  : 'bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] text-gray-300 hover:border-[#2563EB]'
+                  ? 'border-fin-accent bg-fin-accent text-fin-surface'
+                  : 'border-fin-border bg-fin-surface text-fin-ink hover:-translate-y-0.5 hover:border-fin-accent'
                 }`}
             >
               {preset.label}
@@ -300,7 +300,7 @@ export default function FilterPanel() {
               placeholder="カスタム"
               min={1}
               max={200}
-              className="w-24 bg-[#1E2D40] border border-[rgba(37,99,235,0.2)] rounded px-3 py-2 text-sm text-gray-200 focus:border-[#2563EB] focus:outline-none placeholder-gray-600"
+              className="w-24 rounded-full border border-fin-border bg-fin-surface px-3 py-2 text-sm text-fin-ink transition-colors placeholder:text-fin-muted focus:border-fin-accent focus:outline-none"
             />
           </div>
         </div>
@@ -309,7 +309,7 @@ export default function FilterPanel() {
       <button
         onClick={handleSample}
         disabled={sampling}
-        className="bg-[#2563EB] hover:bg-[#3B82F6] disabled:opacity-50 text-black font-bold px-6 py-2.5 rounded text-sm transition-colors"
+        className="rounded-full bg-fin-accent px-6 py-3 text-sm font-semibold text-fin-surface transition-all duration-200 hover:-translate-y-0.5 hover:bg-fin-accentStrong disabled:opacity-50"
       >
         {sampling ? '抽出中...' : `ペルソナを抽出 (${resolvedCount}名)`}
       </button>
@@ -317,10 +317,10 @@ export default function FilterPanel() {
       {personas.length > 0 && (
         <div data-testid="persona-sampled-section">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-sm text-gray-400">{personas.length}名 抽出済み</div>
+            <div className="text-sm text-fin-muted">{personas.length}名 抽出済み</div>
             <button
               onClick={() => setStep(2)}
-              className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white font-bold px-5 py-2 rounded text-sm transition-colors"
+              className="rounded-full border border-fin-border bg-fin-surface px-5 py-2 text-sm font-semibold text-fin-ink transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent"
             >
               次へ: 調査設定 →
             </button>

@@ -2,26 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  background-color: #0F172A;
-  color: #E2E8F0;
-  font-family: 'Noto Sans JP', sans-serif;
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at top left, rgba(31, 106, 90, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(168, 106, 50, 0.08), transparent 24%),
+    #F6F1E8;
+  color: #1F2B2A;
+  font-family: 'Outfit', 'Noto Sans JP', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image:
+    linear-gradient(rgba(31, 43, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 43, 42, 0.04) 1px, transparent 1px);
+  background-size: 6px 6px;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(31, 106, 90, 0.45);
+  outline-offset: 2px;
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #1E293B;
+  background: rgba(239, 231, 218, 0.75);
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+  background: rgba(112, 104, 92, 0.65);
+  border-radius: 999px;
+  border: 2px solid rgba(251, 248, 242, 0.9);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2563EB;
+  background: rgba(31, 106, 90, 0.8);
 }
 
 /* Typing animation */
@@ -32,23 +64,29 @@ body {
 .cursor-blink::after {
   content: '▊';
   animation: blink 1s infinite;
-  color: #2563EB;
+  color: #1F6A5A;
 }
 
 /* Pulse animation for active persona */
-@keyframes pulse-blue {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
-  50% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0); }
+@keyframes pulse-accent {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(31, 106, 90, 0.28); }
+  50% { box-shadow: 0 0 0 8px rgba(31, 106, 90, 0); }
 }
-.pulse-green {
-  animation: pulse-blue 2s infinite;
+.pulse-accent {
+  animation: pulse-accent 2s infinite;
 }
 
 /* Fade in */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.35s ease-out;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
 }

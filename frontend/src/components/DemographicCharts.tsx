@@ -19,16 +19,16 @@ function MiniChart({ title, data, colorByScore = false }: {
 }) {
   const dataKey = data[0]?.count !== undefined ? 'count' : 'score'
   return (
-    <div className="bg-[#1E293B] rounded-lg p-4">
-      <div className="text-xs font-semibold text-gray-400 mb-3">{title}</div>
+    <div className="rounded-[1.5rem] border border-fin-border bg-fin-surface p-4 shadow-card">
+      <div className="mb-3 text-xs font-semibold tracking-[0.12em] text-fin-muted">{title}</div>
       <ResponsiveContainer width="100%" height={120}>
         <BarChart data={data} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-          <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#888' }} />
-          <YAxis tick={{ fontSize: 10, fill: '#888' }} domain={dataKey === 'score' ? [0, 5] : undefined} />
+          <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#70685C' }} />
+          <YAxis tick={{ fontSize: 10, fill: '#70685C' }} domain={dataKey === 'score' ? [0, 5] : undefined} />
           <Tooltip
-            contentStyle={{ background: '#1E2D40', border: '1px solid rgba(37,99,235,0.2)', borderRadius: 4 }}
-            labelStyle={{ color: '#ccc', fontSize: 11 }}
-            itemStyle={{ color: '#2563EB', fontSize: 11 }}
+            contentStyle={{ background: '#FBF8F2', border: '1px solid #D7CDBD', borderRadius: 16, boxShadow: '0 14px 32px rgba(31, 43, 42, 0.08)' }}
+            labelStyle={{ color: '#70685C', fontSize: 11 }}
+            itemStyle={{ color: '#1F6A5A', fontSize: 11 }}
           />
           <Bar dataKey={dataKey} radius={[3, 3, 0, 0]}>
             {data.map((entry, i) => (
@@ -62,7 +62,7 @@ export default function DemographicCharts({ report }: Props) {
       )}
 
       {/* By demographic */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {breakdown?.by_age && Object.keys(breakdown.by_age).length > 0 && (
           <MiniChart title="年齢別平均" data={formatAgeData(breakdown.by_age)} />
         )}

@@ -5,28 +5,28 @@ export default {
     extend: {
       colors: {
         fin: {
-          primary: '#2563EB',    // Professional blue for CTAs
-          secondary: '#0EA5E9',  // Sky blue for secondary elements
-          dark: '#0F172A',       // Deep slate navy background
-          darker: '#1E293B',     // Card/panel background
-          surface: '#1E2D40',    // Elevated surface
-          border: 'rgba(71, 130, 181, 0.15)',  // Subtle blue border
-          success: '#059669',    // Emerald green
-          warning: '#D97706',    // Amber
-          danger: '#DC2626',     // Red
-        },
-        // Keep nvidia for backwards compatibility during transition
-        nvidia: {
-          green: '#76B900',
-          blue: '#00A3E0',
-          dark: '#0a0a0f',
-          darker: '#141420',
-          surface: '#1c1c2e',
-          border: 'rgba(118,185,0,0.15)',
+          canvas: '#F6F1E8',
+          surface: '#FBF8F2',
+          panel: '#EFE7DA',
+          border: '#D7CDBD',
+          ink: '#1F2B2A',
+          muted: '#70685C',
+          accent: '#1F6A5A',
+          accentStrong: '#154B40',
+          accentSoft: '#DCE8E0',
+          bronze: '#B58A57',
+          success: '#3F7A5D',
+          warning: '#A86A32',
+          danger: '#A14B45',
+          shadow: 'rgba(31, 43, 42, 0.12)',
         },
       },
       fontFamily: {
-        sans: ['"Noto Sans JP"', 'sans-serif'],
+        sans: ['"Outfit"', '"Noto Sans JP"', 'sans-serif'],
+      },
+      boxShadow: {
+        panel: '0 24px 60px rgba(31, 43, 42, 0.08)',
+        card: '0 14px 32px rgba(31, 43, 42, 0.08)',
       },
     },
   },

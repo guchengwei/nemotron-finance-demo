@@ -10,11 +10,11 @@ const LARGE_SURVEY_THRESHOLD = 30
 function ThinkingBlock({ thinking }: { thinking: string }) {
   return (
     <details data-testid="survey-thinking-block" className="mt-1.5 group">
-      <summary className="text-[10px] text-gray-600 cursor-pointer select-none list-none flex items-center gap-1 hover:text-gray-500 transition-colors w-fit">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1 select-none text-[10px] text-fin-muted transition-colors hover:text-fin-accent">
         <span className="transition-transform group-open:rotate-90 inline-block">▸</span>
         <span>思考過程</span>
       </summary>
-      <div className="mt-1 text-xs text-slate-300 bg-[#0F172A] rounded p-2 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto border border-[rgba(148,163,184,0.18)]">
+      <div className="mt-1 max-h-40 overflow-y-auto rounded-2xl border border-fin-border bg-fin-panel p-3 font-mono text-xs leading-relaxed text-fin-ink whitespace-pre-wrap">
         {thinking}
       </div>
     </details>
@@ -39,22 +39,22 @@ const PersonaListItem = React.memo(function PersonaListItem({
   onClick: () => void
 }) {
   const statusIcon = status === 'complete' ? '✓' : status === 'error' ? '✗' : status === 'active' ? '●' : '○'
-  const statusColor = status === 'complete' ? 'text-green-400' : status === 'error' ? 'text-red-400' : status === 'active' ? 'text-[#2563EB]' : 'text-gray-600'
+  const statusColor = status === 'complete' ? 'text-fin-success' : status === 'error' ? 'text-fin-danger' : status === 'active' ? 'text-fin-accent' : 'text-fin-muted'
 
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-3 py-2 flex items-center gap-2 rounded transition-colors ${isActive ? 'bg-[#2563EB]/10 border border-[rgba(37,99,235,0.3)]' : 'hover:bg-[#1E2D40]'}`}
+      className={`flex w-full items-center gap-2 rounded-2xl border px-3 py-2 text-left transition-all duration-200 ${isActive ? 'border-fin-accent/40 bg-fin-accentSoft' : 'border-transparent hover:border-fin-border hover:bg-fin-panel/60'}`}
     >
-      <span className={`text-xs ${statusColor} ${status === 'active' ? 'pulse-green' : ''}`}>
+      <span className={`text-xs ${statusColor} ${status === 'active' ? 'pulse-accent' : ''}`}>
         {statusIcon}
       </span>
       <PersonaAvatar name={name} age={age} sex={sex} size={24} />
       <div className="flex-1 min-w-0">
-        <div className="text-xs text-gray-300 truncate">{name}</div>
+        <div className="truncate text-xs text-fin-ink">{name}</div>
       </div>
       {score !== undefined && (
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded text-white ${scoreBg(score)}`}>
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold text-fin-surface ${scoreBg(score)}`}>
           {score}
         </span>
       )}
@@ -125,7 +125,7 @@ export default function SurveyRunner() {
   return (
     <div data-testid="survey-runner-screen" className="h-full flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-white">{headerLabel}</h2>
+        <h2 className="text-lg font-bold tracking-[-0.03em] text-fin-ink">{headerLabel}</h2>
         <div className="flex gap-2">
           {(surveyComplete || restoredInterruptedRun || restoredFailedRun) && (surveyCompleted > 0 || allStates.some((s) => s.answers.length > 0)) && (
             <button
@@ -140,7 +140,7 @@ export default function SurveyRunner() {
                 }
                 setStep(4)
               }}
-              className="bg-[#2563EB] text-black font-bold px-4 py-2 rounded text-sm"
+              className="rounded-full bg-fin-accent px-4 py-2 text-sm font-semibold text-fin-surface transition-all duration-200 hover:-translate-y-0.5 hover:bg-fin-accentStrong"
             >
               レポートを見る →
             </button>
@@ -151,7 +151,7 @@ export default function SurveyRunner() {
       {(restoredInterruptedRun || restoredFailedRun || (surveyComplete && surveyFailed > 0)) && (
         <div
           data-testid="survey-interruption-banner"
-          className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100"
+          className="rounded-[1.5rem] border border-fin-warning/30 bg-fin-warning/10 px-4 py-3 text-sm text-fin-warning"
         >
           {restoredInterruptedRun
             ? 'この調査は途中で停止しました。ここでは途中経過を確認できます。'
@@ -166,9 +166,9 @@ export default function SurveyRunner() {
         averageScore={avgScore}
       />
 
-      <div className="flex-1 flex gap-4 min-h-0">
-        <div className="w-44 flex-shrink-0 bg-[#1E293B] rounded-lg overflow-y-auto">
-          <div className="px-3 py-2 text-[10px] text-gray-600 uppercase tracking-wider border-b border-[rgba(255,255,255,0.05)]">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
+        <div className="h-44 flex-shrink-0 overflow-y-auto rounded-[1.5rem] border border-fin-border bg-fin-surface shadow-card xl:h-auto xl:w-44">
+          <div className="border-b border-fin-border px-3 py-3 text-[10px] uppercase tracking-[0.2em] text-fin-muted">
             ペルソナ一覧
           </div>
           {selectedPersonas.map((p) => {
@@ -189,10 +189,10 @@ export default function SurveyRunner() {
           })}
         </div>
 
-        <div className="flex-1 bg-[#1E293B] rounded-lg flex flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-fin-border bg-fin-surface shadow-card">
           {displayState ? (
             <>
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-[rgba(255,255,255,0.05)]">
+              <div className="flex items-center gap-3 border-b border-fin-border px-4 py-4">
                 <PersonaAvatar
                   name={displayState.persona.name}
                   age={displayState.persona.age}
@@ -200,27 +200,27 @@ export default function SurveyRunner() {
                   size={36}
                 />
                 <div>
-                  <div className="text-sm font-bold text-white">{displayState.persona.name}</div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-sm font-bold text-fin-ink">{displayState.persona.name}</div>
+                  <div className="text-xs text-fin-muted">
                     {displayState.persona.age}歳 · {displayState.persona.occupation} · {displayState.persona.prefecture}
                   </div>
                 </div>
                 {displayState.status === 'active' && (
-                  <div className="ml-auto text-xs text-[#2563EB] pulse-green">回答中...</div>
+                  <div className="ml-auto text-xs text-fin-accent pulse-accent">回答中...</div>
                 )}
               </div>
 
               <div ref={feedRef} className="flex-1 overflow-y-auto p-4 space-y-4">
                 {displayState.answers.map((ans, i) => (
                   <div key={i} className="fade-in">
-                    <div className="text-xs text-gray-500 mb-1">Q{i + 1}: {ans.question}</div>
+                    <div className="mb-1 text-xs text-fin-muted">Q{i + 1}: {ans.question}</div>
                     {ans.thinking && <ThinkingBlock thinking={ans.thinking} />}
                     <div
                       data-testid="survey-answer-block"
-                      className="bg-[#1E2D40] rounded-lg p-3 text-sm text-gray-100 border border-[rgba(37,99,235,0.12)]"
+                      className="rounded-[1.25rem] border border-fin-border bg-fin-panel p-3 text-sm text-fin-ink"
                     >
                       {ans.score !== undefined && (
-                        <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded mr-2 text-white ${scoreBg(ans.score)}`}>
+                        <span className={`mr-2 inline-block rounded-full px-2 py-0.5 text-xs font-bold text-fin-surface ${scoreBg(ans.score)}`}>
                           {ans.score}
                         </span>
                       )}
@@ -230,14 +230,14 @@ export default function SurveyRunner() {
                 ))}
 
                 {displayState.status === 'error' && (
-                  <div className="text-sm text-red-300 bg-red-900/20 rounded-lg p-3 border border-red-500/20">
+                  <div className="rounded-[1.25rem] border border-fin-danger/25 bg-fin-danger/10 p-3 text-sm text-fin-danger">
                     このペルソナの回答は途中で停止しました。
                   </div>
                 )}
 
                 {displayState.status === 'active' && displayState.activeAnswer !== undefined && (
                   <div className="fade-in">
-                    <div className="text-xs text-gray-500 mb-1">
+                    <div className="mb-1 text-xs text-fin-muted">
                       Q{(displayState.activeQuestion ?? 0) + 1}: {questions[displayState.activeQuestion ?? 0]}
                     </div>
                     {displayState.activeThinking && (
@@ -245,12 +245,12 @@ export default function SurveyRunner() {
                     )}
                     <div
                       data-testid="survey-active-answer-block"
-                      className="bg-[#F8FAFC] text-slate-900 border border-[rgba(37,99,235,0.25)] rounded-lg p-3 text-sm mt-1"
+                      className="mt-1 rounded-[1.25rem] border border-fin-accent/25 bg-fin-surface p-3 text-sm text-fin-ink shadow-card"
                     >
                       {isLarge ? (
-                        <span>{displayState.activeAnswer || <span className="text-slate-500">回答中...</span>}</span>
+                        <span>{displayState.activeAnswer || <span className="text-fin-muted">回答中...</span>}</span>
                       ) : (
-                        <span className={displayState.activeAnswer ? 'cursor-blink' : 'text-slate-500'}>
+                        <span className={displayState.activeAnswer ? 'cursor-blink' : 'text-fin-muted'}>
                           {displayState.activeAnswer || '入力中...'}
                         </span>
                       )}
@@ -260,7 +260,7 @@ export default function SurveyRunner() {
               </div>
             </>
           ) : (
-            <div className="flex items-center justify-center h-full text-sm text-gray-500">
+            <div className="flex h-full items-center justify-center text-sm text-fin-muted">
               表示できる回答がまだありません
             </div>
           )}

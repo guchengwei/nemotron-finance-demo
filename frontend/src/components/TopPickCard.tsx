@@ -9,9 +9,9 @@ interface Props {
 }
 
 const VARIANT_LABELS = {
-  positive: { label: 'ポジティブ', color: 'text-green-400 bg-green-400/10' },
-  negative: { label: 'ネガティブ', color: 'text-orange-400 bg-orange-400/10' },
-  unique: { label: 'ユニーク', color: 'text-[#0EA5E9] bg-[#0EA5E9]/10' },
+  positive: { label: 'ポジティブ', color: 'text-fin-success bg-fin-success/10' },
+  negative: { label: 'ネガティブ', color: 'text-fin-warning bg-fin-warning/10' },
+  unique: { label: 'ユニーク', color: 'text-fin-accent bg-fin-accentSoft' },
 }
 
 export default function TopPickCard({ pick, persona, variant, onChat }: Props) {
@@ -20,35 +20,30 @@ export default function TopPickCard({ pick, persona, variant, onChat }: Props) {
   const sex = persona?.sex || '男'
 
   return (
-    <div className="bg-[#1E2D40] border border-[rgba(37,99,235,0.15)] rounded-lg p-4 space-y-3">
-      {/* Variant badge */}
-      <span className={`text-[10px] font-bold px-2 py-1 rounded ${v.color}`}>
+    <div className="space-y-3 rounded-[1.5rem] border border-fin-border bg-fin-surface p-4 shadow-card">
+      <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${v.color}`}>
         {v.label}
       </span>
 
-      {/* Persona info */}
       <div className="flex items-center gap-3">
         <PersonaAvatar name={pick.persona_name} age={age} sex={sex} size={36} />
         <div>
-          <div className="text-sm font-bold text-white">{pick.persona_name}</div>
-          <div className="text-xs text-gray-500">{pick.persona_summary}</div>
+          <div className="text-sm font-bold text-fin-ink">{pick.persona_name}</div>
+          <div className="text-xs text-fin-muted">{pick.persona_summary}</div>
         </div>
       </div>
 
-      {/* Highlight reason */}
-      <div className="text-xs text-gray-500">{pick.highlight_reason}</div>
+      <div className="text-xs text-fin-muted">{pick.highlight_reason}</div>
 
-      {/* Quote */}
-      <blockquote className="border-l-2 border-[#2563EB] pl-3 text-sm text-gray-300 italic">
+      <blockquote className="border-l-2 border-fin-accent pl-3 text-sm italic text-fin-ink">
         「{pick.highlight_quote}」
       </blockquote>
 
-      {/* Chat button */}
       {onChat && (
         <button
           data-testid={`top-pick-chat-${pick.persona_uuid}`}
           onClick={onChat}
-          className="w-full text-center text-xs text-[#0EA5E9] hover:text-[#38BDF8] py-1.5 border border-[rgba(0,163,224,0.2)] rounded hover:border-[#0EA5E9] transition-colors"
+          className="w-full rounded-full border border-fin-border py-2 text-center text-xs font-medium text-fin-ink transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent"
         >
           この人に質問する →
         </button>
