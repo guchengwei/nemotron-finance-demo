@@ -9,3 +9,5 @@ pydantic-settings>=2.2.0
 python-dotenv>=1.0.0
 json-repair>=0.25.0
 aiosqlite>=0.20.0
+fugashi>=1.4.0
+unidic-lite
