@@ -11,6 +11,7 @@ import aiosqlite
 from config import settings
 from models import ReportRequest, ReportResponse, TopPick
 import llm
+import text_analysis
 from prompts import sex_display
 
 logger = logging.getLogger(__name__)
@@ -140,21 +141,9 @@ def _build_candidate_personas_block(persona_records: dict[str, dict], max_person
 
 
 def _extract_answer_themes(answers: list[dict]) -> list[str]:
-    """Extract top keyword themes from answers."""
-    keywords = {
-        "使いやす": "使いやすさ", "便利": "利便性", "効率": "効率化",
-        "透明": "透明性", "安心": "安心感", "不安": "不安感",
-        "懸念": "懸念", "手数料": "手数料", "セキュリティ": "セキュリティ",
-        "難し": "操作負荷", "複雑": "複雑さ", "期待": "期待感",
-        "リスク": "リスク", "老後": "老後資金", "投資": "投資",
-    }
-    counts: dict[str, int] = defaultdict(int)
-    for a in answers:
-        text = _strip_score_prefix(a.get("answer", ""))
-        for needle, label in keywords.items():
-            if needle in text:
-                counts[label] += 1
-    return [label for label, _ in sorted(counts.items(), key=lambda x: x[1], reverse=True)]
+    """Extract top keyword themes from answers using data-driven tokenization."""
+    texts = [_strip_score_prefix(a.get("answer", "")) for a in answers]
+    return text_analysis.extract_themes(texts)
 
 
 def _pick_representative_excerpts(answers: list[dict], n: int = 5) -> list[str]:
@@ -212,7 +201,7 @@ def _build_question_aggregation(answers: list[dict], questions: list[str]) -> st
     return "\n".join(lines)
 
 
-def _build_top_pick_candidates(persona_records: dict[str, dict], questions: list[str], max_candidates: int = 10) -> str:
+def _build_top_pick_candidates(persona_records: dict[str, dict], questions: list[str], token_polarities: dict[str, float], all_persona_lemmas: dict[str, int], max_candidates: int = 10) -> str:
     """Pre-select diverse candidates using Python scoring; give LLM full Q&A."""
     all_records = list(persona_records.values())
     if not all_records:
@@ -223,9 +212,9 @@ def _build_top_pick_candidates(persona_records: dict[str, dict], questions: list
         scored.append({
             "uuid": record["persona_uuid"],
             "record": record,
-            "sentiment": _record_sentiment_score(record),
-            "concern": _record_concern_score(record),
-            "uniqueness": _record_uniqueness_score(record),
+            "sentiment": _record_sentiment_score(record, token_polarities),
+            "concern": _record_concern_score(record, token_polarities),
+            "uniqueness": _record_uniqueness_score(record, all_persona_lemmas),
         })
 
     candidates: list[str] = []
@@ -384,36 +373,11 @@ def _top_demographic_signal(demographic_breakdown: dict) -> str:
     return f"{labels.get(label, label)}では{group}の反応が比較的強めです。"
 
 
-def _extract_motifs(answers: list[dict]) -> tuple[str, str]:
-    positives = {
-        "使いやす": "使いやすさへの期待",
-        "便利": "利便性への期待",
-        "効率": "効率化への期待",
-        "透明": "透明性への評価",
-        "安心": "安心感への期待",
-    }
-    negatives = {
-        "不安": "不安感",
-        "懸念": "懸念",
-        "手数料": "手数料への敏感さ",
-        "セキュリティ": "セキュリティへの不安",
-        "難し": "操作負荷への不安",
-        "複雑": "複雑さへの不満",
-    }
-    positive_counts = defaultdict(int)
-    negative_counts = defaultdict(int)
-    for answer in answers:
-        text = _strip_score_prefix(answer.get("answer", ""))
-        for needle, label in positives.items():
-            if needle in text:
-                positive_counts[label] += 1
-        for needle, label in negatives.items():
-            if needle in text:
-                negative_counts[label] += 1
-
-    positive = max(positive_counts.items(), key=lambda item: item[1])[0] if positive_counts else "利便性への期待"
-    negative = max(negative_counts.items(), key=lambda item: item[1])[0] if negative_counts else "導入時の不安"
-    return positive, negative
+def _extract_motifs(answers: list[dict], token_polarities: dict[str, float] | None = None) -> tuple[str, str]:
+    """Extract positive/negative motifs using learned token polarities."""
+    texts = [_strip_score_prefix(a.get("answer", "")) for a in answers]
+    scores: list[int | None] = [a.get("score") for a in answers]
+    return text_analysis.extract_motifs(texts, scores)
 
 
 def build_fallback_group_tendency(
@@ -437,26 +401,21 @@ def build_fallback_conclusion(overall_score: float | None, answers: list[dict]) 
     )
 
 
-def _record_sentiment_score(record: dict) -> int:
-    text = " ".join(_strip_score_prefix(answer.get("answer", "")) for answer in record.get("answers", []))
+def _record_sentiment_score(record: dict, token_polarities: dict[str, float]) -> int:
+    texts = [_strip_score_prefix(a.get("answer", "")) for a in record.get("answers", [])]
     score = record.get("score") or 0
-    positive_hits = sum(keyword in text for keyword in ["魅力", "便利", "期待", "使いやす", "安心"])
-    negative_hits = sum(keyword in text for keyword in ["不安", "懸念", "難し", "複雑", "高い", "手数料"])
-    return score * 10 + positive_hits - negative_hits
+    return score * 10 + text_analysis.sentiment_score(texts, token_polarities)
 
 
-def _record_concern_score(record: dict) -> int:
-    text = " ".join(_strip_score_prefix(answer.get("answer", "")) for answer in record.get("answers", []))
+def _record_concern_score(record: dict, token_polarities: dict[str, float]) -> int:
+    texts = [_strip_score_prefix(a.get("answer", "")) for a in record.get("answers", [])]
     score = record.get("score") or 0
-    concern_hits = sum(keyword in text for keyword in ["不安", "懸念", "難し", "複雑", "リスク", "手数料", "セキュリティ"])
-    return concern_hits * 10 - score
+    return text_analysis.concern_score(texts, token_polarities) * 10 - score
 
 
-def _record_uniqueness_score(record: dict) -> int:
-    total_length = sum(len(_strip_score_prefix(answer.get("answer", ""))) for answer in record.get("answers", []))
-    text = " ".join(_strip_score_prefix(answer.get("answer", "")) for answer in record.get("answers", []))
-    unique_hits = sum(keyword in text for keyword in ["独自", "一方で", "ただ", "現場", "家族", "仕事", "連携"])
-    return total_length + unique_hits * 20
+def _record_uniqueness_score(record: dict, all_persona_lemmas: dict[str, int]) -> int:
+    texts = [_strip_score_prefix(a.get("answer", "")) for a in record.get("answers", [])]
+    return text_analysis.uniqueness_score(texts, all_persona_lemmas)
 
 
 def _fallback_pick_from_record(record: dict, reason: str) -> dict:
@@ -469,7 +428,7 @@ def _fallback_pick_from_record(record: dict, reason: str) -> dict:
     }
 
 
-def build_fallback_top_picks(persona_records: dict[str, dict], exclude_uuids: set[str] | None = None) -> list[dict]:
+def build_fallback_top_picks(persona_records: dict[str, dict], token_polarities: dict[str, float], all_persona_lemmas: dict[str, int], exclude_uuids: set[str] | None = None) -> list[dict]:
     exclude_uuids = exclude_uuids or set()
     available = [record for record in persona_records.values() if record["persona_uuid"] not in exclude_uuids]
     if not available:
@@ -487,23 +446,23 @@ def build_fallback_top_picks(persona_records: dict[str, dict], exclude_uuids: se
         picks.append(_fallback_pick_from_record(best, reason))
 
     select_best(
-        sorted(available, key=lambda record: (record.get("score") or 0, _record_sentiment_score(record)), reverse=True),
-        _record_sentiment_score,
+        sorted(available, key=lambda record: (record.get("score") or 0, _record_sentiment_score(record, token_polarities)), reverse=True),
+        lambda r: _record_sentiment_score(r, token_polarities),
         "前向きな受容理由が具体的で、全体訴求の核を示しているため",
     )
     select_best(
-        sorted(available, key=lambda record: (_record_concern_score(record), -(record.get("score") or 0)), reverse=True),
-        _record_concern_score,
+        sorted(available, key=lambda record: (_record_concern_score(record, token_polarities), -(record.get("score") or 0)), reverse=True),
+        lambda r: _record_concern_score(r, token_polarities),
         "懸念点が明確で、導入障壁の把握に役立つため",
     )
     select_best(
-        sorted(available, key=_record_uniqueness_score, reverse=True),
-        _record_uniqueness_score,
+        sorted(available, key=lambda r: _record_uniqueness_score(r, all_persona_lemmas), reverse=True),
+        lambda r: _record_uniqueness_score(r, all_persona_lemmas),
         "回答の切り口が比較的独自で、示唆の幅を広げるため",
     )
 
     while len(picks) < min(TOP_PICK_LIMIT, len(available)):
-        select_best(available, _record_uniqueness_score, "補完候補として追加")
+        select_best(available, lambda r: _record_uniqueness_score(r, all_persona_lemmas), "補完候補として追加")
 
     return picks
 
@@ -529,7 +488,7 @@ def _repair_top_pick(candidate: dict, persona_records: dict[str, dict]) -> dict 
     }
 
 
-def _merge_top_picks(llm_picks: list[dict], persona_records: dict[str, dict]) -> list[dict]:
+def _merge_top_picks(llm_picks: list[dict], persona_records: dict[str, dict], token_polarities: dict[str, float], all_persona_lemmas: dict[str, int]) -> list[dict]:
     merged = []
     seen = set()
     for candidate in llm_picks:
@@ -543,7 +502,7 @@ def _merge_top_picks(llm_picks: list[dict], persona_records: dict[str, dict]) ->
 
     if len(merged) < min(TOP_PICK_LIMIT, len(persona_records)):
         merged.extend(
-            build_fallback_top_picks(persona_records, exclude_uuids=seen)[: TOP_PICK_LIMIT - len(merged)]
+            build_fallback_top_picks(persona_records, token_polarities, all_persona_lemmas, exclude_uuids=seen)[: TOP_PICK_LIMIT - len(merged)]
         )
     return merged
 
@@ -590,8 +549,33 @@ async def generate_report_endpoint(request: ReportRequest):
 
         # New data preparation: aggregated per question + pre-scored top-pick candidates
         persona_records = _build_persona_records(answers)
+
+        # Build corpus-wide lemma frequencies for uniqueness scoring
+        all_persona_lemmas: dict[str, int] = defaultdict(int)
+        for record in persona_records.values():
+            texts = [_strip_score_prefix(a.get("answer", "")) for a in record.get("answers", [])]
+            for text in texts:
+                for lemma in text_analysis.tokenize(text):
+                    all_persona_lemmas[lemma] += 1
+
+        # Polarity learning: load historical, learn fresh, merge
+        historical_polarities = text_analysis.load_polarities(settings.history_db_path)
+        all_texts_by_persona = [
+            [_strip_score_prefix(a.get("answer", "")) for a in record.get("answers", [])]
+            for record in persona_records.values()
+        ]
+        q1_scores = [record.get("score") for record in persona_records.values() if record.get("score") is not None]
+        # Only learn if we have enough personas with scores
+        if len(q1_scores) >= 2:
+            fresh_polarities, fresh_counts = text_analysis.learn_token_polarities(all_texts_by_persona, q1_scores)
+            historical_counts: dict[str, int] = {lemma: text_analysis.SEED_COUNTS.get(lemma, 1) for lemma in historical_polarities}
+            token_polarities = text_analysis.merge_polarities(fresh_polarities, fresh_counts, historical_polarities, historical_counts)
+        else:
+            fresh_polarities, fresh_counts = {}, {}
+            token_polarities = historical_polarities
+
         question_aggregation = _build_question_aggregation(answers, questions)
-        top_pick_candidates = _build_top_pick_candidates(persona_records, questions)
+        top_pick_candidates = _build_top_pick_candidates(persona_records, questions, token_polarities, all_persona_lemmas)
 
         # Build shared system prefix for KV-cache efficiency
         from prompts import REPORT_SHARED_SYSTEM
@@ -614,7 +598,12 @@ async def generate_report_endpoint(request: ReportRequest):
             aggregated["demographic_breakdown"],
         )
         fallback_conclusion = build_fallback_conclusion(aggregated["overall_score"], answers)
-        merged_top_picks = _merge_top_picks(top_picks_raw, persona_records)
+        merged_top_picks = _merge_top_picks(top_picks_raw, persona_records, token_polarities, all_persona_lemmas)
+
+        # Persist fresh polarities for future surveys
+        if fresh_polarities:
+            text_analysis.save_polarities(settings.history_db_path, fresh_polarities, fresh_counts)
+
         if not group_tendency_raw:
             logger.warning("report fallback used for group_tendency")
         if not conclusion_raw:
