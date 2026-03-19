@@ -194,10 +194,10 @@ async def _survey_stream(
 
         # Create run record
         await history_db.execute(
-            "INSERT INTO survey_runs (id, survey_theme, questions_json, persona_count, status, label) "
-            "VALUES (?, ?, ?, ?, 'running', ?)",
+            "INSERT INTO survey_runs (id, survey_theme, questions_json, persona_count, status, label, enable_thinking) "
+            "VALUES (?, ?, ?, ?, 'running', ?, ?)",
             [run_id, request.survey_theme, json.dumps(questions, ensure_ascii=False),
-             total, request.label]
+             total, request.label, enable_thinking]
         )
         await history_db.commit()
 

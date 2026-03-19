@@ -6,6 +6,7 @@ interface Props {
   persona?: Persona
   variant: 'positive' | 'negative' | 'unique'
   onChat?: () => void
+  onProfile?: () => void
 }
 
 const VARIANT_LABELS = {
@@ -14,7 +15,7 @@ const VARIANT_LABELS = {
   unique: { label: 'ユニーク', color: 'text-fin-accent bg-fin-accentSoft' },
 }
 
-export default function TopPickCard({ pick, persona, variant, onChat }: Props) {
+export default function TopPickCard({ pick, persona, variant, onChat, onProfile }: Props) {
   const v = VARIANT_LABELS[variant]
   const age = persona?.age || 30
   const sex = persona?.sex || '男'
@@ -39,6 +40,15 @@ export default function TopPickCard({ pick, persona, variant, onChat }: Props) {
         「{pick.highlight_quote}」
       </blockquote>
 
+      {onProfile && (
+        <button
+          data-testid={`top-pick-profile-${pick.persona_uuid}`}
+          onClick={onProfile}
+          className="w-full rounded-full border border-fin-border/60 py-1.5 text-center text-xs font-medium text-fin-muted transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent/40 hover:text-fin-accent"
+        >
+          プロフィールを見る
+        </button>
+      )}
       {onChat && (
         <button
           data-testid={`top-pick-chat-${pick.persona_uuid}`}

@@ -60,7 +60,7 @@ function buildPersonaStates(detail: SurveyRunDetail) {
 }
 
 export default function Sidebar() {
-  const { history, setHistory, setStep, setCurrentReport, setCurrentHistoryRun, resetSurvey, setSelectedPersonas, setQuestions, setSurveyTheme, setSurveyLabel, setCurrentRunId, setPersonaStates, setSurveyComplete, setSurveyCounts } = useStore()
+  const { history, setHistory, setStep, setCurrentReport, setCurrentHistoryRun, resetSurvey, setSelectedPersonas, setQuestions, setSurveyTheme, setSurveyLabel, setCurrentRunId, setPersonaStates, setSurveyComplete, setSurveyCounts, setEnableThinking } = useStore()
   const dbReady = useStore((s) => s.dbReady)
 
   useEffect(() => {
@@ -104,6 +104,17 @@ export default function Sidebar() {
         setSurveyCounts(reconstructed.completed, reconstructed.failed)
         setSurveyComplete(detail.status !== 'running')
         setStep(3)
+        return
+      }
+
+      if (detail.status === 'completed') {
+        const reconstructed = buildPersonaStates(detail)
+        setSelectedPersonas(reconstructed.personas)
+        setPersonaStates(reconstructed.personaStates)
+        setSurveyCounts(reconstructed.completed, reconstructed.failed)
+        setSurveyComplete(true)
+        setEnableThinking(detail.enable_thinking ?? true)
+        setStep(4)
         return
       }
 

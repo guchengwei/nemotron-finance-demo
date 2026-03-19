@@ -75,6 +75,7 @@ export default function SurveyRunner() {
   const {
     personaStates, surveyComplete, surveyCompleted, surveyFailed,
     questions, currentRunId, setCurrentReport, setStep, selectedPersonas, currentHistoryRun,
+    currentReport, openPersonaDetail,
   } = useStore()
 
   const feedRef = useRef<HTMLDivElement>(null)
@@ -107,6 +108,7 @@ export default function SurveyRunner() {
 
   useEffect(() => {
     if (!surveyComplete || !currentRunId || surveyCompleted === 0) return
+    if (currentReport) return
     const hasAnswers = Object.values(personaStates).some((s) => s.answers.length > 0)
     if (!hasAnswers) return
 
@@ -120,7 +122,7 @@ export default function SurveyRunner() {
       }
     }, 1500)
     return () => clearTimeout(timer)
-  }, [surveyComplete, currentRunId, personaStates, setCurrentReport, setStep, surveyFailed])
+  }, [surveyComplete, currentRunId, personaStates, setCurrentReport, setStep, surveyFailed, currentReport])
 
   const completed = allStates.filter((s) => s.status === 'complete')
   const errored = allStates.filter((s) => s.status === 'error')
@@ -212,18 +214,24 @@ export default function SurveyRunner() {
           {displayState ? (
             <>
               <div className="flex items-center gap-3 border-b border-fin-border px-4 py-4">
-                <PersonaAvatar
-                  name={displayState.persona.name}
-                  age={displayState.persona.age}
-                  sex={displayState.persona.sex}
-                  size={36}
-                />
-                <div>
-                  <div className="text-sm font-bold text-fin-ink">{displayState.persona.name}</div>
-                  <div className="text-xs text-fin-muted">
-                    {displayState.persona.age}歳 · {displayState.persona.occupation} · {displayState.persona.prefecture}
+                <button
+                  onClick={() => openPersonaDetail(displayState.persona)}
+                  className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                  title="プロフィールを表示"
+                >
+                  <PersonaAvatar
+                    name={displayState.persona.name}
+                    age={displayState.persona.age}
+                    sex={displayState.persona.sex}
+                    size={36}
+                  />
+                  <div>
+                    <div className="text-sm font-bold text-fin-ink">{displayState.persona.name}</div>
+                    <div className="text-xs text-fin-muted">
+                      {displayState.persona.age}歳 · {displayState.persona.occupation} · {displayState.persona.prefecture}
+                    </div>
                   </div>
-                </div>
+                </button>
                 {displayState.status === 'active' && (
                   <div className="ml-auto text-xs text-fin-accent pulse-accent">回答中...</div>
                 )}

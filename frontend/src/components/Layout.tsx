@@ -1,12 +1,16 @@
 import type { ReactNode } from 'react'
 import Sidebar from './Sidebar'
 import StepIndicator from './StepIndicator'
+import PersonaDetailModal from './PersonaDetailModal'
+import { useStore } from '../store'
 
 interface Props {
   children: ReactNode
 }
 
 export default function Layout({ children }: Props) {
+  const { activeDetailPersona, closePersonaDetail } = useStore()
+
   return (
     <div className="flex min-h-screen overflow-hidden bg-fin-canvas text-fin-ink">
       <Sidebar />
@@ -18,6 +22,7 @@ export default function Layout({ children }: Props) {
           {children}
         </main>
       </div>
+      <PersonaDetailModal persona={activeDetailPersona} onClose={closePersonaDetail} />
     </div>
   )
 }

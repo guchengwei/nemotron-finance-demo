@@ -148,3 +148,4 @@ class SurveyRunDetail(BaseModel):
     report: Optional[ReportResponse] = None
     answers: List[Dict[str, Any]] = []
     followup_chats: Dict[str, List[Dict[str, str]]] = {}
+    enable_thinking: Optional[bool] = True

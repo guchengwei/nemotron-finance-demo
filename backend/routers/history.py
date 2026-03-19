@@ -115,6 +115,7 @@ async def get_history_run(run_id: str):
         report=report,
         answers=answers,
         followup_chats=followup_chats,
+        enable_thinking=bool(run.get("enable_thinking", True)),
     )
 
 

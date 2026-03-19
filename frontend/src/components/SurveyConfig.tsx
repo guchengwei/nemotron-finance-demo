@@ -10,7 +10,7 @@ export default function SurveyConfig() {
   const {
     selectedPersonas, surveyTheme, setSurveyTheme,
     questions, setQuestions, surveyLabel, setSurveyLabel,
-    setStep, enableThinking, setEnableThinking,
+    setStep, enableThinking, setEnableThinking, currentHistoryRun,
   } = useStore()
   const { startSurvey } = useSurvey()
 
@@ -21,6 +21,7 @@ export default function SurveyConfig() {
   const [selectedPreset, setSelectedPreset] = useState<string>('')
 
   const estimatedMinutes = Math.ceil(selectedPersonas.length * questions.length * 3 / 60)
+  const isCompletedReview = currentHistoryRun?.status === 'completed'
 
   const generateQuestions = async () => {
     if (!surveyTheme) return
@@ -64,6 +65,59 @@ export default function SurveyConfig() {
   const handleStart = () => {
     setStep(3)
     startSurvey()
+  }
+
+  if (isCompletedReview) {
+    return (
+      <div data-testid="survey-config-screen" className="max-w-2xl space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold tracking-[-0.03em] text-fin-ink">調査設定</h2>
+          <span className="rounded-full bg-fin-accentSoft px-3 py-1 text-xs font-medium text-fin-accent">
+            完了済み（閲覧のみ）
+          </span>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-xs font-semibold text-fin-muted">調査テーマ</label>
+          <div className="w-full rounded-[1.5rem] border border-fin-border bg-fin-panel px-4 py-3 text-sm text-fin-ink">
+            {surveyTheme || '—'}
+          </div>
+        </div>
+
+        {surveyLabel && (
+          <div>
+            <label className="mb-2 block text-xs font-semibold text-fin-muted">ラベル</label>
+            <div className="w-full rounded-full border border-fin-border bg-fin-panel px-4 py-3 text-sm text-fin-ink">
+              {surveyLabel}
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between rounded-[1.5rem] border border-fin-border bg-fin-surface px-4 py-3 shadow-card">
+          <div>
+            <div className="text-sm font-medium text-fin-ink">モデル思考モード</div>
+            <div className="text-xs text-fin-muted">実行時の設定</div>
+          </div>
+          <div className={`rounded-full px-3 py-1 text-xs font-medium ${enableThinking ? 'bg-fin-accent text-fin-surface' : 'bg-fin-border text-fin-muted'}`}>
+            {enableThinking ? 'ON' : 'OFF'}
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-xs font-semibold text-fin-muted">質問項目</label>
+          <div className="space-y-2">
+            {questions.map((q, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="mt-2.5 w-4 flex-shrink-0 text-xs text-fin-muted">{i + 1}</span>
+                <div className="flex-1 rounded-2xl border border-fin-border bg-fin-panel px-3 py-2 text-sm text-fin-ink">
+                  {q}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS survey_runs (
     persona_count INTEGER,
     status TEXT DEFAULT 'running',
     report_json TEXT,
-    label TEXT
+    label TEXT,
+    enable_thinking BOOLEAN DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS survey_answers (
@@ -84,6 +85,13 @@ def _create_history_db():
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(HISTORY_DDL)
+    # Migrate: add enable_thinking if missing
+    try:
+        conn.execute("ALTER TABLE survey_runs ADD COLUMN enable_thinking BOOLEAN DEFAULT 1")
+        conn.commit()
+        logger.info("Migrated survey_runs: added enable_thinking column")
+    except Exception:
+        pass  # Column already exists
     # Fix any surveys stuck in 'running' status from previous crashes
     stuck = conn.execute(
         "UPDATE survey_runs SET status = 'failed' WHERE status = 'running'"

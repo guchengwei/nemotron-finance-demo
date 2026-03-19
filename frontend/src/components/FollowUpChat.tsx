@@ -35,7 +35,7 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
 }
 
 export default function FollowUpChat() {
-  const { followupPersona, currentRunId, setStep, currentHistoryRun, surveyTheme } = useStore()
+  const { followupPersona, currentRunId, setStep, currentHistoryRun, surveyTheme, openPersonaDetail } = useStore()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -123,7 +123,11 @@ export default function FollowUpChat() {
     <div data-testid="followup-screen" className="flex h-full flex-col gap-6 xl:flex-row">
       <div className="w-full flex-shrink-0 space-y-4 overflow-y-auto xl:w-72">
         <div className="rounded-[1.75rem] border border-fin-border bg-fin-surface p-4 shadow-card">
-          <div className="flex items-center gap-3 mb-3">
+          <button
+            onClick={() => openPersonaDetail(followupPersona)}
+            className="flex items-center gap-3 mb-3 hover:opacity-80 transition-opacity w-full text-left"
+            title="プロフィールを表示"
+          >
             <PersonaAvatar
               name={followupPersona.name}
               age={followupPersona.age}
@@ -135,7 +139,7 @@ export default function FollowUpChat() {
               <div className="text-xs text-fin-muted">{followupPersona.age}歳 · {sexDisplay}</div>
               <div className="text-xs text-fin-accent">{followupPersona.occupation}</div>
             </div>
-          </div>
+          </button>
           <div className="text-xs text-fin-muted">{followupPersona.prefecture}（{followupPersona.region}）</div>
           <div className="mt-3">
             <div

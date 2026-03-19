@@ -119,6 +119,7 @@ export interface SurveyRunDetail {
   report?: ReportResponse
   answers: SurveyAnswer[]
   followup_chats: Record<string, Array<{ role: string; content: string }>>
+  enable_thinking?: boolean
 }
 
 export interface SSERunCreated {

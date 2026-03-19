@@ -3,6 +3,7 @@ import { useStore } from './store'
 import { api } from './api'
 import { useSurvey } from './hooks/useSurvey'
 import Layout from './components/Layout'
+import CompletedFilterReview from './components/CompletedFilterReview'
 import FilterPanel from './components/FilterPanel'
 import SurveyConfig from './components/SurveyConfig'
 import SurveyRunner from './components/SurveyRunner'
@@ -77,6 +78,7 @@ function WelcomeScreen() {
 
 export default function App() {
   const { currentStep, resetVersion } = useStore()
+  const currentHistoryRun = useStore(s => s.currentHistoryRun)
   const dbReady = useStore(s => s.dbReady)
   const setDbReady = useStore(s => s.setDbReady)
   const setLlmStatus = useStore(s => s.setLlmStatus)
@@ -131,6 +133,9 @@ export default function App() {
   const renderStep = () => {
     switch (currentStep) {
       case 1:
+        if (currentHistoryRun?.status === 'completed') {
+          return <CompletedFilterReview />
+        }
         return (
           <div>
             <WelcomeScreen />

@@ -92,6 +92,10 @@ interface AppState {
   enableThinking: boolean
   setEnableThinking: (v: boolean) => void
 
+  activeDetailPersona: import('./types').Persona | null
+  openPersonaDetail: (p: import('./types').Persona) => void
+  closePersonaDetail: () => void
+
   resetVersion: number
   resetSurvey: () => void
 }
@@ -156,6 +160,10 @@ export const useStore = create<AppState>((set) => ({
   enableThinking: false,
   setEnableThinking: (enableThinking) => set({ enableThinking }),
 
+  activeDetailPersona: null,
+  openPersonaDetail: (activeDetailPersona) => set({ activeDetailPersona }),
+  closePersonaDetail: () => set({ activeDetailPersona: null }),
+
   resetVersion: 0,
   resetSurvey: () =>
     set((state) => ({
@@ -174,6 +182,7 @@ export const useStore = create<AppState>((set) => ({
       followupPersona: null,
       currentHistoryRun: null,
       enableThinking: false,
+      activeDetailPersona: null,
       resetVersion: state.resetVersion + 1,
     })),
 }))

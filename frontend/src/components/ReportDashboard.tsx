@@ -23,7 +23,7 @@ function ScoreCircle({ score }: { score: number }) {
 export default function ReportDashboard() {
   const {
     currentReport, currentRunId, setCurrentReport, setFollowupPersona,
-    setStep, currentHistoryRun, selectedPersonas, surveyTheme
+    setStep, currentHistoryRun, selectedPersonas, surveyTheme, openPersonaDetail
   } = useStore()
 
   const [generating, setGenerating] = useState(false)
@@ -60,6 +60,19 @@ export default function ReportDashboard() {
       setStep(5)
     }
   }, [selectedPersonas, currentHistoryRun, setFollowupPersona, setStep])
+
+  const handleViewProfile = useCallback((uuid: string) => {
+    let persona = selectedPersonas.find((p) => p.uuid === uuid) ?? null
+    if (!persona && currentHistoryRun) {
+      const answer = currentHistoryRun.answers.find((a) => a.persona_uuid === uuid)
+      if (answer) {
+        try { persona = JSON.parse(answer.persona_full_json) } catch { /* skip */ }
+      }
+    }
+    if (persona) {
+      openPersonaDetail(persona)
+    }
+  }, [selectedPersonas, currentHistoryRun, openPersonaDetail])
 
   const handleDownload = () => {
     if (!report) return
@@ -169,6 +182,7 @@ export default function ReportDashboard() {
                   persona={persona}
                   variant={i === 0 ? 'positive' : i === 1 ? 'negative' : 'unique'}
                   onChat={() => handleChatWithPersona(pick.persona_uuid)}
+                  onProfile={() => handleViewProfile(pick.persona_uuid)}
                 />
               )
             })}
