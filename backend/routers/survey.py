@@ -83,7 +83,14 @@ async def _run_persona_survey(
             "data": {"persona_uuid": persona_id, "name": name, "index": persona_index, "total": total}
         })
 
-        fin_ext = _build_financial_ext(persona)
+        # Overlay cached financial extension (generated at sample time) onto persona dict
+        from persona_store import get_store as _get_store
+        fin_ext = _get_store().get_cached_financial(persona.get("uuid", ""))
+        if fin_ext:
+            persona = {**persona, "financial_extension": fin_ext}
+        else:
+            fin_ext = _build_financial_ext(persona)
+
         system_prompt = build_survey_system_prompt(persona, fin_ext)
         persona_summary = _persona_summary(persona)
         persona_full_json = json.dumps(persona, ensure_ascii=False, default=str)

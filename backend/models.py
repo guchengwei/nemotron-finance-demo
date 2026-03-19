@@ -1,7 +1,7 @@
 """Pydantic models for API request/response types."""
 
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Literal, Optional, List, Dict, Any
 
 
 class FinancialExtension(BaseModel):
@@ -11,6 +11,16 @@ class FinancialExtension(BaseModel):
     annual_income_bracket: Optional[str] = None
     asset_bracket: Optional[str] = None
     primary_bank_type: Optional[str] = None
+
+
+class FinancialExtensionSchema(BaseModel):
+    """Strict schema for LLM structured output. All fields required (no Optional)."""
+    financial_literacy: Literal["初心者", "中級者", "上級者", "専門家"]
+    investment_experience: str
+    financial_concerns: str
+    annual_income_bracket: Literal["300万未満", "300-500万", "500-800万", "800-1200万", "1200万以上"]
+    asset_bracket: Literal["500万未満", "500-2000万", "2000-5000万", "5000万以上"]
+    primary_bank_type: Literal["メガバンク", "地方銀行", "ネット銀行", "信用金庫", "証券会社"]
 
 
 class Persona(BaseModel):

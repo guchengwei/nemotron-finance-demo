@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
+from llm import generate_financial_extensions
 from models import CountResponse, FiltersResponse, PersonaSample, Persona, FinancialExtension
 from persona_store import get_store
 
@@ -61,18 +62,19 @@ async def get_sample(
         occupation=occupation, education=education,
         financial_literacy=financial_literacy,
     )
+
+    # Enrich personas lacking cached financial extension
+    uncached = [p for p in rows if store.get_cached_financial(p.get("uuid", "")) is None]
+    if uncached:
+        results = await generate_financial_extensions(uncached)
+        for p, (ext, should_cache) in zip(uncached, results):
+            if should_cache:
+                store.set_cached_financial(p["uuid"], ext)
+
     personas = []
     for record in rows:
-        fin_ext = None
-        if record.get('financial_literacy'):
-            fin_ext = FinancialExtension(
-                financial_literacy=record.get('financial_literacy'),
-                investment_experience=record.get('investment_experience'),
-                financial_concerns=record.get('financial_concerns'),
-                annual_income_bracket=record.get('annual_income_bracket'),
-                asset_bracket=record.get('asset_bracket'),
-                primary_bank_type=record.get('primary_bank_type'),
-            )
+        fin = store.get_cached_financial(record.get("uuid", ""))
+        fin_ext = FinancialExtension(**fin) if fin else None
         personas.append(Persona(
             uuid=record['uuid'],
             name=record.get('name') or '不明',

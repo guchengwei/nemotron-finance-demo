@@ -12,6 +12,7 @@ import re
 from typing import Any, AsyncGenerator, Optional
 
 from openai import AsyncOpenAI
+from pydantic import BaseModel
 
 from config import settings
 
@@ -292,6 +293,8 @@ async def call_llm(
     user_message: str,
     max_tokens: Optional[int] = None,
     stream: bool = False,
+    extra_body: Optional[dict] = None,
+    temperature: Optional[float] = None,
 ) -> str:
     """Single LLM call (non-streaming). Returns full response text."""
     async with get_semaphore():
@@ -306,8 +309,9 @@ async def call_llm(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
             ],
-            temperature=settings.llm_temperature,
+            temperature=temperature if temperature is not None else settings.llm_temperature,
             max_tokens=max_tokens or settings.llm_max_tokens,
+            **({"extra_body": extra_body} if extra_body else {}),
         )
         return sanitize_answer_text(resp.choices[0].message.content or "")
 
@@ -604,3 +608,165 @@ async def generate_report(
     elif set(parsed) != set(normalize_report_qualitative(parsed)):
         logger.warning("report parse partially succeeded: %s", raw_text[:200])
     return normalize_report_qualitative(parsed)
+
+
+# -- Financial extension generation -------------------------------------------
+
+_FINANCIAL_BATCH_SIZE = 8
+
+
+def _random_financial_extension() -> "FinancialExtension":
+    """Random fallback used for mock mode or parse failures. Result is NOT cached."""
+    from models import FinancialExtension
+    return FinancialExtension(
+        financial_literacy=random.choices(
+            ["初心者", "中級者", "上級者", "専門家"],
+            weights=[40, 38, 17, 5],
+        )[0],
+        investment_experience="",
+        financial_concerns="",
+        annual_income_bracket=random.choice(
+            ["300万未満", "300-500万", "500-800万", "800-1200万", "1200万以上"]
+        ),
+        asset_bracket=random.choice(["500万未満", "500-2000万", "2000-5000万", "5000万以上"]),
+        primary_bank_type=random.choice(
+            ["メガバンク", "地方銀行", "ネット銀行", "信用金庫", "証券会社"]
+        ),
+    )
+
+
+async def _generate_financial_extension_single(
+    persona: dict,
+) -> tuple["FinancialExtension", bool]:
+    """Generate financial profile for one persona. Returns (extension, should_cache)."""
+    from models import FinancialExtensionSchema, FinancialExtension
+    from prompts import FINANCIAL_EXTENSION_PROMPT, sex_display
+
+    prompt = FINANCIAL_EXTENSION_PROMPT.format(
+        name=persona.get("name", "不明"),
+        age=persona.get("age", "不明"),
+        sex_display=sex_display(persona.get("sex", "")),
+        prefecture=persona.get("prefecture", "不明"),
+        region=persona.get("region", "不明"),
+        occupation=persona.get("occupation", "不明"),
+        education_level=persona.get("education_level", "不明"),
+        marital_status=persona.get("marital_status", "不明"),
+        persona=persona.get("persona", ""),
+        skills_and_expertise=persona.get("skills_and_expertise", ""),
+    )
+    schema = FinancialExtensionSchema.model_json_schema()
+    extra_body = {
+        "structured_outputs": {"json": schema},
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    raw = ""
+    try:
+        raw = await call_llm(
+            system_prompt="あなたは金融プロファイル生成AIです。",
+            user_message=prompt,
+            max_tokens=300,
+            extra_body=extra_body,
+            temperature=1.1,
+        )
+        data = json.loads(raw)
+        return FinancialExtension(**data), True
+    except Exception:
+        try:
+            try:
+                import json_repair
+            except ImportError:
+                json_repair = None  # type: ignore[assignment]
+            if json_repair is not None and raw:
+                repaired = json_repair.loads(raw)
+                return FinancialExtension(**repaired), True
+        except Exception:
+            pass
+        return _random_financial_extension(), False
+
+
+class _ProfileBatch(BaseModel):
+    """Wrapper for structured output of N financial profiles."""
+    profiles: list["FinancialExtensionSchema"]
+
+
+async def generate_financial_extension_batch(
+    personas: list[dict],
+) -> list[tuple["FinancialExtension", bool]]:
+    """
+    Generate financial profiles for a small batch (≤8) in one LLM call.
+    Returns list of (FinancialExtension, should_cache) tuples, same order as input.
+    Falls back to per-persona on parse failure (result not cached).
+    """
+    from models import FinancialExtension, FinancialExtensionSchema
+    from prompts import FINANCIAL_EXTENSION_BATCH_PROMPT, sex_display
+
+    if settings.mock_llm:
+        return [(_random_financial_extension(), True) for _ in personas]
+
+    lines = []
+    for i, p in enumerate(personas, 1):
+        persona_excerpt = (p.get("professional_persona") or p.get("persona") or "")[:80]
+        lines.append(
+            f"[{i}] {p.get('name', '不明')}, {p.get('age', '?')}歳, "
+            f"{sex_display(p.get('sex', ''))}, 職業: {p.get('occupation', '不明')}, "
+            f"学歴: {p.get('education_level', '不明')}, 特徴: {persona_excerpt}"
+        )
+    personas_block = "\n".join(lines)
+    n = len(personas)
+
+    # Build batch schema with concrete FinancialExtensionSchema
+    class _BatchModel(BaseModel):
+        profiles: list[FinancialExtensionSchema]
+
+    schema = _BatchModel.model_json_schema()
+    extra_body = {
+        "structured_outputs": {"json": schema},
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+
+    try:
+        raw = await call_llm(
+            system_prompt="あなたは金融プロファイル生成AIです。",
+            user_message=FINANCIAL_EXTENSION_BATCH_PROMPT.format(
+                n=n, personas_block=personas_block
+            ),
+            max_tokens=400 * n,
+            extra_body=extra_body,
+            temperature=1.1,
+        )
+        data = json.loads(raw)
+        batch = _BatchModel.model_validate(data)
+        if len(batch.profiles) != n:
+            raise ValueError(f"Expected {n} profiles, got {len(batch.profiles)}")
+        return [(FinancialExtension(**p.model_dump()), True) for p in batch.profiles]
+    except Exception as e:
+        logger.warning(
+            "batch financial_extension parse failed (%s), falling back to per-persona", e
+        )
+        tasks = [_generate_financial_extension_single(p) for p in personas]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        out: list[tuple[FinancialExtension, bool]] = []
+        for r, p in zip(results, personas):
+            if isinstance(r, Exception):
+                logger.warning("per-persona fallback failed for %s: %s", p.get("uuid"), r)
+                out.append((_random_financial_extension(), False))
+            else:
+                out.append(r)  # type: ignore[arg-type]
+        return out
+
+
+async def generate_financial_extensions(
+    personas: list[dict],
+) -> list[tuple["FinancialExtension", bool]]:
+    """
+    Generate financial profiles for any number of personas.
+    Splits into chunks of _FINANCIAL_BATCH_SIZE, runs batches concurrently.
+    """
+    chunks = [
+        personas[i:i + _FINANCIAL_BATCH_SIZE]
+        for i in range(0, len(personas), _FINANCIAL_BATCH_SIZE)
+    ]
+    chunk_results = await asyncio.gather(
+        *[generate_financial_extension_batch(chunk) for chunk in chunks]
+    )
+    return [item for sublist in chunk_results for item in sublist]

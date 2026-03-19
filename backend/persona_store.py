@@ -6,11 +6,14 @@ All filter/sample/lookup operations are sub-millisecond on 1M rows.
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 
 from config import settings
+
+if TYPE_CHECKING:
+    from models import FinancialExtension
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,7 @@ class PersonaStore:
     def __init__(self, df: pd.DataFrame):
         # Fill NaN with None for JSON serialization
         self._df = df.where(df.notna(), None)
+        self._financial_cache: dict[str, dict] = {}  # uuid → serialized FinancialExtension
         logger.info("PersonaStore initialized with %d rows", len(df))
 
     def total_count(self) -> int:
@@ -99,6 +103,12 @@ class PersonaStore:
         sampled = filtered.sample(n=n)
         rows = sampled.to_dict(orient="records")
         return total, rows
+
+    def get_cached_financial(self, uuid: str) -> dict | None:
+        return self._financial_cache.get(uuid)
+
+    def set_cached_financial(self, uuid: str, ext: "FinancialExtension") -> None:
+        self._financial_cache[uuid] = ext.model_dump(exclude_none=False)
 
     def get_persona(self, uuid: str) -> Optional[dict]:
         matches = self._df[self._df["uuid"] == uuid]
