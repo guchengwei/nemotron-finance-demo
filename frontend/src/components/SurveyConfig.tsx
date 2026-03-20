@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../api'
-import { useStore, SURVEY_PRESETS } from '../store'
+import { useStore } from '../store'
+import { SURVEY_PRESETS } from '../config/surveyPresets'
 import { useSurvey } from '../hooks/useSurvey'
 
 

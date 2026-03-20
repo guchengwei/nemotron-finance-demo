@@ -1,6 +1,24 @@
 import { expect, test } from '@playwright/test'
 import { filtersFixture } from './fixtures/personas'
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**/ready', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'ready' }),
+    })
+  })
+
+  await page.route('**/health', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'ok', mock_llm: true, llm_reachable: true }),
+    })
+  })
+})
+
 test('filter hit count updates for latest dropdown selection', async ({ page }) => {
   await page.route('**/api/personas/filters', async (route) => {
     await route.fulfill({
