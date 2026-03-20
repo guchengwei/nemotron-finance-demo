@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -16,29 +17,17 @@ from prompts import build_followup_system_prompt
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/followup", tags=["followup"])
 
-_BAD_FOLLOWUP_PREFIXES = (
-    "okay, let's",
-    "okay, let me",
-    "the user is asking",
-    "first, i need",
-    "in the previous answers",
-    "wait,",
+_ASSISTANT_ROLE_PREFIX_RE = re.compile(
+    r"(?is)^assistant(?:\s*[:：]\s*|\s*\r?\n\s*|$)"
 )
 
 
-def _should_validate_followup_start(text: str) -> bool:
-    visible = text.strip()
-    return (
-        len(visible) >= 120
-        or any(mark in visible for mark in ("。", "！", "？", "\n"))
-    )
-
-
-def _looks_like_meta_reasoning(text: str) -> bool:
-    lowered = text.strip().lower()
-    if any(prefix in lowered for prefix in _BAD_FOLLOWUP_PREFIXES):
-        return True
-    return "q1:" in lowered or "q2:" in lowered or "q3:" in lowered or "\na:" in lowered
+def _strip_leading_assistant_label(text: str) -> str:
+    stripped = text.lstrip()
+    match = _ASSISTANT_ROLE_PREFIX_RE.match(stripped)
+    if not match:
+        return text
+    return stripped[match.end():].lstrip()
 
 
 async def _followup_stream(request: FollowUpRequest):
@@ -112,76 +101,39 @@ async def _followup_stream(request: FollowUpRequest):
         full_answer = ""
         enable_thinking = bool(run.get("enable_thinking", True))
         assistant_fallback = "（回答を取得できませんでした。もう一度お試しください。）"
-        attempt_profiles = [
-            {"enable_thinking": enable_thinking},
-            {"enable_thinking": False},
-        ]
 
         try:
-            completed = False
-            for profile in attempt_profiles:
-                attempt_answer = ""
-                pending_answer = ""
-                pending_thinking: list[str] = []
-                emitted = False
-                rejected = False
+            pending_thinking: list[str] = []
+            emitted = False
 
-                async for kind, chunk in stream_followup_answer(
-                    system_prompt,
-                    messages,
-                    enable_thinking=profile["enable_thinking"],
-                ):
-                    if kind == 'think':
-                        if emitted:
-                            data = json.dumps({"thinking": chunk}, ensure_ascii=False)
-                            yield f"event: thinking\ndata: {data}\n\n"
-                        else:
-                            pending_thinking.append(chunk)
-                        continue
-
-                    clean_chunk = sanitize_answer_text(chunk)
+            async for kind, chunk in stream_followup_answer(
+                system_prompt,
+                messages,
+                enable_thinking=enable_thinking,
+            ):
+                if kind == 'think':
                     if emitted:
-                        attempt_answer += clean_chunk
-                        data = json.dumps({"text": chunk}, ensure_ascii=False)
-                        yield f"event: token\ndata: {data}\n\n"
-                        continue
-
-                    pending_answer += clean_chunk
-                    if not _should_validate_followup_start(pending_answer):
-                        continue
-                    if _looks_like_meta_reasoning(pending_answer):
-                        rejected = True
-                        break
-
-                    emitted = True
-                    attempt_answer = pending_answer
-                    for thinking_chunk in pending_thinking:
-                        data = json.dumps({"thinking": thinking_chunk}, ensure_ascii=False)
+                        data = json.dumps({"thinking": chunk}, ensure_ascii=False)
                         yield f"event: thinking\ndata: {data}\n\n"
-                    if pending_answer:
-                        data = json.dumps({"text": pending_answer}, ensure_ascii=False)
-                        yield f"event: token\ndata: {data}\n\n"
-
-                if rejected:
-                    logger.warning("Rejected followup answer prefix for %s; retrying", request.persona_uuid)
+                    else:
+                        pending_thinking.append(chunk)
                     continue
 
-                if not emitted and pending_answer:
-                    if _looks_like_meta_reasoning(pending_answer):
-                        logger.warning("Rejected short followup answer prefix for %s; retrying", request.persona_uuid)
+                clean_chunk = sanitize_answer_text(chunk)
+                if not emitted:
+                    clean_chunk = _strip_leading_assistant_label(clean_chunk)
+                    if not clean_chunk:
                         continue
-                    attempt_answer = pending_answer
+                    emitted = True
                     for thinking_chunk in pending_thinking:
                         data = json.dumps({"thinking": thinking_chunk}, ensure_ascii=False)
                         yield f"event: thinking\ndata: {data}\n\n"
-                    data = json.dumps({"text": pending_answer}, ensure_ascii=False)
-                    yield f"event: token\ndata: {data}\n\n"
 
-                full_answer = attempt_answer
-                completed = True
-                break
+                full_answer += clean_chunk
+                data = json.dumps({"text": clean_chunk}, ensure_ascii=False)
+                yield f"event: token\ndata: {data}\n\n"
 
-            if not completed:
+            if not full_answer:
                 full_answer = assistant_fallback
         except asyncio.CancelledError:
             logger.warning("Followup stream cancelled for %s", request.persona_uuid)
