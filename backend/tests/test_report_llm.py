@@ -11,6 +11,8 @@ def test_parse_report_qualitative_parses_clean_json():
     raw = json.dumps(
         {
             "group_tendency": "全体では前向きです。",
+            "conclusion_summary": "導入判断は前向きです。",
+            "recommended_actions": ["説明を強化する", "料金を明確にする", "試用導線を整える"],
             "conclusion": "導入検証を進めるべきです。",
             "top_picks": [{"persona_uuid": "p1", "persona_name": "田中"}],
         },
@@ -20,25 +22,31 @@ def test_parse_report_qualitative_parses_clean_json():
     parsed = parse_report_qualitative(raw)
 
     assert parsed["group_tendency"] == "全体では前向きです。"
+    assert parsed["conclusion_summary"] == "導入判断は前向きです。"
+    assert parsed["recommended_actions"] == ["説明を強化する", "料金を明確にする", "試用導線を整える"]
     assert parsed["conclusion"] == "導入検証を進めるべきです。"
     assert parsed["top_picks"][0]["persona_uuid"] == "p1"
 
 
 def test_parse_report_qualitative_extracts_json_from_prose():
-    raw = '分析結果です。\n{"group_tendency":"慎重です","conclusion":"不安解消が必要です","top_picks":[]}\n以上です。'
+    raw = '分析結果です。\n{"group_tendency":"慎重です","conclusion_summary":"不安解消が必要です","recommended_actions":["安全性を示す","料金を整理する","導線を改善する"],"conclusion":"不安解消が必要です","top_picks":[]}\n以上です。'
 
     parsed = parse_report_qualitative(raw)
 
     assert parsed["group_tendency"] == "慎重です"
+    assert parsed["conclusion_summary"] == "不安解消が必要です"
+    assert parsed["recommended_actions"] == ["安全性を示す", "料金を整理する", "導線を改善する"]
     assert parsed["conclusion"] == "不安解消が必要です"
 
 
 def test_parse_report_qualitative_extracts_fenced_json():
-    raw = '```json\n{"group_tendency":"傾向","conclusion":"結論","top_picks":[]}\n```'
+    raw = '```json\n{"group_tendency":"傾向","conclusion_summary":"要点","recommended_actions":["a","b","c"],"conclusion":"結論","top_picks":[]}\n```'
 
     parsed = parse_report_qualitative(raw)
 
     assert parsed["group_tendency"] == "傾向"
+    assert parsed["conclusion_summary"] == "要点"
+    assert parsed["recommended_actions"] == ["a", "b", "c"]
     assert parsed["conclusion"] == "結論"
 
 
@@ -46,6 +54,12 @@ def test_parse_report_qualitative_returns_partial_fields_from_malformed_json():
     raw = """
     {
       "group_tendency": "前向きです",
+      "conclusion_summary": "透明性の説明を強めるべきです",
+      "recommended_actions": [
+        "料金体系を明示する",
+        "不安点を先に解消する",
+        "試用機会を作る"
+      ],
       "conclusion": "透明性の説明を強めるべきです",
       "top_picks": [
         {"persona_uuid": "p1", "persona_name": "田中"}
@@ -55,6 +69,8 @@ def test_parse_report_qualitative_returns_partial_fields_from_malformed_json():
     parsed = parse_report_qualitative(raw)
 
     assert parsed["group_tendency"] == "前向きです"
+    assert parsed["conclusion_summary"] == "透明性の説明を強めるべきです"
+    assert parsed["recommended_actions"] == ["料金体系を明示する", "不安点を先に解消する", "試用機会を作る"]
     assert parsed["conclusion"] == "透明性の説明を強めるべきです"
     assert parsed["top_picks"][0]["persona_uuid"] == "p1"
 

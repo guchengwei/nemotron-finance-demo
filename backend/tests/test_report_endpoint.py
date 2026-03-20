@@ -161,7 +161,9 @@ def test_report_endpoint_uses_fallbacks_when_llm_returns_empty(report_client):
     assert response.status_code == 200
     body = response.json()
     assert body["group_tendency"]
+    assert body["conclusion_summary"]
     assert body["conclusion"]
+    assert len(body["recommended_actions"]) == 3
     assert len(body["top_picks"]) == 3
     assert {pick["persona_uuid"] for pick in body["top_picks"]} <= {"p1", "p2", "p3"}
 
@@ -194,7 +196,9 @@ def test_report_endpoint_preserves_partial_json_and_repairs_missing_fields(repor
 
     body = response.json()
     assert body["group_tendency"] == "若年層は期待と不安が混在しています。"
+    assert body["conclusion_summary"]
     assert body["conclusion"]
+    assert len(body["recommended_actions"]) == 3
     assert len(body["top_picks"]) == 3
     first_pick = next(pick for pick in body["top_picks"] if pick["persona_uuid"] == "p1")
     assert first_pick["persona_name"] == "田中太郎"
@@ -239,4 +243,95 @@ def test_report_endpoint_rejects_fabricated_top_pick_uuids(report_client):
     body = response.json()
     assert len(body["top_picks"]) == 3
     assert {pick["persona_uuid"] for pick in body["top_picks"]} <= {"p1", "p2", "p3"}
+
+
+def test_build_conclusion_fields_extracts_actions_from_llm_conclusion_text():
+    answers = [
+        {"answer": "【評価: 2】料金がわかりづらいです。", "score": 2},
+        {"answer": "【評価: 4】安全性が明確なら前向きです。", "score": 4},
+    ]
+
+    summary, actions, conclusion = report.build_conclusion_fields(
+        3.0,
+        {"1": 0, "2": 1, "3": 0, "4": 1, "5": 0},
+        answers,
+        "全体としては慎重な反応が残ります。料金を明確にする。安全性を具体的に示す。試用導線を整える。",
+    )
+
+    assert summary == "全体としては慎重な反応が残ります。"
+    assert actions == ["料金を明確にする。", "安全性を具体的に示す。", "試用導線を整える。"]
+    assert conclusion == "全体としては慎重な反応が残ります。料金を明確にする。安全性を具体的に示す。試用導線を整える。"
+
+
+def test_build_conclusion_fields_splits_multi_action_sentence_and_pads_to_three_actions():
+    answers = [
+        {"answer": "【評価: 2】料金がわかりづらいです。", "score": 2},
+        {"answer": "【評価: 4】安全性が明確なら前向きです。", "score": 4},
+    ]
+
+    summary, actions, conclusion = report.build_conclusion_fields(
+        3.0,
+        {"1": 0, "2": 1, "3": 0, "4": 1, "5": 0},
+        answers,
+        "全体としては慎重です。料金を明確にし、安全性を示し、試用導線を整えることが必要です。",
+    )
+
+    assert summary == "全体としては慎重です。"
+    assert len(actions) == 3
+    assert actions[0].startswith("料金を明確")
+    assert actions[1].startswith("安全性を示")
+    assert "試用導線" in actions[2]
+    assert conclusion == "全体としては慎重です。料金を明確にし、安全性を示し、試用導線を整えることが必要です。"
+
+
+def test_build_conclusion_fields_pads_extracted_actions_to_exactly_three():
+    answers = [
+        {"answer": "【評価: 2】料金がわかりづらいです。", "score": 2},
+        {"answer": "【評価: 4】安全性が明確なら前向きです。", "score": 4},
+    ]
+
+    summary, actions, conclusion = report.build_conclusion_fields(
+        3.0,
+        {"1": 0, "2": 1, "3": 0, "4": 1, "5": 0},
+        answers,
+        "全体としては慎重です。料金を明確にする。安全性を示す。",
+    )
+
+    assert summary == "全体としては慎重です。"
+    assert len(actions) == 3
+    assert actions[0] == "料金を明確にする。"
+    assert actions[1] == "安全性を示す。"
+    assert actions[2]
+    assert conclusion == "全体としては慎重です。料金を明確にする。安全性を示す。"
+
+
+def test_report_endpoint_backfills_structured_fields_from_cached_legacy_report(report_client):
+    client, history_db = report_client
+
+    legacy_report = {
+        "overall_score": 3.7,
+        "score_distribution": {"1": 0, "2": 1, "3": 1, "4": 1, "5": 0},
+        "group_tendency": "全体では期待と不安が混在しています。",
+        "conclusion": "安全性と料金の説明が必要です。",
+        "top_picks": [],
+        "demographic_breakdown": {"by_age": {"20-39": 3.7}},
+    }
+
+    conn = sqlite3.connect(history_db)
+    try:
+        conn.execute(
+            "UPDATE survey_runs SET report_json = ? WHERE id = ?",
+            (json.dumps(legacy_report, ensure_ascii=False), "run-report"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.post("/api/report/generate", json={"run_id": "run-report"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["conclusion"] == "安全性と料金の説明が必要です。"
+    assert body["conclusion_summary"] == "安全性と料金の説明が必要です。"
+    assert body["recommended_actions"] == []
     assert "fake-uuid" not in {pick["persona_uuid"] for pick in body["top_picks"]}

@@ -57,6 +57,8 @@ function makeReport(personaUuid: string, personaName: string, personaSummary: st
     run_id: 'run-1',
     overall_score: 4.1,
     group_tendency: '前向きです',
+    conclusion_summary: '不安解消を優先すべきです',
+    recommended_actions: ['料金を明確にする', '安全性を示す', '試用導線を整える'],
     conclusion: '具体的な懸念解消が重要です',
     demographic_breakdown: {
       by_financial_literacy: {
@@ -137,5 +139,42 @@ describe('ReportDashboard.handleChatWithPersona', () => {
       financial_literacy: '中級者',
     })
     expect(useStore.getState().currentStep).toBe(5)
+  })
+
+  it('renders structured conclusion summary and recommended actions', async () => {
+    await act(async () => {
+      useStore.setState({
+        currentReport: makeReport(selectedPersona.uuid, selectedPersona.name, '田中太郎、35歳、男性、会社員、東京都'),
+        selectedPersonas: [selectedPersona],
+        currentHistoryRun: null,
+      })
+    })
+
+    render(<ReportDashboard />)
+
+    expect(screen.getByText('不安解消を優先すべきです')).toBeInTheDocument()
+    expect(screen.getByText('料金を明確にする')).toBeInTheDocument()
+    expect(screen.getByText('安全性を示す')).toBeInTheDocument()
+    expect(screen.getByText('試用導線を整える')).toBeInTheDocument()
+  })
+
+  it('falls back to legacy conclusion text when structured fields are absent', async () => {
+    await act(async () => {
+      useStore.setState({
+        currentReport: {
+          ...makeReport(selectedPersona.uuid, selectedPersona.name, '田中太郎、35歳、男性、会社員、東京都'),
+          conclusion_summary: undefined,
+          recommended_actions: [],
+          conclusion: '旧形式の結論テキストです',
+        },
+        selectedPersonas: [selectedPersona],
+        currentHistoryRun: null,
+      })
+    })
+
+    render(<ReportDashboard />)
+
+    expect(screen.getByText('旧形式の結論テキストです')).toBeInTheDocument()
+    expect(screen.queryByText('料金を明確にする')).not.toBeInTheDocument()
   })
 })

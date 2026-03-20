@@ -46,8 +46,7 @@ export default function ReportDashboard() {
   }, [currentReport, currentRunId, triggerGenerate])
 
   const report = currentReport
-
-  const handleChatWithPersona = useCallback((uuid: string) => {
+  const resolvePersona = useCallback((uuid: string) => {
     let persona = selectedPersonas.find((p) => p.uuid === uuid) ?? null
     if (!persona && currentHistoryRun) {
       const answer = currentHistoryRun.answers.find((a) => a.persona_uuid === uuid)
@@ -55,24 +54,23 @@ export default function ReportDashboard() {
         try { persona = JSON.parse(answer.persona_full_json) } catch { /* skip */ }
       }
     }
+    return persona
+  }, [selectedPersonas, currentHistoryRun])
+
+  const handleChatWithPersona = useCallback((uuid: string) => {
+    const persona = resolvePersona(uuid)
     if (persona) {
       setFollowupPersona(persona)
       setStep(5)
     }
-  }, [selectedPersonas, currentHistoryRun, setFollowupPersona, setStep])
+  }, [resolvePersona, setFollowupPersona, setStep])
 
   const handleViewProfile = useCallback((uuid: string) => {
-    let persona = selectedPersonas.find((p) => p.uuid === uuid) ?? null
-    if (!persona && currentHistoryRun) {
-      const answer = currentHistoryRun.answers.find((a) => a.persona_uuid === uuid)
-      if (answer) {
-        try { persona = JSON.parse(answer.persona_full_json) } catch { /* skip */ }
-      }
-    }
+    const persona = resolvePersona(uuid)
     if (persona) {
       openPersonaDetail(persona)
     }
-  }, [selectedPersonas, currentHistoryRun, openPersonaDetail])
+  }, [resolvePersona, openPersonaDetail])
 
   const handleDownload = () => {
     if (!report) return
@@ -127,6 +125,8 @@ export default function ReportDashboard() {
     )
   }
 
+  const hasStructuredConclusion = Boolean(report.conclusion_summary) || (report.recommended_actions?.length ?? 0) > 0
+
   const theme = surveyTheme || currentHistoryRun?.survey_theme || '—'
 
   return (
@@ -160,12 +160,29 @@ export default function ReportDashboard() {
         </div>
       </div>
 
-      {report.conclusion && (
+      {hasStructuredConclusion ? (
+        <div data-testid="report-conclusion" className="rounded-[1.5rem] border border-fin-border bg-fin-panel/70 px-5 py-4">
+          <div className="mb-2 text-xs font-semibold tracking-[0.12em] text-fin-accent">総合結論・推奨アクション</div>
+          {report.conclusion_summary && (
+            <div className="text-sm leading-relaxed text-fin-ink">{report.conclusion_summary}</div>
+          )}
+          {report.recommended_actions && report.recommended_actions.length > 0 && (
+            <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fin-ink">
+              {report.recommended_actions.map((action, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="mt-1 text-fin-accent">•</span>
+                  <span>{action}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : report.conclusion ? (
         <div data-testid="report-conclusion" className="rounded-[1.5rem] border border-fin-border bg-fin-panel/70 px-5 py-4">
           <div className="mb-2 text-xs font-semibold tracking-[0.12em] text-fin-accent">総合結論・推奨アクション</div>
           <div className="text-sm leading-relaxed text-fin-ink">{report.conclusion}</div>
         </div>
-      )}
+      ) : null}
 
       <DemographicCharts report={report} />
 
@@ -174,7 +191,7 @@ export default function ReportDashboard() {
           <h3 className="mb-3 text-sm font-bold text-fin-ink">注目回答者</h3>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {report.top_picks.slice(0, 3).map((pick, i) => {
-              const persona = selectedPersonas.find((p) => p.uuid === pick.persona_uuid)
+              const persona = resolvePersona(pick.persona_uuid)
               return (
                 <TopPickCard
                   key={i}

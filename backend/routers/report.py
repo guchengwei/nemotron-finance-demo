@@ -39,6 +39,38 @@ def _clip_text(text: str, max_len: int = 50) -> str:
     return text[: max_len - 1].rstrip() + "…"
 
 
+def _first_sentence(text: str, max_len: int = 120) -> str:
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if not cleaned:
+        return ""
+    for sep in ("。", "！", "!", "？", "?", "\n"):
+        idx = cleaned.find(sep)
+        if idx != -1:
+            return cleaned[: idx + 1].strip()
+    return _clip_text(cleaned, max_len)
+
+
+def _split_sentences(text: str) -> list[str]:
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if not cleaned:
+        return []
+    sentences = [part.strip() for part in re.split(r"(?<=[。！？!?])", cleaned) if part.strip()]
+    return sentences
+
+
+def _split_action_clauses(text: str) -> list[str]:
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    cleaned = cleaned.rstrip("。！？!?")
+    if not cleaned:
+        return []
+    clauses = []
+    for part in re.split(r"[、,]", cleaned):
+        clause = part.strip()
+        if clause:
+            clauses.append(clause)
+    return clauses
+
+
 def _persona_name(persona_data: dict, answer: dict) -> str:
     return persona_data.get("name") or answer.get("persona_summary", "不明").split()[0]
 
@@ -266,11 +298,14 @@ def _aggregate_scores(answers: list[dict]) -> dict:
     for uuid, scores_list in persona_scores.items():
         persona_avgs[uuid] = round(sum(scores_list) / len(scores_list), 1)
 
-    # Step 3: Build distribution from per-persona averages (round to nearest int)
+    # Step 3: Build score distribution from raw scored answers.
     all_avg_scores = list(persona_avgs.values())
     distribution = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
-    for s in all_avg_scores:
-        key = str(round(s))
+    for a in answers:
+        score = a.get("score")
+        if score is None:
+            continue
+        key = str(score)
         if key in distribution:
             distribution[key] += 1
 
@@ -401,13 +436,133 @@ def build_fallback_group_tendency(
     return f"{_describe_score_level(overall_score)}。{balance}で、評価3を含む様子見層も一定数います。{demo_signal}".strip()
 
 
-def build_fallback_conclusion(overall_score: float | None, answers: list[dict]) -> str:
+def build_fallback_conclusion_summary(overall_score: float | None, answers: list[dict]) -> str:
     positive_motif, negative_motif = _extract_motifs(answers)
-    score_text = "導入訴求を強めやすい段階です" if (overall_score or 0) >= 3.5 else "訴求前に不安解消が必要な段階です"
-    return (
-        f"{positive_motif}は見込める一方で、{negative_motif}が意思決定の壁になっています。"
-        f"{score_text}。金融機関としては、料金や安全性、利用イメージを具体化した上で段階的な導入導線を提示することを推奨します。"
+    if overall_score is None:
+        lead = "評価はまだ十分に定まっていません"
+    elif overall_score >= 3.5:
+        lead = "全体としては前向きな反応が中心です"
+    elif overall_score >= 2.8:
+        lead = "全体としては賛否が分かれています"
+    else:
+        lead = "全体としては慎重な反応が目立ちます"
+    return f"{lead}。{positive_motif}は追い風ですが、{negative_motif}への対応が導入判断の鍵です。"
+
+
+def build_fallback_recommended_actions(
+    overall_score: float | None,
+    score_distribution: dict[str, int],
+    answers: list[dict],
+) -> list[str]:
+    positive_motif, negative_motif = _extract_motifs(answers)
+    positive_count = score_distribution.get("4", 0) + score_distribution.get("5", 0)
+    negative_count = score_distribution.get("1", 0) + score_distribution.get("2", 0)
+
+    actions = [
+        (
+            f"{negative_motif}に対する説明を先に整え、"
+            f"不安要因を短時間で解消できる導線を用意する"
+            if (overall_score or 0) < 3.5
+            else f"{positive_motif}を訴求軸にして、利用イメージを具体化する"
+        ),
+        "料金、手数料、セキュリティの比較情報を一枚で見せる",
+        (
+            "初心者向けのサポートと問い合わせ導線を強化する"
+            if negative_count >= positive_count
+            else "高評価層向けの試用・段階導入プランを提示する"
+        ),
+    ]
+
+    unique_actions: list[str] = []
+    for action in actions:
+        cleaned = action.strip()
+        if cleaned and cleaned not in unique_actions:
+            unique_actions.append(cleaned)
+
+    while len(unique_actions) < 3:
+        fallback = [
+            "導入前の説明資料を簡潔に整備する",
+            "想定質問への回答例を用意する",
+            "利用開始までの手順を明確にする",
+        ][len(unique_actions)]
+        if fallback not in unique_actions:
+            unique_actions.append(fallback)
+
+    return unique_actions[:3]
+
+
+def _pad_recommended_actions(actions: list[str], overall_score: float | None, score_distribution: dict[str, int], answers: list[dict]) -> list[str]:
+    unique_actions: list[str] = []
+    for action in actions:
+        cleaned = action.strip()
+        if cleaned and cleaned not in unique_actions:
+            unique_actions.append(cleaned)
+
+    if len(unique_actions) >= 3:
+        return unique_actions[:3]
+
+    fallback_actions = build_fallback_recommended_actions(overall_score, score_distribution, answers)
+    for action in fallback_actions:
+        if len(unique_actions) >= 3:
+            break
+        if action not in unique_actions:
+            unique_actions.append(action)
+
+    return unique_actions[:3]
+
+
+def _extract_recommended_actions_from_conclusion(conclusion_raw: str) -> list[str]:
+    sentences = _split_sentences(conclusion_raw)
+    if len(sentences) > 1:
+        tail = sentences[1:]
+        if len(tail) == 1:
+            clauses = _split_action_clauses(tail[0])
+            if len(clauses) > 1:
+                return clauses[:3]
+        return tail[:3]
+
+    if not sentences:
+        return []
+
+    clauses = _split_action_clauses(sentences[0])
+    if len(clauses) > 1:
+        return clauses[:3]
+
+    return []
+
+
+def synthesize_conclusion(conclusion_summary: str, recommended_actions: list[str]) -> str:
+    summary = (conclusion_summary or "").strip()
+    actions = [action.strip() for action in recommended_actions if action.strip()]
+    parts = []
+    if summary:
+        parts.append(summary.rstrip("。"))
+    if actions:
+        parts.append("推奨アクションは、" + "。".join(actions) + "。")
+    return "。".join(parts).strip("。") + ("。" if parts else "")
+
+
+def build_conclusion_fields(
+    overall_score: float | None,
+    score_distribution: dict[str, int],
+    answers: list[dict],
+    conclusion_raw: str,
+) -> tuple[str, list[str], str]:
+    conclusion_summary = _first_sentence(conclusion_raw)
+    if not conclusion_summary:
+        conclusion_summary = build_fallback_conclusion_summary(overall_score, answers)
+
+    recommended_actions = _pad_recommended_actions(
+        _extract_recommended_actions_from_conclusion(conclusion_raw),
+        overall_score,
+        score_distribution,
+        answers,
     )
+    conclusion = conclusion_raw.strip() if conclusion_raw and conclusion_raw.strip() else synthesize_conclusion(
+        conclusion_summary,
+        recommended_actions,
+    )
+    return conclusion_summary, recommended_actions, conclusion
 
 
 def _record_sentiment_score(record: dict, token_polarities: dict[str, float]) -> int:
@@ -609,7 +764,6 @@ async def generate_report_endpoint(request: ReportRequest):
             aggregated["score_distribution"],
             aggregated["demographic_breakdown"],
         )
-        fallback_conclusion = build_fallback_conclusion(aggregated["overall_score"], answers)
         merged_top_picks = _merge_top_picks(top_picks_raw, persona_records, token_polarities, all_persona_lemmas)
 
         # Persist fresh polarities for future surveys
@@ -623,12 +777,21 @@ async def generate_report_endpoint(request: ReportRequest):
         if len(merged_top_picks) != len(top_picks_raw):
             logger.warning("report fallback used for top_picks (merged %d from %d)", len(merged_top_picks), len(top_picks_raw))
 
+        conclusion_summary, recommended_actions, conclusion = build_conclusion_fields(
+            aggregated["overall_score"],
+            aggregated["score_distribution"],
+            answers,
+            conclusion_raw,
+        )
+
         report_data = {
             "run_id": request.run_id,
             "overall_score": aggregated["overall_score"],
             "score_distribution": aggregated["score_distribution"],
             "group_tendency": group_tendency_raw or fallback_group_tendency,
-            "conclusion": conclusion_raw or fallback_conclusion,
+            "conclusion_summary": conclusion_summary,
+            "recommended_actions": recommended_actions,
+            "conclusion": conclusion,
             "top_picks": [TopPick(**pick) for pick in merged_top_picks],
             "demographic_breakdown": aggregated["demographic_breakdown"],
         }

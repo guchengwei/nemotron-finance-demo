@@ -17,7 +17,13 @@ from pydantic import BaseModel
 from config import settings
 
 logger = logging.getLogger(__name__)
-REPORT_ALLOWED_KEYS = {"group_tendency", "conclusion", "top_picks"}
+REPORT_ALLOWED_KEYS = {
+    "group_tendency",
+    "conclusion_summary",
+    "recommended_actions",
+    "conclusion",
+    "top_picks",
+}
 
 # Semaphore for concurrency control
 _semaphore: asyncio.Semaphore | None = None
@@ -67,6 +73,12 @@ MOCK_REPORT = {
     "overall_score": 3.4,
     "score_distribution": {"1": 1, "2": 2, "3": 3, "4": 2, "5": 0},
     "group_tendency": "全体として中程度の関心度。40代以上の金融経験者層がより積極的な評価を示す傾向。セキュリティと手数料透明性への懸念が共通テーマとして浮上。",
+    "conclusion_summary": "全体としては中程度の関心度で、導入判断には不安解消が必要です。",
+    "recommended_actions": [
+        "セキュリティ対策を具体的に示す",
+        "手数料体系をわかりやすく開示する",
+        "初心者向けの利用導線を整える",
+    ],
     "conclusion": "サービス導入に向けては、セキュリティ対策の強化と手数料体系の明確化が最優先課題。特に専門家層のニーズに応える高度な機能と、初心者向けの使いやすいインターフェースの両立が求められる。",
     "top_picks": [
         {
@@ -231,6 +243,20 @@ def _extract_string_field(text: str, field_name: str) -> str | None:
         return json.loads(f'"{match.group(1)}"')
     except Exception:
         return match.group(1).strip()
+
+
+def _extract_string_array_field(text: str, field_name: str) -> list[str] | None:
+    fragment = _extract_json_array_fragment(text, field_name)
+    if not fragment:
+        return None
+    try:
+        parsed = json.loads(fragment)
+    except Exception:
+        return None
+    if not isinstance(parsed, list):
+        return None
+    cleaned = [str(item).strip() for item in parsed if str(item).strip()]
+    return cleaned or None
 
 
 async def _stream_split_thinking(
@@ -583,6 +609,8 @@ async def generate_report_raw(
         await asyncio.sleep(1.0)
         qualitative = {
             "group_tendency": MOCK_REPORT["group_tendency"],
+            "conclusion_summary": MOCK_REPORT["conclusion_summary"],
+            "recommended_actions": MOCK_REPORT["recommended_actions"],
             "conclusion": MOCK_REPORT["conclusion"],
             "top_picks": MOCK_REPORT["top_picks"],
         }
@@ -640,10 +668,14 @@ def parse_report_qualitative(raw_text: str) -> dict[str, Any]:
             continue
 
     partial: dict[str, Any] = {}
-    for field_name in ("group_tendency", "conclusion"):
+    for field_name in ("group_tendency", "conclusion_summary", "conclusion"):
         value = _extract_string_field(cleaned, field_name)
         if isinstance(value, str) and value.strip():
             partial[field_name] = value.strip()
+
+    recommended_actions = _extract_string_array_field(cleaned, "recommended_actions")
+    if recommended_actions:
+        partial["recommended_actions"] = recommended_actions
 
     top_picks_fragment = _extract_json_array_fragment(cleaned, "top_picks")
     if top_picks_fragment:
@@ -674,6 +706,20 @@ def normalize_report_qualitative(parsed: dict[str, Any]) -> dict[str, Any]:
     conclusion = parsed.get("conclusion")
     if isinstance(conclusion, str) and conclusion.strip():
         normalized["conclusion"] = conclusion.strip()
+
+    conclusion_summary = parsed.get("conclusion_summary")
+    if isinstance(conclusion_summary, str) and conclusion_summary.strip():
+        normalized["conclusion_summary"] = conclusion_summary.strip()
+
+    recommended_actions = parsed.get("recommended_actions")
+    if isinstance(recommended_actions, list):
+        cleaned_actions = [
+            str(item).strip()
+            for item in recommended_actions
+            if isinstance(item, str) and item.strip()
+        ]
+        if cleaned_actions:
+            normalized["recommended_actions"] = cleaned_actions
 
     top_picks = parsed.get("top_picks")
     if isinstance(top_picks, list):

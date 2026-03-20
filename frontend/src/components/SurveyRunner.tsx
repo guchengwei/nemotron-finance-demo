@@ -11,6 +11,10 @@ function sanitizeVisibleText(text: string) {
 
 const LARGE_SURVEY_THRESHOLD = 30
 
+function averageScore(scores: number[]) {
+  return scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : undefined
+}
+
 function ThinkingBlock({ thinking }: { thinking: string }) {
   return (
     <details data-testid="survey-thinking-block" className="mt-1.5 group">
@@ -64,7 +68,7 @@ const PersonaListItem = React.memo(function PersonaListItem({
       </div>
       {score !== undefined && (
         <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold text-fin-surface ${scoreBg(score)}`}>
-          {score}
+          {score.toFixed(1)}
         </span>
       )}
     </button>
@@ -101,10 +105,12 @@ export default function SurveyRunner() {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' })
   }, [activePersona?.activeAnswer, activePersona?.answers.length])
 
-  const scores = allStates.flatMap((s) =>
-    s.answers.filter((a) => a.score !== undefined).map((a) => a.score!),
+  const personaAverageScores = allStates.map((state) =>
+    averageScore(state.answers.flatMap((answer) => (
+      answer.score !== undefined ? [answer.score] : []
+    ))),
   )
-  const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : undefined
+  const avgScore = averageScore(personaAverageScores.filter((score): score is number => score !== undefined))
 
   useEffect(() => {
     if (!surveyComplete || !currentRunId || surveyCompleted === 0) return
@@ -193,7 +199,11 @@ export default function SurveyRunner() {
           </div>
           {selectedPersonas.map((p) => {
             const state = personaStates[p.uuid]
-            const firstScore = state?.answers.find((a) => a.score !== undefined)?.score
+            const score = state
+              ? averageScore(state.answers.flatMap((answer) => (
+                  answer.score !== undefined ? [answer.score] : []
+                )))
+              : undefined
             return (
               <PersonaListItem
                 key={p.uuid}
@@ -201,7 +211,7 @@ export default function SurveyRunner() {
                 age={p.age}
                 sex={p.sex}
                 status={state?.status || 'waiting'}
-                score={firstScore}
+                score={score}
                 financialLiteracy={p.financial_extension?.financial_literacy}
                 isActive={p.uuid === displayUuid}
                 onClick={() => setManualDisplayUuid(p.uuid)}

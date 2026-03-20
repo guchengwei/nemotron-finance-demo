@@ -74,6 +74,8 @@ export interface ReportResponse {
   overall_score?: number
   score_distribution?: Record<string, number>
   group_tendency?: string
+  conclusion_summary?: string
+  recommended_actions?: string[]
   conclusion?: string
   top_picks?: TopPick[]
   demographic_breakdown?: {
