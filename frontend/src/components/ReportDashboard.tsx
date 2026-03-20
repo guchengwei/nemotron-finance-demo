@@ -47,7 +47,7 @@ export default function ReportDashboard() {
 
   const report = currentReport
   const resolvePersona = useCallback((uuid: string) => {
-    let persona = selectedPersonas.find((p) => p.uuid === uuid) ?? null
+    let persona = selectedPersonas.find((p) => p.uuid === uuid)
     if (!persona && currentHistoryRun) {
       const answer = currentHistoryRun.answers.find((a) => a.persona_uuid === uuid)
       if (answer) {

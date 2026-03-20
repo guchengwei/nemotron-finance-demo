@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 import aiosqlite
 
 from config import settings
+from followup_sanitizer import sanitize_followup_message_content
 from models import HistoryListResponse, SurveyRunSummary, SurveyRunDetail, ReportResponse
 
 logger = logging.getLogger(__name__)
@@ -76,9 +77,12 @@ async def get_history_run(run_id: str):
     for row in chat_rows:
         r = dict(row)
         pid = r["persona_uuid"]
+        content = sanitize_followup_message_content(r["role"], r["content"])
+        if not content:
+            continue
         if pid not in followup_chats:
             followup_chats[pid] = []
-        followup_chats[pid].append({"role": r["role"], "content": r["content"]})
+        followup_chats[pid].append({"role": r["role"], "content": content})
 
     report = None
     if run.get("report_json"):

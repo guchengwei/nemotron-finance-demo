@@ -228,7 +228,7 @@ def test_followup_suggestions_endpoint_returns_questions_and_excludes_asked_item
 
 
 def test_followup_does_not_retry_or_switch_thinking_modes_on_english_meta_reasoning(followup_client):
-    """English meta-reasoning should not trigger a hidden retry or thinking-mode switch."""
+    """English meta-reasoning should not trigger a hidden retry or leak into the final answer."""
     calls: list[bool] = []
 
     async def mock_stream(*args, **kwargs):
@@ -249,8 +249,9 @@ def test_followup_does_not_retry_or_switch_thinking_modes_on_english_meta_reason
 
     assert resp.status_code == 200, resp.text
     assert calls == [True]
-    assert "Okay, let's see." in resp.text
-    assert "The user is asking about fees." in resp.text
+    assert "Okay, let's see." not in resp.text
+    assert "The user is asking about fees." not in resp.text
+    assert "（回答を取得できませんでした。もう一度お試しください。）" in resp.text
 
 
 def test_followup_strips_malformed_assistant_turn_from_persisted_answer(followup_client):
@@ -290,3 +291,78 @@ def test_followup_strips_malformed_assistant_turn_from_persisted_answer(followup
     assert rows[1][1].strip()
     assert not rows[1][1].lstrip().startswith("assistant")
     assert "ユーザーの関心は手数料の透明性です。" in rows[1][1]
+
+
+def test_followup_skips_contaminated_assistant_history_when_building_messages(followup_client):
+    """Persisted English meta-reasoning should not be fed back into later follow-up turns."""
+    conn = sqlite3.connect(settings.history_db_path)
+    try:
+        conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+            (
+                "run1",
+                "p1",
+                "Okay, let's see. The user is asking about fees and I need to recall the context.",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    captured_messages: list[list[dict]] = []
+
+    async def mock_stream(_system_prompt, messages, **kwargs):
+        captured_messages.append(messages)
+        yield ("answer", "手数料が分かりやすければ検討しやすいです。")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={
+                "run_id": "run1",
+                "persona_uuid": "p1",
+                "question": "料金面で気になる点はありますか？",
+            },
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert len(captured_messages) == 1
+    assert captured_messages[0] == [
+        {"role": "user", "content": "料金面で気になる点はありますか？"},
+    ]
+
+
+def test_followup_replaces_english_meta_reasoning_only_answer_with_fallback(followup_client):
+    """Meta-reasoning-only follow-up output must not be persisted as the assistant answer."""
+
+    async def mock_stream(*args, **kwargs):
+        yield ("answer", "Okay, let's see. The user is asking about fees.")
+        yield ("answer", " First, I need to recall the context.")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={
+                "run_id": "run1",
+                "persona_uuid": "p1",
+                "question": "料金面で気になる点はありますか？",
+            },
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert "event: done" in resp.text
+
+    conn = sqlite3.connect(settings.history_db_path)
+    try:
+        rows = conn.execute(
+            "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? ORDER BY id",
+            ("run1", "p1"),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert rows[-2][0] == "user"
+    assert rows[-1][0] == "assistant"
+    assert rows[-1][1] == "（回答を取得できませんでした。もう一度お試しください。）"

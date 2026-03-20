@@ -11,23 +11,12 @@ import aiosqlite
 
 from config import settings
 from models import FollowUpRequest, FollowUpSuggestionRequest, FollowUpSuggestionResponse
+from followup_sanitizer import sanitize_followup_message_content
 from llm import generate_followup_suggestions, sanitize_answer_text, stream_followup_answer
 from prompts import build_followup_system_prompt
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/followup", tags=["followup"])
-
-_ASSISTANT_ROLE_PREFIX_RE = re.compile(
-    r"(?is)^assistant(?:\s*[:：]\s*|\s*\r?\n\s*|$)"
-)
-
-
-def _strip_leading_assistant_label(text: str) -> str:
-    stripped = text.lstrip()
-    match = _ASSISTANT_ROLE_PREFIX_RE.match(stripped)
-    if not match:
-        return text
-    return stripped[match.end():].lstrip()
 
 
 async def _followup_stream(request: FollowUpRequest):
@@ -66,7 +55,13 @@ async def _followup_stream(request: FollowUpRequest):
             "ORDER BY created_at",
             [request.run_id, request.persona_uuid]
         )
-        chat_history = [{"role": r["role"], "content": r["content"]} for r in chat_rows]
+        chat_history = []
+        for row in chat_rows:
+            role = row["role"]
+            content = sanitize_followup_message_content(role, row["content"])
+            if not content:
+                continue
+            chat_history.append({"role": role, "content": content})
 
         # Get financial extension from persona data (may be nested under financial_extension)
         fe = persona.get("financial_extension") or {}
@@ -121,7 +116,7 @@ async def _followup_stream(request: FollowUpRequest):
 
                 clean_chunk = sanitize_answer_text(chunk)
                 if not emitted:
-                    clean_chunk = _strip_leading_assistant_label(clean_chunk)
+                    clean_chunk = sanitize_followup_message_content("assistant", clean_chunk)
                     if not clean_chunk:
                         continue
                     emitted = True
@@ -144,7 +139,7 @@ async def _followup_stream(request: FollowUpRequest):
             yield f"event: error\ndata: {err_data}\n\n"
             full_answer = assistant_fallback
 
-        full_answer = sanitize_answer_text(full_answer) or assistant_fallback
+        full_answer = sanitize_followup_message_content("assistant", full_answer) or assistant_fallback
 
         # Save assistant response
         await history_db.execute(
