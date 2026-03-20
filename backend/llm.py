@@ -155,6 +155,13 @@ def _strip_thinking(text: str) -> str:
     return cleaned.strip()
 
 
+def _strip_thinking_stream_chunk(text: str) -> str:
+    """Remove leaked think markup from a streamed answer chunk without trimming spacing."""
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    cleaned = re.sub(r'</?think>', '', cleaned, flags=re.IGNORECASE)
+    return cleaned
+
+
 def sanitize_answer_text(text: str) -> str:
     """Remove leaked reasoning markup from model-visible answer text."""
     cleaned = _strip_thinking(text)
@@ -341,6 +348,8 @@ async def _stream_split_reasoning(
         # Process both independently — they can appear in the same chunk
         if reasoning:
             think_buf += reasoning
+        if content is not None:
+            content = _strip_thinking_stream_chunk(content)
         if content:
             # Emit buffered thinking once before first answer chunk
             if think_buf and not think_emitted:
