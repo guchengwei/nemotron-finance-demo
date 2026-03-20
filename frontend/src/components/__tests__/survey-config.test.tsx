@@ -12,7 +12,7 @@ vi.mock('../../api', () => ({
     getHistoryRun: vi.fn(),
     deleteHistoryRun: vi.fn(),
     generateReport: vi.fn(),
-    checkReady: vi.fn().mockResolvedValue(true),
+    checkReady: vi.fn().mockResolvedValue({ ready: true }),
     checkHealth: vi.fn().mockResolvedValue({ mock_llm: true, llm_reachable: true }),
   },
   startSurveySSE: vi.fn(),

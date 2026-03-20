@@ -3,7 +3,7 @@ import { useStore } from '../store'
 import { startFollowupSSE } from '../api'
 import PersonaAvatar from './PersonaAvatar'
 
-const SUGGESTED_QUESTIONS = [
+const FALLBACK_SUGGESTED_QUESTIONS = [
   '具体的にどの程度の手数料なら許容できますか？',
   'どのような情報があれば判断しやすいですか？',
   'このサービスを知人に勧めますか？その理由は？',
@@ -18,6 +18,34 @@ interface Message {
 
 function sanitizeVisibleText(text: string) {
   return text.replace(/<\/?think>/gi, '').trim()
+}
+
+function sanitizeSuggestedQuestion(question: string) {
+  return question.replace(/（[^）]*）/g, '').trim()
+}
+
+function getSuggestedQuestions(sourceQuestions: string[]) {
+  const seen = new Set<string>()
+  const suggestions: string[] = []
+
+  for (const question of sourceQuestions) {
+    const cleaned = sanitizeSuggestedQuestion(question)
+    if (!cleaned || seen.has(cleaned)) continue
+    seen.add(cleaned)
+    suggestions.push(cleaned)
+    if (suggestions.length === 3) break
+  }
+
+  return suggestions.length > 0 ? suggestions : FALLBACK_SUGGESTED_QUESTIONS
+}
+
+function scrollToBottom(container: HTMLDivElement | null) {
+  if (!container) return
+  if (typeof container.scrollTo === 'function') {
+    container.scrollTo({ top: container.scrollHeight, behavior: 'auto' })
+    return
+  }
+  container.scrollTop = container.scrollHeight
 }
 
 function ThinkingBlock({ thinking }: { thinking: string }) {
@@ -35,32 +63,58 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
 }
 
 export default function FollowUpChat() {
-  const { followupPersona, currentRunId, setStep, currentHistoryRun, surveyTheme, openPersonaDetail, enableThinking } = useStore()
+  const { followupPersona, currentRunId, setStep, currentHistoryRun, surveyTheme, questions, openPersonaDetail, enableThinking } = useStore()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [profileExpanded, setProfileExpanded] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const stickToBottomRef = useRef(true)
   const cancelRef = useRef<(() => void) | null>(null)
 
   const runId = currentRunId || currentHistoryRun?.id
 
   useEffect(() => {
-    if (!followupPersona || !currentHistoryRun) return
-    const existing = currentHistoryRun.followup_chats[followupPersona.uuid] || []
-    if (existing.length > 0) {
-      setMessages(existing.map((msg) => ({ ...msg, content: sanitizeVisibleText(msg.content) })) as Message[])
+    cancelRef.current?.()
+    cancelRef.current = null
+    setSending(false)
+    setInput('')
+    setProfileExpanded(false)
+    stickToBottomRef.current = true
+
+    if (!followupPersona) {
+      setMessages([])
+      return
     }
+
+    const existing = currentHistoryRun?.followup_chats[followupPersona.uuid] || []
+    setMessages(
+      existing.flatMap((msg) =>
+        msg.role === 'user' || msg.role === 'assistant'
+          ? [{ role: msg.role, content: sanitizeVisibleText(msg.content) } satisfies Message]
+          : [],
+      ),
+    )
   }, [followupPersona, currentHistoryRun])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (stickToBottomRef.current) {
+      scrollToBottom(messagesContainerRef.current)
+    }
   }, [messages])
+
+  useEffect(() => {
+    return () => {
+      cancelRef.current?.()
+      cancelRef.current = null
+    }
+  }, [])
 
   const send = (text: string) => {
     if (!text.trim() || !followupPersona || !runId || sending) return
     setInput('')
     setSending(true)
+    stickToBottomRef.current = true
 
     const userMsg: Message = { role: 'user', content: text }
     const assistantMsg: Message = { role: 'assistant', content: '', streaming: true }
@@ -90,6 +144,20 @@ export default function FollowUpChat() {
       },
       (err) => {
         console.error('Followup error:', err)
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (last?.role === 'assistant' && last.streaming) {
+            return [
+              ...prev.slice(0, -1),
+              {
+                role: 'assistant',
+                content: '回答の取得に失敗しました。もう一度お試しください。',
+                streaming: false,
+              },
+            ]
+          }
+          return prev
+        })
         setSending(false)
         cancelRef.current = null
       },
@@ -118,6 +186,7 @@ export default function FollowUpChat() {
 
   const sexDisplay = followupPersona.sex === '男' ? '男性' : '女性'
   const theme = surveyTheme || currentHistoryRun?.survey_theme
+  const suggestedQuestions = getSuggestedQuestions(currentHistoryRun?.questions ?? questions)
 
   return (
     <div data-testid="followup-screen" className="flex h-full min-h-0 flex-col gap-6 xl:flex-row">
@@ -176,7 +245,15 @@ export default function FollowUpChat() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-fin-border bg-fin-surface shadow-card">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div
+          ref={messagesContainerRef}
+          data-testid="followup-messages"
+          onScroll={(event) => {
+            const target = event.currentTarget
+            stickToBottomRef.current = target.scrollHeight - target.scrollTop - target.clientHeight < 100
+          }}
+          className="flex-1 overflow-y-auto p-4 space-y-4"
+        >
           {messages.length === 0 && (
             <div className="py-8 text-center text-sm text-fin-muted">
               {followupPersona.name} に質問してみましょう
@@ -213,22 +290,21 @@ export default function FollowUpChat() {
               </div>
             </div>
           ))}
-          <div ref={bottomRef} />
         </div>
 
-        {messages.length === 0 && (
-          <div className="px-4 pb-2 flex flex-wrap gap-2">
-            {SUGGESTED_QUESTIONS.map((q, i) => (
-              <button
-                key={i}
-                onClick={() => send(q)}
-                className="rounded-full border border-fin-border px-3 py-1.5 text-xs text-fin-ink transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className={`flex gap-2 overflow-x-auto px-4 pb-2 ${messages.length === 0 ? 'flex-wrap' : 'whitespace-nowrap'}`}>
+          {suggestedQuestions.map((q, i) => (
+            <button
+              key={i}
+              onClick={() => send(q)}
+              className={`rounded-full border border-fin-border px-3 py-1.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent ${
+                messages.length === 0 ? 'text-xs text-fin-ink' : 'text-[11px] text-fin-muted'
+              }`}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
 
         <div className="flex gap-3 border-t border-fin-border p-4">
           <input
