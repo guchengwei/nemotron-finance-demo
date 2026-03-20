@@ -14,7 +14,7 @@ vi.mock('../../api', () => ({
     getHistoryRun: vi.fn(),
     generateReport: vi.fn(),
     deleteHistoryRun: vi.fn(),
-    checkReady: vi.fn().mockResolvedValue(true),
+    checkReady: vi.fn().mockResolvedValue({ ready: true }),
     checkHealth: vi.fn().mockResolvedValue({ status: 'ok', mock_llm: true, llm_reachable: true }),
   },
 }))
@@ -68,10 +68,62 @@ function deferred<T>() {
 
 describe('App navigation', () => {
   beforeEach(() => {
-    useStore.setState({ dbReady: true })
+    vi.clearAllMocks()
+    useStore.setState({
+      currentStep: 1,
+      filters: null,
+      selectedPersonas: [],
+      surveyTheme: '',
+      questions: [],
+      surveyLabel: '',
+      currentRunId: null,
+      personaStates: {},
+      surveyComplete: false,
+      surveyCompleted: 0,
+      surveyFailed: 0,
+      currentReport: null,
+      followupPersona: null,
+      history: [],
+      currentHistoryRun: null,
+      dbReady: true,
+      llmStatus: null,
+      enableThinking: false,
+      activeDetailPersona: null,
+      resetVersion: 0,
+    })
     mockedApi.getHistory.mockResolvedValue({ runs: [] })
     mockedApi.getFilters.mockResolvedValue(filtersResponse)
     mockedApi.getSample.mockResolvedValue({ total_matching: 1, sampled: [samplePersona] })
+    mockedApi.checkReady.mockResolvedValue({ ready: true })
+    mockedApi.checkHealth.mockResolvedValue({ status: 'ok', mock_llm: true, llm_reachable: true })
+  })
+
+  it('transitions from loading to welcome screen when readiness completes without a hook-order crash', async () => {
+    useStore.setState({
+      dbReady: false,
+      currentStep: 1,
+      selectedPersonas: [],
+      currentHistoryRun: null,
+      currentRunId: null,
+      personaStates: {},
+    })
+    mockedApi.checkReady.mockResolvedValueOnce({ ready: true })
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      render(<App />)
+
+      expect(screen.getByText('データベースを準備中...')).toBeInTheDocument()
+      expect(await screen.findByText('Nemotron Financial Survey Demo')).toBeInTheDocument()
+      expect(
+        consoleError.mock.calls.some((call) =>
+          call.some((arg) => String(arg).includes('Rendered more hooks than during the previous render')),
+        ),
+      ).toBe(false)
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 
   it('clicking custom survey opens config screen', async () => {
