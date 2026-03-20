@@ -20,8 +20,12 @@ export default function SurveyConfig() {
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [selectedPreset, setSelectedPreset] = useState<string>('')
 
+  const { currentRunId, personaStates } = useStore()
+
   const estimatedMinutes = Math.ceil(selectedPersonas.length * questions.length * 3 / 60)
   const isCompletedReview = currentHistoryRun?.status === 'completed'
+  const isActiveRun = !!(currentRunId || Object.keys(personaStates).length > 0)
+  const isReadOnly = isCompletedReview || isActiveRun
 
   const generateQuestions = async () => {
     if (!surveyTheme) return
@@ -67,7 +71,7 @@ export default function SurveyConfig() {
     startSurvey()
   }
 
-  if (isCompletedReview) {
+  if (isReadOnly) {
     return (
       <div data-testid="survey-config-screen" className="max-w-2xl space-y-6">
         <div className="flex items-center justify-between">

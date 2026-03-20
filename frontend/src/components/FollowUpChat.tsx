@@ -35,7 +35,7 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
 }
 
 export default function FollowUpChat() {
-  const { followupPersona, currentRunId, setStep, currentHistoryRun, surveyTheme, openPersonaDetail } = useStore()
+  const { followupPersona, currentRunId, setStep, currentHistoryRun, surveyTheme, openPersonaDetail, enableThinking } = useStore()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -120,7 +120,7 @@ export default function FollowUpChat() {
   const theme = surveyTheme || currentHistoryRun?.survey_theme
 
   return (
-    <div data-testid="followup-screen" className="flex h-full flex-col gap-6 xl:flex-row">
+    <div data-testid="followup-screen" className="flex h-full min-h-0 flex-col gap-6 xl:flex-row">
       <div className="w-full flex-shrink-0 space-y-4 overflow-y-auto xl:w-72">
         <div className="rounded-[1.75rem] border border-fin-border bg-fin-surface p-4 shadow-card">
           <button
@@ -175,7 +175,7 @@ export default function FollowUpChat() {
         )}
       </div>
 
-      <div className="flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-fin-border bg-fin-surface shadow-card">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-fin-border bg-fin-surface shadow-card">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
             <div className="py-8 text-center text-sm text-fin-muted">
@@ -193,7 +193,7 @@ export default function FollowUpChat() {
                 />
               )}
               <div className="max-w-lg">
-                {msg.role === 'assistant' && msg.thinking && (
+                {enableThinking && msg.role === 'assistant' && msg.thinking && (
                   <ThinkingBlock thinking={msg.thinking} />
                 )}
                 <div

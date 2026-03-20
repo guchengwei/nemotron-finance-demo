@@ -85,9 +85,10 @@ async def _followup_stream(request: FollowUpRequest):
         # Stream response
         messages = chat_history + [{"role": "user", "content": request.question}]
         full_answer = ""
+        enable_thinking = bool(run.get("enable_thinking", True))
 
         try:
-            async for kind, chunk in stream_followup_answer(system_prompt, messages):
+            async for kind, chunk in stream_followup_answer(system_prompt, messages, enable_thinking=enable_thinking):
                 if kind == 'think':
                     data = json.dumps({"thinking": chunk}, ensure_ascii=False)
                     yield f"event: thinking\ndata: {data}\n\n"

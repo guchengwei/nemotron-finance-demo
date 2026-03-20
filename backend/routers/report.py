@@ -70,13 +70,16 @@ def _build_persona_records(answers: list[dict]) -> dict[str, dict]:
         if persona_data:
             record["persona_data"] = persona_data
         record["answers"].append(answer)
-        if answer["question_index"] == 0 and answer.get("score") is not None:
-            record["score"] = answer["score"]
+        if answer.get("score") is not None:
+            record.setdefault("_scores", []).append(answer["score"])
         record["persona_name"] = _persona_name(record.get("persona_data", {}), answer)
         record["persona_summary"] = _persona_summary(record.get("persona_data", {}), answer)
 
     for record in records.values():
         record["answers"].sort(key=lambda item: item["question_index"])
+        scores = record.pop("_scores", [])
+        if scores:
+            record["score"] = round(sum(scores) / len(scores), 1)
     return records
 
 
@@ -183,9 +186,8 @@ def _build_question_aggregation(answers: list[dict], questions: list[str]) -> st
         lines.append(f"Q{q_idx+1}: {question}")
         lines.append(f"  回答数: {len(q_list)}")
 
-        if q_idx == 0:
-            scores = [a["score"] for a in q_list if a.get("score") is not None]
-            if scores:
+        scores = [a["score"] for a in q_list if a.get("score") is not None]
+        if scores:
                 dist = {str(i): scores.count(i) for i in range(1, 6)}
                 avg = round(sum(scores) / len(scores), 1)
                 lines.append(f"  平均スコア: {avg}, 分布: {dist}")
@@ -245,51 +247,58 @@ def _build_top_pick_candidates(persona_records: dict[str, dict], questions: list
 
 
 def _aggregate_scores(answers: list[dict]) -> dict:
-    """Python-side aggregation for large surveys."""
-    scores = [a["score"] for a in answers if a.get("score") is not None and a["question_index"] == 0]
+    """Python-side aggregation using per-persona averaged scores across all questions."""
+    # Step 1: Collect all scores per persona
+    persona_scores: dict[str, list[int]] = defaultdict(list)
+    persona_data_cache: dict[str, dict] = {}
+    for a in answers:
+        if a.get("score") is not None:
+            uuid = a["persona_uuid"]
+            persona_scores[uuid].append(a["score"])
+            if uuid not in persona_data_cache:
+                try:
+                    persona_data_cache[uuid] = json.loads(a.get("persona_full_json") or "{}")
+                except Exception:
+                    persona_data_cache[uuid] = {}
+
+    # Step 2: Compute per-persona averages
+    persona_avgs: dict[str, float] = {}
+    for uuid, scores_list in persona_scores.items():
+        persona_avgs[uuid] = round(sum(scores_list) / len(scores_list), 1)
+
+    # Step 3: Build distribution from per-persona averages (round to nearest int)
+    all_avg_scores = list(persona_avgs.values())
     distribution = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
-    for s in scores:
-        key = str(s)
+    for s in all_avg_scores:
+        key = str(round(s))
         if key in distribution:
             distribution[key] += 1
 
-    overall = round(sum(scores) / len(scores), 1) if scores else None
+    overall = round(sum(all_avg_scores) / len(all_avg_scores), 1) if all_avg_scores else None
 
-    # Demographic breakdown
+    # Step 4: Demographics using per-persona averages
     by_age: dict = defaultdict(list)
     by_sex: dict = defaultdict(list)
     by_lit: dict = defaultdict(list)
 
-    seen_personas: dict = {}
-    for a in answers:
-        if a["question_index"] != 0 or a.get("score") is None:
-            continue
-        uuid = a["persona_uuid"]
-        if uuid in seen_personas:
-            continue
-        seen_personas[uuid] = True
-
-        # Parse persona JSON for demographic info
-        try:
-            p = json.loads(a.get("persona_full_json") or "{}")
-        except Exception:
-            p = {}
+    for uuid, avg_score in persona_avgs.items():
+        p = persona_data_cache.get(uuid, {})
 
         age = p.get("age", 0)
         if age < 40:
-            by_age["20-39"].append(a["score"])
+            by_age["20-39"].append(avg_score)
         elif age < 60:
-            by_age["40-59"].append(a["score"])
+            by_age["40-59"].append(avg_score)
         else:
-            by_age["60+"].append(a["score"])
+            by_age["60+"].append(avg_score)
 
         sex_raw = p.get("sex", "")
-        by_sex[sex_display(sex_raw)].append(a["score"])
+        by_sex[sex_display(sex_raw)].append(avg_score)
 
         fe = p.get("financial_extension") or {}
         lit = p.get("financial_literacy") or fe.get("financial_literacy")
         if lit:
-            by_lit[lit].append(a["score"])
+            by_lit[lit].append(avg_score)
 
     def avg(lst):
         return round(sum(lst) / len(lst), 1) if lst else 0.0

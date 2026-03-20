@@ -5,7 +5,7 @@ function sexDisplay(sex: string) {
   return sex === '男' ? '男性' : sex === '女' ? '女性' : sex
 }
 
-export default function CompletedFilterReview() {
+export default function CompletedFilterReview({ badge }: { badge?: string }) {
   const { selectedPersonas, openPersonaDetail } = useStore()
 
   return (
@@ -13,7 +13,7 @@ export default function CompletedFilterReview() {
       <div className="flex items-center gap-3">
         <h2 className="text-xl font-bold tracking-[-0.03em] text-fin-ink">ペルソナ選択</h2>
         <span className="rounded-full bg-fin-accentSoft px-3 py-1 text-xs font-medium text-fin-accent">
-          完了済み（閲覧のみ）
+          {badge || '完了済み（閲覧のみ）'}
         </span>
       </div>
 

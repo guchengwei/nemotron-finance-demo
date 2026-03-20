@@ -130,11 +130,18 @@ export default function App() {
     );
   }
 
+  const selectedPersonas = useStore(s => s.selectedPersonas)
+
   const renderStep = () => {
     switch (currentStep) {
-      case 1:
-        if (currentHistoryRun?.status === 'completed') {
-          return <CompletedFilterReview />
+      case 1: {
+        const hasActiveWorkflow = selectedPersonas.length > 0
+        if (currentHistoryRun?.status === 'completed' || hasActiveWorkflow) {
+          return <CompletedFilterReview badge={
+            currentHistoryRun?.status === 'completed'
+              ? '完了済み（閲覧のみ）'
+              : '設定済み（閲覧のみ）'
+          } />
         }
         return (
           <div>
@@ -144,6 +151,7 @@ export default function App() {
             </div>
           </div>
         )
+      }
       case 2:
         return <SurveyConfig />
       case 3:

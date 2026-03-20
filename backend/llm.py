@@ -659,14 +659,21 @@ async def generate_report_group_tendency(
                 {"role": "user", "content": REPORT_GROUP_TENDENCY_USER},
             ],
             temperature=0.3,
-            max_tokens=500,
+            max_tokens=2048,
             extra_body=extra_body,
         )
+        reasoning = getattr(resp.choices[0].message, 'reasoning_content', None)
+        if reasoning:
+            logger.info("group_tendency reasoning_content_len=%d", len(reasoning))
         raw = sanitize_answer_text(resp.choices[0].message.content or "")
         cached = resp.usage and getattr(resp.usage, "prompt_tokens_details", None)
         if cached:
             logger.info("group_tendency cached_tokens=%s", getattr(cached, "cached_tokens", "?"))
-        return _strip_thinking(raw).strip()
+        result = _strip_thinking(raw).strip()
+        if not result:
+            logger.warning("group_tendency: empty after stripping thinking tags")
+            return ""
+        return result
     except Exception as e:
         logger.error("generate_report_group_tendency failed: %s", e)
         return ""
@@ -694,14 +701,21 @@ async def generate_report_conclusion(
                 {"role": "user", "content": user_content},
             ],
             temperature=0.3,
-            max_tokens=3000,
+            max_tokens=4096,
             extra_body=extra_body,
         )
+        reasoning = getattr(resp.choices[0].message, 'reasoning_content', None)
+        if reasoning:
+            logger.info("conclusion reasoning_content_len=%d", len(reasoning))
         raw = sanitize_answer_text(resp.choices[0].message.content or "")
         cached = resp.usage and getattr(resp.usage, "prompt_tokens_details", None)
         if cached:
             logger.info("conclusion cached_tokens=%s", getattr(cached, "cached_tokens", "?"))
-        return _strip_thinking(raw).strip()
+        result = _strip_thinking(raw).strip()
+        if not result:
+            logger.warning("conclusion: empty after stripping thinking tags")
+            return ""
+        return result
     except Exception as e:
         logger.error("generate_report_conclusion failed: %s", e)
         return ""
@@ -744,9 +758,12 @@ async def generate_report_top_picks(
                 {"role": "user", "content": user_content},
             ],
             temperature=0.3,
-            max_tokens=800,
+            max_tokens=2048,
             extra_body=extra_body,
         )
+        reasoning = getattr(resp.choices[0].message, 'reasoning_content', None)
+        if reasoning:
+            logger.info("top_picks reasoning_content_len=%d", len(reasoning))
         cached = resp.usage and getattr(resp.usage, "prompt_tokens_details", None)
         if cached:
             logger.info("top_picks cached_tokens=%s", getattr(cached, "cached_tokens", "?"))

@@ -75,7 +75,7 @@ export default function SurveyRunner() {
   const {
     personaStates, surveyComplete, surveyCompleted, surveyFailed,
     questions, currentRunId, setCurrentReport, setStep, selectedPersonas, currentHistoryRun,
-    currentReport, openPersonaDetail,
+    currentReport, openPersonaDetail, enableThinking,
   } = useStore()
 
   const feedRef = useRef<HTMLDivElement>(null)
@@ -241,7 +241,7 @@ export default function SurveyRunner() {
                 {displayState.answers.map((ans, i) => (
                   <div key={i} className="fade-in">
                     <div className="mb-1 text-xs text-fin-muted">Q{i + 1}: {ans.question}</div>
-                    {ans.thinking && <ThinkingBlock thinking={ans.thinking} />}
+                    {enableThinking && ans.thinking && <ThinkingBlock thinking={ans.thinking} />}
                     <div
                       data-testid="survey-answer-block"
                       className="rounded-[1.25rem] border border-fin-border bg-fin-panel p-3 text-sm text-fin-ink"
@@ -267,7 +267,7 @@ export default function SurveyRunner() {
                     <div className="mb-1 text-xs text-fin-muted">
                       Q{(displayState.activeQuestion ?? 0) + 1}: {questions[displayState.activeQuestion ?? 0]}
                     </div>
-                    {displayState.activeThinking && (
+                    {enableThinking && displayState.activeThinking && (
                       <ThinkingBlock thinking={displayState.activeThinking} />
                     )}
                     <div
