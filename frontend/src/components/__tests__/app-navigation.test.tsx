@@ -137,6 +137,27 @@ describe('App navigation', () => {
     expect(await screen.findByRole('heading', { name: '調査設定' })).toBeInTheDocument()
   })
 
+  it('shows the read-only review on step 1 when personas are already selected', async () => {
+    useStore.setState({ selectedPersonas: [samplePersona] })
+
+    render(<App />)
+
+    expect(await screen.findByText('設定済み（閲覧のみ）')).toBeInTheDocument()
+    expect(screen.getByText('1名 抽出済み')).toBeInTheDocument()
+    expect(screen.queryByTestId('quick-demo-button')).not.toBeInTheDocument()
+  })
+
+  it('allows navigating from the step-1 review to config via the step indicator', async () => {
+    const user = userEvent.setup()
+    useStore.setState({ selectedPersonas: [samplePersona] })
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /2 調査設定/ }))
+
+    expect(await screen.findByTestId('survey-config-screen')).toBeInTheDocument()
+  })
+
   it('clicking quick demo shows immediate pending state', async () => {
     const user = userEvent.setup()
     const pendingSample = deferred<{ total_matching: number; sampled: typeof samplePersona[] }>()

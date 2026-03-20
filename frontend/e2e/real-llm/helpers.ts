@@ -34,8 +34,10 @@ export async function openSurveyConfigWithOnePersona(page: Page) {
   await gotoHome(page)
   await page.getByPlaceholder('カスタム').fill('1')
   await page.getByRole('button', { name: 'ペルソナを抽出 (1名)' }).click()
-  await expect(page.getByTestId('persona-sampled-section')).toBeVisible()
-  await page.getByRole('button', { name: '次へ: 調査設定 →' }).click()
+  await expect(page.getByRole('heading', { name: 'ペルソナ選択' })).toBeVisible()
+  await expect(page.getByText('設定済み（閲覧のみ）')).toBeVisible()
+  await expect(page.getByText('1名 抽出済み')).toBeVisible()
+  await page.getByRole('button', { name: /2 調査設定/ }).click()
   await expect(page.getByTestId('survey-config-screen')).toBeVisible()
 }
 
