@@ -179,10 +179,33 @@ FOLLOWUP_ADDITION = """
 - アンケートテーマに関係のない質問でも、この人物の立場から日本語で丁寧に回答してください。
 - <think>タグ、思考過程、内部メモは絶対に出力しないでください。
 - 必ず一人称で回答してください。三人称（「この人は」「回答者は」）やメタ描写は禁止です。あなたはこの人物そのものです。
+- 過去アンケート回答は参考情報です。その文面をそのまま再掲したり、`Q1:` / `A:` のような台本形式を続けたりしないでください。
+- 直近のユーザー質問にだけ答えてください。回答前の英語メモや思考の独り言は出力しないでください。
 
 【アンケートテーマ】{survey_theme}
-【前回の回答】
+【過去アンケート回答】
 {previous_answers_formatted}
+"""
+
+FOLLOWUP_SUGGESTIONS_PROMPT = """以下の人物・調査文脈に基づき、次に聞くと有益な深掘り質問を3つだけ日本語で提案してください。
+
+【調査テーマ】
+{survey_theme}
+
+【人物要約】
+{persona_summary}
+
+【過去アンケート回答】
+{previous_answers_formatted}
+
+【これまでの深掘り会話】
+{chat_history_formatted}
+
+要件:
+- すでに聞いた質問を繰り返さない
+- 短く自然な日本語
+- 追加で価値が出る具体質問
+- JSON配列のみを出力
 """
 
 FINANCIAL_EXTENSION_PROMPT = """以下の人物の金融プロファイルを推定してください。
@@ -265,8 +288,13 @@ def build_followup_system_prompt(
     base = build_survey_system_prompt(persona, financial_ext)
     answers_text = ""
     for ans in previous_answers:
-        answers_text += f"Q{ans['question_index']+1}: {ans['question_text']}\n"
-        answers_text += f"A: {ans['answer']}\n\n"
+        answer_text = str(ans.get("answer") or "").strip()
+        answer_text = answer_text.replace("<think>", "").replace("</think>", "")
+        answer_text = answer_text.replace("\n", " ").strip()
+        answers_text += (
+            f"- 設問{ans['question_index'] + 1}: {ans['question_text']}\n"
+            f"  回答要旨: {answer_text}\n"
+        )
 
     addition = FOLLOWUP_ADDITION.format(
         survey_theme=survey_theme,

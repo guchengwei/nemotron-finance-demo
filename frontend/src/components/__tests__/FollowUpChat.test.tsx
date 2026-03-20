@@ -2,10 +2,13 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FollowUpChat from '../FollowUpChat'
-import { startFollowupSSE } from '../../api'
+import { api, startFollowupSSE } from '../../api'
 import { useStore } from '../../store'
 
 vi.mock('../../api', () => ({
+  api: {
+    getFollowupSuggestions: vi.fn(),
+  },
   startFollowupSSE: vi.fn(),
 }))
 
@@ -14,6 +17,7 @@ vi.mock('../PersonaAvatar', () => ({
 }))
 
 const mockedStartFollowupSSE = vi.mocked(startFollowupSSE)
+const mockedApi = vi.mocked(api)
 
 const personaA = {
   uuid: 'persona-a',
@@ -76,6 +80,7 @@ function setScrollMetrics(element: HTMLElement, { scrollTop }: { scrollTop: numb
 describe('FollowUpChat', () => {
   beforeEach(() => {
     seedStore()
+    mockedApi.getFollowupSuggestions?.mockResolvedValue({ questions: ['履歴質問1', '履歴質問2', '履歴質問3'] } as never)
   })
 
   it('keeps survey-derived suggestions visible after conversation starts', async () => {
@@ -84,7 +89,7 @@ describe('FollowUpChat', () => {
 
     render(<FollowUpChat />)
 
-    expect(screen.getByRole('button', { name: '履歴質問1' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '履歴質問1' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /具体的にどの程度の手数料/ })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '履歴質問1' }))
@@ -130,14 +135,16 @@ describe('FollowUpChat', () => {
     mockedStartFollowupSSE.mockReturnValue(cancel)
 
     render(<FollowUpChat />)
+    await screen.findByRole('button', { name: '履歴質問1' })
 
     expect(screen.getByText('前回の回答')).toBeInTheDocument()
 
     await user.type(screen.getByTestId('followup-input'), '未送信の入力')
     await user.click(screen.getByRole('button', { name: '送信' }))
 
-    act(() => {
+    await act(async () => {
       useStore.setState({ followupPersona: personaB })
+      await Promise.resolve()
     })
 
     expect(cancel).toHaveBeenCalled()
@@ -167,5 +174,81 @@ describe('FollowUpChat', () => {
     expect(screen.getByText('回答の取得に失敗しました。もう一度お試しください。')).toBeInTheDocument()
     expect(screen.queryByText('思考中')).not.toBeInTheDocument()
     consoleError.mockRestore()
+  })
+
+  it('refreshes suggestions after a completed answer', async () => {
+    const user = userEvent.setup()
+    let onDone: ((text: string) => void) | undefined
+
+    mockedApi.getFollowupSuggestions
+      .mockResolvedValueOnce({ questions: ['初期候補1', '初期候補2', '初期候補3'] } as never)
+      .mockResolvedValueOnce({ questions: ['更新候補1', '更新候補2', '更新候補3'] } as never)
+
+    mockedStartFollowupSSE.mockImplementation((_request, _onToken, handleDone) => {
+      onDone = handleDone
+      return vi.fn()
+    })
+
+    render(<FollowUpChat />)
+
+    expect(await screen.findByRole('button', { name: '初期候補1' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '初期候補1' }))
+
+    await act(async () => {
+      onDone?.('回答完了')
+    })
+
+    expect(await screen.findByRole('button', { name: '更新候補1' })).toBeInTheDocument()
+  })
+
+  it('keeps the suggestion rail wrapped after conversation starts', async () => {
+    const user = userEvent.setup()
+    mockedStartFollowupSSE.mockReturnValue(vi.fn())
+
+    render(<FollowUpChat />)
+
+    const initialChip = await screen.findByRole('button', { name: '履歴質問1' })
+    const rail = initialChip.parentElement as HTMLElement
+
+    expect(rail.className).toContain('flex-wrap')
+    expect(rail.className).not.toContain('whitespace-nowrap')
+
+    await user.click(initialChip)
+
+    expect(rail.className).toContain('flex-wrap')
+    expect(rail.className).not.toContain('whitespace-nowrap')
+    expect(rail.className).not.toContain('overflow-x-auto')
+  })
+
+  it('keeps completed follow-up turns in store-backed history when switching personas', async () => {
+    const user = userEvent.setup()
+    let onDone: ((text: string) => void) | undefined
+
+    mockedStartFollowupSSE.mockImplementation((_request, _onToken, handleDone) => {
+      onDone = handleDone
+      return vi.fn()
+    })
+
+    render(<FollowUpChat />)
+    await screen.findByRole('button', { name: '履歴質問1' })
+
+    await user.type(screen.getByTestId('followup-input'), '保存される質問')
+    await user.click(screen.getByRole('button', { name: '送信' }))
+
+    await act(async () => {
+      onDone?.('保存される回答')
+    })
+
+    await act(async () => {
+      useStore.setState({ followupPersona: personaB })
+      await Promise.resolve()
+    })
+    await act(async () => {
+      useStore.setState({ followupPersona: personaA })
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('保存される回答')).toBeInTheDocument()
   })
 })

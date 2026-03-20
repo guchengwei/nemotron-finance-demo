@@ -470,6 +470,93 @@ async def generate_questions(survey_theme: str, enable_thinking: bool = True) ->
     return MOCK_QUESTIONS[:3]
 
 
+def _fallback_followup_suggestions(previous_answers: list[dict], chat_history: list[dict]) -> list[str]:
+    asked = {
+        str(msg.get("content") or "").strip()
+        for msg in chat_history
+        if msg.get("role") == "user"
+    }
+    suggestions: list[str] = []
+    for answer in previous_answers:
+        question = str(answer.get("question_text") or "").strip()
+        if question and question not in asked and question not in suggestions:
+            suggestions.append(question)
+        if len(suggestions) == 3:
+            break
+    for fallback in FALLBACK_SUGGESTIONS:
+        if fallback not in asked and fallback not in suggestions:
+            suggestions.append(fallback)
+        if len(suggestions) == 3:
+            break
+    return suggestions[:3]
+
+
+FALLBACK_SUGGESTIONS = [
+    "具体的にどの程度の手数料なら許容できますか？",
+    "どのような情報があれば判断しやすいですか？",
+    "このサービスを知人に勧めますか？その理由は？",
+]
+
+
+async def generate_followup_suggestions(
+    survey_theme: str,
+    persona: dict,
+    previous_answers: list[dict],
+    chat_history: list[dict],
+) -> list[str]:
+    """Generate 3 follow-up question suggestions."""
+    from prompts import FOLLOWUP_SUGGESTIONS_PROMPT
+
+    if settings.mock_llm:
+        await asyncio.sleep(0.05)
+        return _fallback_followup_suggestions(previous_answers, chat_history)
+
+    persona_summary = (
+        f"{persona.get('name', '不明')}、{persona.get('age', '不明')}歳、"
+        f"{persona.get('occupation', '不明')}、{persona.get('prefecture', '不明')}"
+    )
+    previous_answers_formatted = "\n".join(
+        f"- 設問{a.get('question_index', 0) + 1}: {a.get('question_text', '')}\n"
+        f"  回答要旨: {sanitize_answer_text(str(a.get('answer') or ''))}"
+        for a in previous_answers
+    )
+    chat_history_formatted = "\n".join(
+        f"- {msg.get('role')}: {sanitize_answer_text(str(msg.get('content') or ''))}"
+        for msg in chat_history[-6:]
+    ) or "（まだ会話なし）"
+
+    prompt = FOLLOWUP_SUGGESTIONS_PROMPT.format(
+        survey_theme=survey_theme,
+        persona_summary=persona_summary,
+        previous_answers_formatted=previous_answers_formatted,
+        chat_history_formatted=chat_history_formatted,
+    )
+    extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
+
+    try:
+        resp = await get_client().chat.completions.create(
+            model=settings.vllm_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=512,
+            extra_body=extra_body,
+        )
+        text = sanitize_answer_text(resp.choices[0].message.content or "[]")
+        text = re.sub(r'```(?:json)?\s*', '', text).strip()
+        json_match = re.search(r'\[.*\]', text, re.DOTALL)
+        if json_match:
+            text = json_match.group(0)
+        questions = json.loads(text)
+        if isinstance(questions, list):
+            cleaned = [str(q).strip() for q in questions if str(q).strip()]
+            if cleaned:
+                return cleaned[:3]
+    except Exception as e:
+        logger.warning("Followup suggestions generation failed: %s", e)
+
+    return _fallback_followup_suggestions(previous_answers, chat_history)
+
+
 async def check_llm_health() -> bool:
     """Return True if vLLM endpoint is reachable, False otherwise."""
     if settings.mock_llm:

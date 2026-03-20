@@ -122,6 +122,15 @@ class FollowUpRequest(BaseModel):
     question: str
 
 
+class FollowUpSuggestionRequest(BaseModel):
+    run_id: str
+    persona_uuid: str
+
+
+class FollowUpSuggestionResponse(BaseModel):
+    questions: List[str]
+
+
 class SurveyRunSummary(BaseModel):
     id: str
     created_at: str

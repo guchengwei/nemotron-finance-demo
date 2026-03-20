@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useStore } from '../store'
-import { startFollowupSSE } from '../api'
+import { api, startFollowupSSE } from '../api'
 import PersonaAvatar from './PersonaAvatar'
 
 const FALLBACK_SUGGESTED_QUESTIONS = [
@@ -63,17 +63,27 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
 }
 
 export default function FollowUpChat() {
-  const { followupPersona, currentRunId, setStep, currentHistoryRun, surveyTheme, questions, openPersonaDetail, enableThinking } = useStore()
+  const {
+    followupPersona,
+    currentRunId,
+    setStep,
+    currentHistoryRun,
+    surveyTheme,
+    questions,
+    openPersonaDetail,
+    enableThinking,
+    appendFollowupMessages,
+  } = useStore()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [profileExpanded, setProfileExpanded] = useState(false)
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([])
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
   const cancelRef = useRef<(() => void) | null>(null)
 
   const runId = currentRunId || currentHistoryRun?.id
-
   useEffect(() => {
     cancelRef.current?.()
     cancelRef.current = null
@@ -110,18 +120,47 @@ export default function FollowUpChat() {
     }
   }, [])
 
+  useEffect(() => {
+    let active = true
+    const fallbackSuggestions = getSuggestedQuestions(currentHistoryRun?.questions ?? questions)
+
+    if (!followupPersona || !runId) {
+      setSuggestedQuestions(fallbackSuggestions)
+      return () => {
+        active = false
+      }
+    }
+
+    api.getFollowupSuggestions(runId, followupPersona.uuid)
+      .then((response) => {
+        if (active) {
+          setSuggestedQuestions(response.questions.length > 0 ? response.questions : fallbackSuggestions)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSuggestedQuestions(fallbackSuggestions)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [followupPersona, runId, currentHistoryRun, questions])
+
   const send = (text: string) => {
     if (!text.trim() || !followupPersona || !runId || sending) return
+    const questionText = text.trim()
     setInput('')
     setSending(true)
     stickToBottomRef.current = true
 
-    const userMsg: Message = { role: 'user', content: text }
+    const userMsg: Message = { role: 'user', content: questionText }
     const assistantMsg: Message = { role: 'assistant', content: '', streaming: true }
     setMessages((prev) => [...prev, userMsg, assistantMsg])
 
     cancelRef.current = startFollowupSSE(
-      { run_id: runId, persona_uuid: followupPersona.uuid, question: text },
+      { run_id: runId, persona_uuid: followupPersona.uuid, question: questionText },
       (chunk) => {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
@@ -132,18 +171,24 @@ export default function FollowUpChat() {
         })
       },
       (full) => {
+        const answerText = sanitizeVisibleText(full)
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (last.role === 'assistant') {
-            return [...prev.slice(0, -1), { ...last, content: sanitizeVisibleText(full), streaming: false }]
+            return [...prev.slice(0, -1), { ...last, content: answerText, streaming: false }]
           }
           return prev
         })
+        appendFollowupMessages(followupPersona.uuid, [
+          { role: 'user', content: questionText },
+          { role: 'assistant', content: answerText },
+        ])
         setSending(false)
         cancelRef.current = null
       },
       (err) => {
         console.error('Followup error:', err)
+        const fallbackAnswer = '回答の取得に失敗しました。もう一度お試しください。'
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (last?.role === 'assistant' && last.streaming) {
@@ -151,13 +196,17 @@ export default function FollowUpChat() {
               ...prev.slice(0, -1),
               {
                 role: 'assistant',
-                content: '回答の取得に失敗しました。もう一度お試しください。',
+                content: fallbackAnswer,
                 streaming: false,
               },
             ]
           }
           return prev
         })
+        appendFollowupMessages(followupPersona.uuid, [
+          { role: 'user', content: questionText },
+          { role: 'assistant', content: fallbackAnswer },
+        ])
         setSending(false)
         cancelRef.current = null
       },
@@ -186,7 +235,6 @@ export default function FollowUpChat() {
 
   const sexDisplay = followupPersona.sex === '男' ? '男性' : '女性'
   const theme = surveyTheme || currentHistoryRun?.survey_theme
-  const suggestedQuestions = getSuggestedQuestions(currentHistoryRun?.questions ?? questions)
 
   return (
     <div data-testid="followup-screen" className="flex h-full min-h-0 flex-col gap-6 xl:flex-row">
@@ -292,12 +340,13 @@ export default function FollowUpChat() {
           ))}
         </div>
 
-        <div className={`flex gap-2 overflow-x-auto px-4 pb-2 ${messages.length === 0 ? 'flex-wrap' : 'whitespace-nowrap'}`}>
+        <div className="flex flex-wrap gap-2 px-4 pb-2">
           {suggestedQuestions.map((q, i) => (
             <button
               key={i}
               onClick={() => send(q)}
-              className={`rounded-full border border-fin-border px-3 py-1.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent ${
+              disabled={sending}
+              className={`rounded-full border border-fin-border px-3 py-1.5 transition-all duration-200 hover:border-fin-accent hover:text-fin-accent disabled:opacity-50 ${
                 messages.length === 0 ? 'text-xs text-fin-ink' : 'text-[11px] text-fin-muted'
               }`}
             >

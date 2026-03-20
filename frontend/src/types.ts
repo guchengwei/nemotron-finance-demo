@@ -122,6 +122,10 @@ export interface SurveyRunDetail {
   enable_thinking?: boolean
 }
 
+export interface FollowUpSuggestionResponse {
+  questions: string[]
+}
+
 export interface SSERunCreated {
   run_id: string
   total_personas: number
