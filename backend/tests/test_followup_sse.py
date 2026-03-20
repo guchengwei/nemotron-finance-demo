@@ -49,6 +49,64 @@ def followup_client(tmp_path):
     settings.history_db_path = orig_hist
 
 
+@pytest.fixture()
+def followup_client_with_thinking(tmp_path):
+    """Fixture that seeds two runs: one with enable_thinking=1 and one with enable_thinking=0."""
+    history_db = str(tmp_path / "history.db")
+
+    orig_hist = settings.history_db_path
+    settings.history_db_path = history_db
+
+    _create_history_db()
+
+    hist_conn = sqlite3.connect(history_db)
+    for run_id, enable_thinking in [("run-think-on", 1), ("run-think-off", 0)]:
+        hist_conn.execute(
+            "INSERT INTO survey_runs (id, created_at, survey_theme, questions_json,"
+            " filter_config_json, persona_count, status, enable_thinking)"
+            " VALUES (?, datetime('now'), ?, ?, '{}', 1, 'completed', ?)",
+            (run_id, "テスト", json.dumps(["質問1"]), enable_thinking),
+        )
+        hist_conn.execute(
+            "INSERT INTO survey_answers (run_id, persona_uuid, persona_summary,"
+            " persona_full_json, question_index, question_text, answer, score, created_at)"
+            " VALUES (?, ?, ?, '{}', 0, ?, ?, 4, datetime('now'))",
+            (run_id, "p1", "テスト太郎 30歳", "質問1", "回答テスト"),
+        )
+    hist_conn.commit()
+    hist_conn.close()
+
+    app = FastAPI()
+    app.include_router(followup.router)
+    with TestClient(app) as c:
+        yield c
+
+    settings.history_db_path = orig_hist
+
+
+def test_bug3_followup_passes_enable_thinking_from_run(followup_client_with_thinking):
+    """Bug 3: followup passes enable_thinking from the run's DB record to stream_followup_answer."""
+    captured_calls: list[dict] = []
+
+    async def mock_stream(system_prompt, messages, enable_thinking=True):
+        captured_calls.append({"enable_thinking": enable_thinking})
+        yield ("answer", "テスト回答")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        for run_id, expected in [("run-think-on", True), ("run-think-off", False)]:
+            captured_calls.clear()
+            resp = followup_client_with_thinking.post(
+                "/api/followup/ask",
+                json={"run_id": run_id, "persona_uuid": "p1", "question": "質問"},
+            )
+            assert resp.status_code == 200, resp.text
+            assert len(captured_calls) == 1, "stream_followup_answer should be called once"
+            assert captured_calls[0]["enable_thinking"] == expected, (
+                f"run {run_id}: expected enable_thinking={expected}, "
+                f"got {captured_calls[0]['enable_thinking']}"
+            )
+
+
 def test_followup_emits_error_event_on_llm_failure(followup_client):
     """When LLM stream fails, must emit an error event, not hang."""
     async def mock_stream(*args, **kwargs):
