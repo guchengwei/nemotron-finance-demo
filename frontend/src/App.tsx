@@ -79,6 +79,7 @@ function WelcomeScreen() {
 export default function App() {
   const { currentStep, resetVersion } = useStore()
   const currentHistoryRun = useStore(s => s.currentHistoryRun)
+  const selectedPersonas = useStore(s => s.selectedPersonas)
   const dbReady = useStore(s => s.dbReady)
   const setDbReady = useStore(s => s.setDbReady)
   const setLlmStatus = useStore(s => s.setLlmStatus)
@@ -129,8 +130,6 @@ export default function App() {
       </div>
     );
   }
-
-  const selectedPersonas = useStore(s => s.selectedPersonas)
 
   const renderStep = () => {
     switch (currentStep) {
