@@ -1,6 +1,6 @@
 """Pydantic models for API request/response types."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Literal, Optional, List, Dict, Any
 
 
@@ -107,9 +107,19 @@ class ReportResponse(BaseModel):
     overall_score: Optional[float] = None
     score_distribution: Optional[Dict[str, int]] = None
     group_tendency: Optional[str] = None
+    conclusion_summary: Optional[str] = None
+    recommended_actions: Optional[List[str]] = None
     conclusion: Optional[str] = None
     top_picks: Optional[List[TopPick]] = None
     demographic_breakdown: Optional[Dict[str, Dict[str, float]]] = None
+
+    @model_validator(mode="after")
+    def _backfill_legacy_structured_fields(self):
+        if not self.conclusion_summary and self.conclusion:
+            self.conclusion_summary = self.conclusion
+        if self.recommended_actions is None:
+            self.recommended_actions = []
+        return self
 
 
 class ReportRequest(BaseModel):

@@ -98,7 +98,9 @@ REPORT_SYSTEM_PROMPT = """あなたは金融マーケティングリサーチの
 
 【要件】
 - `group_tendency` は回答者全体の傾向を簡潔に要約してください。
-- `conclusion` は金融機関が取るべき次のアクションを含めて簡潔にまとめてください。
+- `conclusion_summary` は結論の要点を1-2文で要約してください。
+- `recommended_actions` は金融機関が取るべき次のアクションをちょうど3件、短文で列挙してください。
+- `conclusion` は `conclusion_summary` と `recommended_actions` を踏まえた自然な要約文にしてください。
 - `top_picks` は必ずちょうど3件にしてください。
 - `top_picks` は候補ペルソナ一覧からのみ選び、`persona_uuid` は候補一覧の値を1文字も変えずにそのまま使ってください。
 - `top_picks` の3件は、できる限り「ポジティブ」「ネガティブ」「ユニーク視点」を1件ずつ選んでください。
@@ -108,6 +110,8 @@ REPORT_SYSTEM_PROMPT = """あなたは金融マーケティングリサーチの
 【出力例】
 {{
   "group_tendency": "全体では...",
+  "conclusion_summary": "総合すると...",
+  "recommended_actions": ["...", "...", "..."],
   "conclusion": "総合すると...",
   "top_picks": [
     {{

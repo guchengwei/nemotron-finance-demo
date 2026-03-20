@@ -305,13 +305,16 @@ def test_bug2_overall_score_uses_per_persona_average_across_all_questions(report
         f"overall_score {body['overall_score']} should be near {expected_avg}"
     )
 
-    # Verify score_distribution has entries (non-empty)
+    # Verify score_distribution reflects raw scored answers, not persona-average buckets
     dist = body["score_distribution"]
     assert dist is not None
     total_in_dist = sum(dist.values())
-    assert total_in_dist == persona_count, (
-        f"distribution should have exactly {persona_count} persona entries, got {total_in_dist}: {dist}"
+    assert total_in_dist == persona_count * 2, (
+        f"distribution should have exactly {persona_count * 2} scored-answer entries, got {total_in_dist}: {dist}"
     )
+
+    assert body["conclusion_summary"]
+    assert len(body["recommended_actions"]) == 3
 
     # Verify demographic_breakdown reflects all personas
     demo = body["demographic_breakdown"]
