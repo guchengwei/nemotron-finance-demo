@@ -10,6 +10,10 @@ import type {
 
 const BASE = '/api'
 
+function isJsonResponse(res: Response) {
+  return res.headers.get('content-type')?.includes('application/json') ?? false
+}
+
 async function get<T>(
   path: string,
   params?: Record<string, string | number | undefined>,
@@ -153,8 +157,15 @@ export const api = {
   async checkReady(): Promise<{ ready: boolean; error?: string }> {
     try {
       const res = await fetch('/ready')
-      if (res.ok) return { ready: true }
+      if (res.ok) {
+        if (!isJsonResponse(res)) return { ready: false }
+        const data = await res.json().catch(() => null) as { status?: string } | null
+        return data?.status === 'ready' ? { ready: true } : { ready: false }
+      }
       if (res.status === 500) {
+        if (!isJsonResponse(res)) {
+          return { ready: false, error: 'Database initialization failed' }
+        }
         const data = await res.json()
         return { ready: false, error: data.detail || 'Database initialization failed' }
       }
@@ -166,7 +177,27 @@ export const api = {
 
   async checkHealth(): Promise<{ status: string; mock_llm: boolean; llm_reachable: boolean }> {
     const res = await fetch('/health')
-    return res.json()
+    if (!res.ok) {
+      throw new Error(`GET /health failed: ${res.status}`)
+    }
+    if (!isJsonResponse(res)) {
+      throw new Error('GET /health returned non-JSON')
+    }
+    const data = await res.json().catch(() => {
+      throw new Error('GET /health returned invalid JSON')
+    }) as { status?: string; mock_llm?: boolean; llm_reachable?: boolean }
+    if (
+      typeof data.status !== 'string' ||
+      typeof data.mock_llm !== 'boolean' ||
+      typeof data.llm_reachable !== 'boolean'
+    ) {
+      throw new Error('GET /health returned invalid payload')
+    }
+    return {
+      status: data.status,
+      mock_llm: data.mock_llm,
+      llm_reachable: data.llm_reachable,
+    }
   },
 }
 

@@ -81,6 +81,7 @@ export default function App() {
   const currentHistoryRun = useStore(s => s.currentHistoryRun)
   const selectedPersonas = useStore(s => s.selectedPersonas)
   const dbReady = useStore(s => s.dbReady)
+  const llmStatus = useStore(s => s.llmStatus)
   const setDbReady = useStore(s => s.setDbReady)
   const setLlmStatus = useStore(s => s.setLlmStatus)
   const [dbError, setDbError] = useState<string | null>(null);
@@ -98,8 +99,6 @@ export default function App() {
         }
         if (result.ready) {
           setDbReady(true);
-          const health = await api.checkHealth();
-          setLlmStatus(health);
           return;
         }
         await new Promise(r => setTimeout(r, 2000));
@@ -108,6 +107,26 @@ export default function App() {
     poll();
     return () => { cancelled = true; };
   }, [dbReady, setDbReady, setLlmStatus]);
+
+  useEffect(() => {
+    if (!dbReady || llmStatus) return
+    let cancelled = false
+
+    const loadHealth = async () => {
+      try {
+        const health = await api.checkHealth()
+        if (cancelled) return
+        setLlmStatus(health)
+      } catch (error) {
+        if (cancelled) return
+        console.error('Health check failed:', error)
+        setLlmStatus({ mock_llm: false, llm_reachable: false })
+      }
+    }
+
+    loadHealth()
+    return () => { cancelled = true }
+  }, [dbReady, llmStatus, setLlmStatus])
 
   if (!dbReady) {
     return (

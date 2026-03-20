@@ -9,6 +9,7 @@ vi.mock('../../api', () => ({
   api: {
     getFilters: vi.fn(),
     getSample: vi.fn(),
+    getCount: vi.fn(),
     generateQuestions: vi.fn(),
     getHistory: vi.fn(),
     getHistoryRun: vi.fn(),
@@ -93,6 +94,7 @@ describe('App navigation', () => {
     })
     mockedApi.getHistory.mockResolvedValue({ runs: [] })
     mockedApi.getFilters.mockResolvedValue(filtersResponse)
+    mockedApi.getCount.mockResolvedValue({ total_matching: 120 })
     mockedApi.getSample.mockResolvedValue({ total_matching: 1, sampled: [samplePersona] })
     mockedApi.checkReady.mockResolvedValue({ ready: true })
     mockedApi.checkHealth.mockResolvedValue({ status: 'ok', mock_llm: true, llm_reachable: true })
@@ -161,5 +163,32 @@ describe('App navigation', () => {
     pendingSample.resolve({ total_matching: 1, sampled: [samplePersona] })
 
     expect(await screen.findByRole('heading', { name: '調査実行中...' })).toBeInTheDocument()
+  })
+
+  it('transitions from loading state to the home screen when readiness succeeds', async () => {
+    useStore.setState({ dbReady: false })
+    mockedApi.checkReady.mockResolvedValueOnce({ ready: true })
+    mockedApi.checkHealth.mockResolvedValueOnce({ status: 'ok', mock_llm: false, llm_reachable: true })
+
+    render(<App />)
+
+    expect(screen.getByText('データベースを準備中...')).toBeInTheDocument()
+    expect(await screen.findByTestId('quick-demo-button')).toBeInTheDocument()
+  })
+
+  it('keeps rendering the app when health check fails after readiness succeeds', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    useStore.setState({ dbReady: false })
+    mockedApi.checkReady.mockResolvedValueOnce({ ready: true })
+    mockedApi.checkHealth.mockRejectedValueOnce(new Error('invalid health payload'))
+
+    render(<App />)
+
+    expect(await screen.findByTestId('quick-demo-button')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(useStore.getState().llmStatus).toEqual({ mock_llm: false, llm_reachable: false })
+    })
+
+    consoleError.mockRestore()
   })
 })
