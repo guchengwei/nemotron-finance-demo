@@ -92,6 +92,40 @@ def test_transition_chunk_both_fields():
 
 
 # ---------------------------------------------------------------------------
+# Partial transition boundary: first visible answer token must survive
+# ---------------------------------------------------------------------------
+
+def test_partial_transition_keeps_first_visible_answer_token():
+    chunks = [
+        _make_chunk(reasoning="still thinking"),
+        _make_chunk(reasoning="final thought", content="Fi"),
+        _make_chunk(content="rst answer token"),
+    ]
+    result = collect(chunks)
+    answer_text = "".join(v for k, v in result if k == "answer")
+
+    assert answer_text == "First answer token"
+
+
+# ---------------------------------------------------------------------------
+# Malformed parser transition must not leak reasoning markup into answer
+# ---------------------------------------------------------------------------
+
+def test_malformed_transition_strips_think_markup_from_answer():
+    chunks = [
+        _make_chunk(reasoning="internal reasoning"),
+        _make_chunk(reasoning="more internal reasoning", content="</think>Visible answer"),
+        _make_chunk(content=" continues cleanly"),
+    ]
+    result = collect(chunks)
+    think_text = "".join(v for k, v in result if k == "think")
+    answer_text = "".join(v for k, v in result if k == "answer")
+
+    assert think_text == "internal reasoningmore internal reasoning"
+    assert answer_text == "Visible answer continues cleanly"
+
+
+# ---------------------------------------------------------------------------
 # No reasoning at all (thinking disabled via enable_thinking=False)
 # ---------------------------------------------------------------------------
 

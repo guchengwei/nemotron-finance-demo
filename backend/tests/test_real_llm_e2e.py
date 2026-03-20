@@ -193,7 +193,7 @@ def test_bug2_scores_use_all_questions():
 
 @requires_real_llm
 def test_bug3_enable_thinking_false_no_thinking_in_followup():
-    """Bug 3: followup with enable_thinking=False should not stream thinking events."""
+    """Bug 3: followup with enable_thinking=False should not stream thinking events or raw think tags."""
     run_id = f"e2e-bug3-{uuid.uuid4().hex[:8]}"
     _seed_multi_question_run(run_id, enable_thinking=0)
     try:
@@ -208,8 +208,11 @@ def test_bug3_enable_thinking_false_no_thinking_in_followup():
         finally:
             conn.close()
 
-        # Stream a followup question
+        # Stream a followup question and inspect the SSE event stream.
         thinking_chunks = []
+        done_payload = None
+        current_event = None
+        current_data: list[str] = []
         with requests.post(
             f"{APP_BASE}/api/followup/ask",
             json={"run_id": run_id, "persona_uuid": persona_uuid, "question": "どのような点に最も魅力を感じますか？"},
@@ -217,15 +220,33 @@ def test_bug3_enable_thinking_false_no_thinking_in_followup():
             timeout=60,
         ) as resp:
             assert resp.status_code == 200, resp.text
-            for line in resp.iter_lines():
-                if line:
-                    decoded = line.decode("utf-8")
-                    if decoded.startswith("event: thinking"):
-                        thinking_chunks.append(decoded)
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line:
+                    if current_event == "done" and current_data:
+                        done_payload = json.loads("\n".join(current_data))
+                    current_event = None
+                    current_data = []
+                    continue
+
+                if line.startswith("event: "):
+                    current_event = line[7:].strip()
+                    if current_event == "thinking":
+                        thinking_chunks.append(line)
+                    continue
+
+                if line.startswith("data: "):
+                    current_data.append(line[6:])
+
+            if current_event == "done" and current_data and done_payload is None:
+                done_payload = json.loads("\n".join(current_data))
 
         assert len(thinking_chunks) == 0, (
             f"enable_thinking=False should produce no thinking SSE events, got {len(thinking_chunks)}"
         )
+        assert done_payload is not None, "SSE stream should complete with done event"
+        assert isinstance(done_payload.get("full_answer"), str)
+        assert done_payload["full_answer"].strip(), "done payload should contain visible answer text"
+        assert "<think>" not in done_payload["full_answer"], "raw <think> tags must not leak into final answer"
     finally:
         _delete_run(run_id)
 
