@@ -15,6 +15,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from config import settings
+import report_parsing
 
 logger = logging.getLogger(__name__)
 REPORT_ALLOWED_KEYS = {
@@ -650,110 +651,8 @@ async def generate_report_raw(
     return sanitize_answer_text(resp.choices[0].message.content or "")
 
 
-def parse_report_qualitative(raw_text: str) -> dict[str, Any]:
-    """Parse report JSON loosely and keep partial qualitative fields when possible."""
-    try:
-        import json_repair
-    except ImportError:
-        json_repair = None
-
-    cleaned = _strip_code_fences(_strip_thinking(raw_text or ""))
-    json_candidate = _extract_first_json_object(cleaned)
-
-    candidates = []
-    if json_candidate:
-        candidates.append(json_candidate)
-    if cleaned and cleaned not in candidates:
-        candidates.append(cleaned)
-
-    for candidate in candidates:
-        if not candidate:
-            continue
-        try:
-            parsed = json_repair.loads(candidate) if json_repair is not None else json.loads(candidate)
-            if isinstance(parsed, dict):
-                return parsed
-        except Exception:
-            continue
-
-    partial: dict[str, Any] = {}
-    for field_name in ("group_tendency", "conclusion_summary", "conclusion"):
-        value = _extract_string_field(cleaned, field_name)
-        if isinstance(value, str) and value.strip():
-            partial[field_name] = value.strip()
-
-    recommended_actions = _extract_string_array_field(cleaned, "recommended_actions")
-    if recommended_actions:
-        partial["recommended_actions"] = recommended_actions
-
-    top_picks_fragment = _extract_json_array_fragment(cleaned, "top_picks")
-    if top_picks_fragment:
-        try:
-            parsed_picks = (
-                json_repair.loads(top_picks_fragment)
-                if json_repair is not None
-                else json.loads(top_picks_fragment)
-            )
-            if isinstance(parsed_picks, list):
-                partial["top_picks"] = parsed_picks
-        except Exception:
-            pass
-
-    return partial
-
-
-def normalize_report_qualitative(parsed: dict[str, Any]) -> dict[str, Any]:
-    """Keep only allowed qualitative keys and tolerate malformed fields."""
-    normalized: dict[str, Any] = {}
-    if not isinstance(parsed, dict):
-        return normalized
-
-    group_tendency = parsed.get("group_tendency")
-    if isinstance(group_tendency, str) and group_tendency.strip():
-        normalized["group_tendency"] = group_tendency.strip()
-
-    conclusion = parsed.get("conclusion")
-    if isinstance(conclusion, str) and conclusion.strip():
-        normalized["conclusion"] = conclusion.strip()
-
-    conclusion_summary = parsed.get("conclusion_summary")
-    if isinstance(conclusion_summary, str) and conclusion_summary.strip():
-        normalized["conclusion_summary"] = conclusion_summary.strip()
-
-    recommended_actions = parsed.get("recommended_actions")
-    if isinstance(recommended_actions, list):
-        cleaned_actions = [
-            str(item).strip()
-            for item in recommended_actions
-            if isinstance(item, str) and item.strip()
-        ]
-        if cleaned_actions:
-            normalized["recommended_actions"] = cleaned_actions
-
-    top_picks = parsed.get("top_picks")
-    if isinstance(top_picks, list):
-        cleaned_picks = []
-        for item in top_picks:
-            if not isinstance(item, dict):
-                continue
-            clean_item = {
-                key: value.strip()
-                for key, value in item.items()
-                if key in {
-                    "persona_uuid",
-                    "persona_name",
-                    "persona_summary",
-                    "highlight_reason",
-                    "highlight_quote",
-                }
-                and isinstance(value, str)
-                and value.strip()
-            }
-            if clean_item:
-                cleaned_picks.append(clean_item)
-        normalized["top_picks"] = cleaned_picks
-
-    return {key: value for key, value in normalized.items() if key in REPORT_ALLOWED_KEYS}
+parse_report_qualitative = report_parsing.parse_report_qualitative
+normalize_report_qualitative = report_parsing.normalize_report_qualitative
 
 
 async def generate_report(

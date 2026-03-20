@@ -3,6 +3,7 @@
 .env.bak
 
 # Python
+__pycache__/
 backend/venv/
 backend/__pycache__/
 backend/**/__pycache__/
@@ -10,6 +11,7 @@ backend/**/*.pyc
 backend/.pytest_cache/
 
 # Node
+.vite/
 frontend/node_modules/
 frontend/dist/
 
