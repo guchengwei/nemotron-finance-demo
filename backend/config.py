@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 512
     followup_max_tokens: int = 2048
     report_max_tokens: int = 4096
+    report_temperature: float = 0.1
+    report_repetition_penalty: float = 1.15
+    report_frequency_penalty: float = 0.3
     llm_concurrency: int = 4
 
     # Data paths

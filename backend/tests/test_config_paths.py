@@ -30,3 +30,12 @@ def test_env_file_found_from_backend_cwd():
     repo_root = Path(__file__).resolve().parents[2]
     env_file = repo_root / ".env"
     assert env_file.exists(), f".env not found at {env_file}"
+
+
+def test_report_sampling_defaults():
+    """report_temperature, report_repetition_penalty, report_frequency_penalty have correct defaults."""
+    from config import Settings
+    s = Settings()
+    assert s.report_temperature == 0.1
+    assert s.report_repetition_penalty == 1.15
+    assert s.report_frequency_penalty == 0.3

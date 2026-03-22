@@ -706,7 +706,10 @@ async def generate_report_group_tendency(
         return MOCK_REPORT["group_tendency"]
 
     client = get_client()
-    extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
+    extra_body: dict = {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "repetition_penalty": settings.report_repetition_penalty,
+    }
     try:
         resp = await client.chat.completions.create(
             model=settings.vllm_model,
@@ -714,7 +717,8 @@ async def generate_report_group_tendency(
                 {"role": "system", "content": shared_system},
                 {"role": "user", "content": REPORT_GROUP_TENDENCY_USER},
             ],
-            temperature=0.3,
+            temperature=settings.report_temperature,
+            frequency_penalty=settings.report_frequency_penalty,
             max_tokens=2048,
             extra_body=extra_body,
         )
@@ -751,7 +755,10 @@ async def generate_report_conclusion(
         return MOCK_REPORT["conclusion"]
 
     client = get_client()
-    extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
+    extra_body: dict = {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "repetition_penalty": settings.report_repetition_penalty,
+    }
     user_content = REPORT_CONCLUSION_USER.format(group_tendency=group_tendency or "（傾向データなし）")
     try:
         resp = await client.chat.completions.create(
@@ -760,7 +767,8 @@ async def generate_report_conclusion(
                 {"role": "system", "content": shared_system},
                 {"role": "user", "content": user_content},
             ],
-            temperature=0.3,
+            temperature=settings.report_temperature,
+            frequency_penalty=settings.report_frequency_penalty,
             max_tokens=4096,
             extra_body=extra_body,
         )
@@ -823,7 +831,7 @@ async def generate_report_top_picks(
                 {"role": "system", "content": shared_system},
                 {"role": "user", "content": user_content},
             ],
-            temperature=0.3,
+            temperature=settings.report_temperature,
             max_tokens=2048,
             extra_body=extra_body,
         )
