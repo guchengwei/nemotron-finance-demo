@@ -139,11 +139,19 @@ export function useSurvey() {
           case 'persona_complete': {
             const d = data as SSEPersonaComplete
             s.updatePersonaState(d.persona_uuid, { status: 'complete', activeAnswer: '' })
+            const updated = useStore.getState().personaStates
+            const completedCount = Object.values(updated).filter((ps) => ps.status === 'complete').length
+            const failedCount = Object.values(updated).filter((ps) => ps.status === 'error').length
+            s.setSurveyCounts(completedCount, failedCount)
             break
           }
           case 'persona_error': {
             const d = data as { persona_uuid: string }
             s.updatePersonaState(d.persona_uuid, { status: 'error', activeAnswer: '', activeThinking: undefined })
+            const updated = useStore.getState().personaStates
+            const completedCount = Object.values(updated).filter((ps) => ps.status === 'complete').length
+            const failedCount = Object.values(updated).filter((ps) => ps.status === 'error').length
+            s.setSurveyCounts(completedCount, failedCount)
             break
           }
           case 'survey_complete': {

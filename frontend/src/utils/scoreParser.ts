@@ -14,7 +14,8 @@ export function parseScore(text: string): number | null {
 }
 
 export function scoreColor(score: number): string {
-  switch (score) {
+  const rounded = Math.round(score)
+  switch (rounded) {
     case 1: return '#A14B45'
     case 2: return '#A86A32'
     case 3: return '#B58A57'
@@ -25,7 +26,8 @@ export function scoreColor(score: number): string {
 }
 
 export function scoreBg(score: number): string {
-  switch (score) {
+  const rounded = Math.round(score)
+  switch (rounded) {
     case 1: return 'bg-fin-danger'
     case 2: return 'bg-fin-warning'
     case 3: return 'bg-fin-bronze'
