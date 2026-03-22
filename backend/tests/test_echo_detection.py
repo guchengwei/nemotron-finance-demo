@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from llm import detect_prompt_echo
+from prompts import REPORT_CONCLUSION_INSTRUCTION
 
 
 SAMPLE_PROMPT = "集計結果を踏まえ、グループ全体の傾向を簡潔に述べてください。テキストのみ。JSONや説明文は不要です。"
@@ -49,12 +50,17 @@ def test_detects_partial_prompt_echo():
     assert detect_prompt_echo(CONCLUSION_PROMPT, response) is True
 
 
+def test_prompt_shorter_than_min_chunk_returns_false():
+    """Prompt shorter than min_chunk cannot produce a valid match window."""
+    short_prompt = "短い"  # 2 chars, well below default min_chunk=20
+    response = "短い短い短い短い短い分析結果です。"
+    assert detect_prompt_echo(short_prompt, response) is False
+
+
 def test_conclusion_reusing_tendency_is_not_echo():
     """A conclusion that legitimately references the group tendency should NOT be flagged.
     Echo detection for conclusion uses REPORT_CONCLUSION_INSTRUCTION (static only),
     not the full user_content which includes the dynamic group_tendency."""
-    from prompts import REPORT_CONCLUSION_INSTRUCTION
-
     # Conclusion legitimately reuses words from the tendency
     response = "全体的にNISA制度への関心は高く、非課税期間の無期限化が支持されています。金融機関は制度周知の強化が求められます。"
     assert detect_prompt_echo(REPORT_CONCLUSION_INSTRUCTION, response) is False
