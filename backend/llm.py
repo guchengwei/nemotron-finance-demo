@@ -729,6 +729,11 @@ async def generate_report_group_tendency(
         if not result:
             logger.warning("group_tendency: empty after stripping thinking tags")
             return ""
+        # Detect prompt echo-back
+        from prompts import REPORT_GROUP_TENDENCY_USER
+        if detect_prompt_echo(REPORT_GROUP_TENDENCY_USER, result):
+            logger.warning("group_tendency: detected prompt echo, triggering fallback")
+            return ""
         return result
     except Exception as e:
         logger.error("generate_report_group_tendency failed: %s", e)
@@ -770,6 +775,12 @@ async def generate_report_conclusion(
         result = _strip_thinking(raw).strip()
         if not result:
             logger.warning("conclusion: empty after stripping thinking tags")
+            return ""
+        # Detect prompt echo-back using ONLY the static instruction portion,
+        # NOT the dynamic group_tendency (which the model legitimately reuses)
+        from prompts import REPORT_CONCLUSION_INSTRUCTION
+        if detect_prompt_echo(REPORT_CONCLUSION_INSTRUCTION, result):
+            logger.warning("conclusion: detected prompt echo, triggering fallback")
             return ""
         return result
     except Exception as e:
