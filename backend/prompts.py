@@ -152,9 +152,12 @@ REPORT_SHARED_SYSTEM = """あなたは金融マーケティングリサーチの
 
 REPORT_GROUP_TENDENCY_USER = "集計結果を踏まえ、グループ全体の傾向を簡潔に述べてください。テキストのみ。JSONや説明文は不要です。"
 
+# Static instruction portion — used by echo detection (must NOT include dynamic {group_tendency})
+REPORT_CONCLUSION_INSTRUCTION = "上記を踏まえ、総合結論・金融機関が取るべき推奨アクションを詳しく述べてください。テキストのみ。JSONや説明文は不要です。"
+
 REPORT_CONCLUSION_USER = """グループ傾向: {group_tendency}
 
-上記を踏まえ、総合結論・金融機関が取るべき推奨アクションを詳しく述べてください。テキストのみ。JSONや説明文は不要です。"""
+""" + REPORT_CONCLUSION_INSTRUCTION
 
 REPORT_TOP_PICKS_USER = """以下はPythonスコアリングで選出した候補者の詳細です:
 

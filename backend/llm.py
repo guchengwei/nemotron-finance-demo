@@ -171,6 +171,21 @@ def sanitize_answer_text(text: str) -> str:
     return cleaned.strip()
 
 
+def detect_prompt_echo(prompt: str, response: str, min_chunk: int = 20) -> bool:
+    """Detect if a response contains significant substring overlap with the prompt.
+
+    Uses sliding-window check: if any contiguous chunk of the prompt
+    (>= min_chunk characters) appears in the response, it's an echo.
+    """
+    if not prompt or not response or len(prompt) < min_chunk:
+        return False
+    for i in range(len(prompt) - min_chunk + 1):
+        chunk = prompt[i : i + min_chunk]
+        if chunk in response:
+            return True
+    return False
+
+
 def _strip_code_fences(text: str) -> str:
     text = re.sub(r"```(?:json)?\s*", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
