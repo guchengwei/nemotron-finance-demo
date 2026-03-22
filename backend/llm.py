@@ -730,7 +730,6 @@ async def generate_report_group_tendency(
             logger.warning("group_tendency: empty after stripping thinking tags")
             return ""
         # Detect prompt echo-back
-        from prompts import REPORT_GROUP_TENDENCY_USER
         if detect_prompt_echo(REPORT_GROUP_TENDENCY_USER, result):
             logger.warning("group_tendency: detected prompt echo, triggering fallback")
             return ""
