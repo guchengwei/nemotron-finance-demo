@@ -68,8 +68,7 @@ async def _followup_stream(request: FollowUpRequest):
             [request.run_id, request.persona_uuid]
         )
         chat_history, _asked_questions = normalize_followup_history(chat_rows)
-        raw_question = request.question.strip()
-        normalized_question = normalize_followup_user_question(raw_question)
+        normalized_question = normalize_followup_user_question(request.question)
 
         # Get financial extension from persona data (may be nested under financial_extension)
         fe = persona.get("financial_extension") or {}
@@ -95,12 +94,12 @@ async def _followup_stream(request: FollowUpRequest):
         # Save user message to history
         await history_db.execute(
             "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
-            [request.run_id, request.persona_uuid, raw_question]
+            [request.run_id, request.persona_uuid, request.question]
         )
         await history_db.commit()
 
         # Stream response
-        messages = chat_history + [{"role": "user", "content": raw_question}]
+        messages = chat_history + [{"role": "user", "content": request.question}]
         full_answer = ""
         enable_thinking = bool(run.get("enable_thinking", True))
         assistant_fallback = "（回答を取得できませんでした。もう一度お試しください。）"
@@ -153,7 +152,7 @@ async def _followup_stream(request: FollowUpRequest):
                     if not candidate:
                         continue
 
-                    echo_status, _echo_end = match_followup_question_echo_prefix(candidate, request.question)
+                    echo_status, _echo_end = match_followup_question_echo_prefix(candidate, normalized_question)
                     if echo_status == "partial":
                         continue
 

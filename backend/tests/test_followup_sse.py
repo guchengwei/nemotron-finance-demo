@@ -941,7 +941,7 @@ def test_followup_strips_normalized_question_echo_prefix_from_first_visible_chun
         conn.close()
 
     assert rows[-2][0] == "user"
-    assert rows[-2][1] == raw_question.strip()
+    assert rows[-2][1] == raw_question
     assert rows[-1][0] == "assistant"
     assert rows[-1][1] == "実際の回答です。"
 
