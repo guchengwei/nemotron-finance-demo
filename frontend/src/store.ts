@@ -50,6 +50,7 @@ interface AppState {
   currentHistoryRun: SurveyRunDetail | null
   setCurrentHistoryRun: (r: SurveyRunDetail | null) => void
   appendFollowupMessages: (personaUuid: string, messages: Array<{ role: string; content: string }>) => void
+  clearFollowupMessages: (personaUuid: string) => void
 
   dbReady: boolean
   setDbReady: (ready: boolean) => void
@@ -122,6 +123,19 @@ export const useStore = create<AppState>((set) => ({
           followup_chats: {
             ...state.currentHistoryRun.followup_chats,
             [personaUuid]: [...existing, ...messages],
+          },
+        },
+      }
+    }),
+  clearFollowupMessages: (personaUuid) =>
+    set((state) => {
+      if (!state.currentHistoryRun) return state
+      return {
+        currentHistoryRun: {
+          ...state.currentHistoryRun,
+          followup_chats: {
+            ...state.currentHistoryRun.followup_chats,
+            [personaUuid]: [],
           },
         },
       }

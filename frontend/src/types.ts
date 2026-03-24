@@ -128,6 +128,10 @@ export interface FollowUpSuggestionResponse {
   questions: string[]
 }
 
+export interface FollowUpClearResponse {
+  deleted_count: number
+}
+
 export interface SSERunCreated {
   run_id: string
   total_personas: number

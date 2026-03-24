@@ -73,6 +73,7 @@ export default function FollowUpChat() {
     openPersonaDetail,
     enableThinking,
     appendFollowupMessages,
+    clearFollowupMessages,
   } = useStore()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -222,6 +223,25 @@ export default function FollowUpChat() {
     )
   }
 
+  const clearHistory = async () => {
+    if (!followupPersona || !runId || sending) return
+    if (!window.confirm(`${followupPersona.name} との会話履歴を消去しますか？`)) return
+
+    cancelRef.current?.()
+    cancelRef.current = null
+
+    try {
+      await api.clearFollowupHistory(runId, followupPersona.uuid)
+      setMessages([])
+      setInput('')
+      setSending(false)
+      clearFollowupMessages(followupPersona.uuid)
+    } catch (error) {
+      console.error('Failed to clear follow-up history:', error)
+      setSending(false)
+    }
+  }
+
   if (!followupPersona) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
@@ -282,6 +302,16 @@ export default function FollowUpChat() {
           className="text-xs text-fin-muted transition-colors hover:text-fin-accent"
         >
           ← レポートに戻る
+        </button>
+
+        <button
+          onClick={() => {
+            void clearHistory()
+          }}
+          disabled={sending}
+          className="text-xs text-fin-muted transition-colors hover:text-fin-accent disabled:opacity-50"
+        >
+          履歴を消去
         </button>
 
         {theme && (

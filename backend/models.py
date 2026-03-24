@@ -141,6 +141,15 @@ class FollowUpSuggestionResponse(BaseModel):
     questions: List[str]
 
 
+class FollowUpClearRequest(BaseModel):
+    run_id: str
+    persona_uuid: str
+
+
+class FollowUpClearResponse(BaseModel):
+    deleted_count: int
+
+
 class SurveyRunSummary(BaseModel):
     id: str
     created_at: str

@@ -8,6 +8,7 @@ import { useStore } from '../../store'
 vi.mock('../../api', () => ({
   api: {
     getFollowupSuggestions: vi.fn(),
+    clearFollowupHistory: vi.fn(),
   },
   startFollowupSSE: vi.fn(),
 }))
@@ -250,5 +251,27 @@ describe('FollowUpChat', () => {
     })
 
     expect(screen.getByText('保存される回答')).toBeInTheDocument()
+  })
+
+  it('clears follow-up history for the selected persona after confirmation', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    mockedApi.clearFollowupHistory?.mockResolvedValue({ deleted_count: 1 } as never)
+
+    render(<FollowUpChat />)
+
+    expect(await screen.findByRole('button', { name: '履歴質問1' })).toBeInTheDocument()
+    expect(screen.getByText('前回の回答')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '履歴を消去' }))
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(mockedApi.clearFollowupHistory).toHaveBeenCalledWith('run-1', 'persona-a')
+    expect(screen.queryByText('前回の回答')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '履歴質問1' })).toBeInTheDocument()
+    expect(useStore.getState().currentHistoryRun?.followup_chats['persona-a']).toEqual([])
+
+    confirmSpy.mockRestore()
   })
 })

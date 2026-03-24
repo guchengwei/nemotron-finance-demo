@@ -7,6 +7,7 @@ import type {
   HistoryListResponse,
   SurveyRunDetail,
   FollowUpSuggestionResponse,
+  FollowUpClearResponse,
 } from './types'
 
 const BASE = '/api'
@@ -157,6 +158,11 @@ export const api = {
     run_id: string,
     persona_uuid: string,
   ): Promise<FollowUpSuggestionResponse> => post('/followup/suggestions', { run_id, persona_uuid }),
+
+  clearFollowupHistory: (
+    run_id: string,
+    persona_uuid: string,
+  ): Promise<FollowUpClearResponse> => post('/followup/clear', { run_id, persona_uuid }),
 
   deleteHistoryRun: (run_id: string): Promise<void> => del(`/history/${run_id}`),
 

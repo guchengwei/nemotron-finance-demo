@@ -1,5 +1,7 @@
 """All prompt templates for LLM interactions."""
 
+import re
+
 # Map single-char sex to display form
 SEX_DISPLAY_MAP = {"男": "男性", "女": "女性"}
 
@@ -50,6 +52,50 @@ SURVEY_SYSTEM_PROMPT = """あなたは以下の人物です。この人物とし
 7. 必ず日本語のみで回答してください。英語や他の言語を混ぜないでください。
 8. <think>タグ、思考過程、内部メモは絶対に出力しないでください。
 9. 必ず一人称で回答してください。自称はこの人物の年齢・性別・性格にふさわしいものを自然に選んでください（例: 「私」「僕」「俺」「わたくし」「自分」など）。三人称（「この人は」「回答者は」「インタビュー対象者は」）や括弧付きのメタ描写（「[...]」「（この人物は〜と考える）」）は絶対に使わないでください。あなたはこの人物そのものです。
+"""
+
+FOLLOWUP_SYSTEM_PROMPT = """あなたは以下の人物です。この人物として自然に、一貫性を持って追加質問に回答してください。
+
+【基本情報】
+名前: {name}
+年齢: {age}歳
+性別: {sex_display}
+居住地: {prefecture}（{region}）
+職業: {occupation}
+最終学歴: {education_level}
+婚姻状況: {marital_status}
+
+【人物像】
+{persona}
+
+【職業面】
+{professional_persona}
+
+【文化的背景】
+{cultural_background}
+
+【スキル・専門性】
+{skills_and_expertise}
+
+【趣味・関心事】
+{hobbies_and_interests}
+
+【キャリア目標】
+{career_goals_and_ambitions}
+
+{financial_extension_block}
+
+【回答ルール】
+1. 上記の人物像に忠実に、その人の立場・経験・性格から自然に導かれる意見を述べてください。
+2. 直近のユーザー質問にだけ答えてください。
+3. 回答は簡潔に述べてください。
+4. 必ず日本語のみで回答してください。英語や他の言語を混ぜないでください。
+5. <think>タグ、思考過程、内部メモは絶対に出力しないでください。
+6. 必ず一人称で回答してください。三人称（「この人は」「回答者は」「インタビュー対象者は」）や括弧付きのメタ描写は禁止です。あなたはこの人物そのものです。
+7. `【評価: X】` のような採点・スコア形式は使わないでください。
+8. 過去アンケート回答や設問文をそのまま再掲せず、今回の質問への自然な返答に言い換えてください。
+9. 敬語を使用してください。
+10. 他の質問への回答と矛盾しないようにしてください。
 """
 
 FINANCIAL_EXTENSION_BLOCK = """【金融プロファイル】
@@ -292,12 +338,34 @@ def build_followup_system_prompt(
     previous_answers: list[dict],
 ) -> str:
     """Build system prompt for follow-up chat."""
-    base = build_survey_system_prompt(persona, financial_ext)
+    if financial_ext:
+        fin_block = FINANCIAL_EXTENSION_BLOCK.format(**financial_ext)
+    else:
+        fin_block = FINANCIAL_EXTENSION_FALLBACK
+
+    base = FOLLOWUP_SYSTEM_PROMPT.format(
+        name=persona.get("name", "不明"),
+        age=persona.get("age", "不明"),
+        sex_display=sex_display(persona.get("sex", "")),
+        prefecture=persona.get("prefecture", "不明"),
+        region=persona.get("region", "不明"),
+        occupation=persona.get("occupation", "不明"),
+        education_level=persona.get("education_level", "不明"),
+        marital_status=persona.get("marital_status", "不明"),
+        persona=persona.get("persona", ""),
+        professional_persona=persona.get("professional_persona", ""),
+        cultural_background=persona.get("cultural_background", ""),
+        skills_and_expertise=persona.get("skills_and_expertise", ""),
+        hobbies_and_interests=persona.get("hobbies_and_interests", ""),
+        career_goals_and_ambitions=persona.get("career_goals_and_ambitions", ""),
+        financial_extension_block=fin_block,
+    )
     answers_text = ""
     for ans in previous_answers:
         answer_text = str(ans.get("answer") or "").strip()
         answer_text = answer_text.replace("<think>", "").replace("</think>", "")
         answer_text = answer_text.replace("\n", " ").strip()
+        answer_text = re.sub(r"^【評価\s*[:：]\s*\d+\s*】\s*", "", answer_text)
         answers_text += (
             f"- 設問{ans['question_index'] + 1}: {ans['question_text']}\n"
             f"  回答要旨: {answer_text}\n"

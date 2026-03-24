@@ -10,7 +10,14 @@ from fastapi.responses import StreamingResponse
 import aiosqlite
 
 from config import settings
-from models import FollowUpRequest, FollowUpSuggestionRequest, FollowUpSuggestionResponse
+from followup_history import normalize_followup_history
+from models import (
+    FollowUpClearRequest,
+    FollowUpClearResponse,
+    FollowUpRequest,
+    FollowUpSuggestionRequest,
+    FollowUpSuggestionResponse,
+)
 from followup_sanitizer import sanitize_followup_message_content
 from llm import generate_followup_suggestions, sanitize_answer_text, stream_followup_answer
 from prompts import build_followup_system_prompt
@@ -55,13 +62,7 @@ async def _followup_stream(request: FollowUpRequest):
             "ORDER BY created_at",
             [request.run_id, request.persona_uuid]
         )
-        chat_history = []
-        for row in chat_rows:
-            role = row["role"]
-            content = sanitize_followup_message_content(role, row["content"])
-            if not content:
-                continue
-            chat_history.append({"role": role, "content": content})
+        chat_history, _asked_questions = normalize_followup_history(chat_rows)
 
         # Get financial extension from persona data (may be nested under financial_extension)
         fe = persona.get("financial_extension") or {}
@@ -96,9 +97,28 @@ async def _followup_stream(request: FollowUpRequest):
         full_answer = ""
         enable_thinking = bool(run.get("enable_thinking", True))
         assistant_fallback = "（回答を取得できませんでした。もう一度お試しください。）"
+        interrupted_fallback = "（通信が中断されたため、回答を完了できませんでした）"
+        completed = False
+        cancelled = False
+        errored = False
+        assistant_saved = False
+
+        async def save_assistant_response() -> None:
+            nonlocal assistant_saved, full_answer
+            if assistant_saved:
+                return
+            full_answer = sanitize_followup_message_content("assistant", full_answer) or assistant_fallback
+            async with aiosqlite.connect(settings.history_db_path) as persist_db:
+                await persist_db.execute(
+                    "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+                    [request.run_id, request.persona_uuid, full_answer]
+                )
+                await persist_db.commit()
+            assistant_saved = True
 
         try:
             pending_thinking: list[str] = []
+            pending_visible_prefix = ""
             emitted = False
 
             async for kind, chunk in stream_followup_answer(
@@ -116,7 +136,13 @@ async def _followup_stream(request: FollowUpRequest):
 
                 clean_chunk = sanitize_answer_text(chunk)
                 if not emitted:
-                    clean_chunk = sanitize_followup_message_content("assistant", clean_chunk)
+                    if clean_chunk:
+                        pending_visible_prefix = (
+                            f"{pending_visible_prefix}\n{clean_chunk}"
+                            if pending_visible_prefix
+                            else clean_chunk
+                        )
+                    clean_chunk = sanitize_followup_message_content("assistant", pending_visible_prefix)
                     if not clean_chunk:
                         continue
                     emitted = True
@@ -130,26 +156,29 @@ async def _followup_stream(request: FollowUpRequest):
 
             if not full_answer:
                 full_answer = assistant_fallback
+            completed = True
         except asyncio.CancelledError:
             logger.warning("Followup stream cancelled for %s", request.persona_uuid)
-            full_answer = "（通信が中断されたため、回答を完了できませんでした）"
+            full_answer = interrupted_fallback
+            cancelled = True
         except Exception as e:
             logger.error("Followup LLM error for %s: %s", request.persona_uuid, e)
             err_data = json.dumps({"error": str(e)}, ensure_ascii=False)
             yield f"event: error\ndata: {err_data}\n\n"
             full_answer = assistant_fallback
+            errored = True
+        finally:
+            if not completed and not cancelled and not errored:
+                full_answer = interrupted_fallback
+            save_task = asyncio.create_task(save_assistant_response())
+            try:
+                await asyncio.shield(save_task)
+            except asyncio.CancelledError:
+                await asyncio.shield(save_task)
 
-        full_answer = sanitize_followup_message_content("assistant", full_answer) or assistant_fallback
-
-        # Save assistant response
-        await history_db.execute(
-            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
-            [request.run_id, request.persona_uuid, full_answer]
-        )
-        await history_db.commit()
-
-        done_data = json.dumps({"full_answer": full_answer}, ensure_ascii=False)
-        yield f"event: done\ndata: {done_data}\n\n"
+        if completed:
+            done_data = json.dumps({"full_answer": full_answer}, ensure_ascii=False)
+            yield f"event: done\ndata: {done_data}\n\n"
 
 
 @router.post("/ask")
@@ -189,18 +218,14 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
             "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? ORDER BY created_at",
             [request.run_id, request.persona_uuid]
         )
-        chat_history = [{"role": r["role"], "content": r["content"]} for r in chat_rows]
+        chat_history, asked_questions = normalize_followup_history(chat_rows)
 
     try:
         persona = json.loads(answers[0].get("persona_full_json") or "{}")
     except Exception:
         persona = {}
 
-    asked = {
-        str(msg.get("content") or "").strip()
-        for msg in chat_history
-        if msg.get("role") == "user"
-    }
+    asked = set(asked_questions)
     generated = await generate_followup_suggestions(
         survey_theme=run["survey_theme"],
         persona=persona,
@@ -218,3 +243,15 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
             break
 
     return FollowUpSuggestionResponse(questions=filtered)
+
+
+@router.post("/clear", response_model=FollowUpClearResponse)
+async def clear_followup_history(request: FollowUpClearRequest):
+    async with aiosqlite.connect(settings.history_db_path) as history_db:
+        cursor = await history_db.execute(
+            "DELETE FROM followup_chats WHERE run_id = ? AND persona_uuid = ?",
+            [request.run_id, request.persona_uuid],
+        )
+        await history_db.commit()
+
+    return FollowUpClearResponse(deleted_count=cursor.rowcount or 0)
