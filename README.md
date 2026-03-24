@@ -2,16 +2,37 @@
 
 Japanese overview: [README.ja.md](README.ja.md)
 
-Agent-first demo application for running financial-product survey simulations against the `nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese` model and the Nemotron Personas Japan dataset. The app supports mock-mode development, real vLLM-backed survey runs, report generation, follow-up chat, and persisted survey history.
+Demo application for financial-product survey simulations powered by the `nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese` model and the Nemotron Personas Japan dataset. It is designed for market-research and event-demo workflows: select personas by demographic profile, run multi-question surveys with live streaming answers, generate a report, and continue with follow-up chat backed by persisted survey history.
 
-## Current Capabilities
+## Features
 
-- Persona filtering and sampling from the Nemotron Personas dataset
-- Multi-question survey runs with streaming answers
-- Optional thinking-mode rendering for parser-backed vLLM responses
-- Report generation with qualitative summaries and top-pick personas
-- Follow-up chat per persona with persisted history replay
-- Mock-mode and real-LLM E2E coverage
+- **Persona Filtering and Sampling**: narrow the Nemotron Personas dataset by demographic and profile fields, then sample respondents for a run
+- **Live Survey Streaming**: stream each persona's answer in real time during multi-question survey execution
+- **Thinking Mode**: render parser-backed reasoning output for vLLM responses when the model emits it
+- **Report Generation**: produce qualitative summaries, polarity-aware insights, and top-pick personas after the survey
+- **Follow-up Chat**: continue the conversation with individual personas after the report
+- **Persisted Survey History**: reload prior runs and follow-up state from the history store
+- **Mock and Real vLLM Modes**: develop offline or run against a local vLLM deployment with the repo-owned reasoning parser plugin
+
+## Architecture
+
+```text
+┌─────────────────────┐    SSE / REST APIs    ┌─────────────────────────────┐
+│ Frontend            │ ────────────────────► │ Backend                     │
+│ React + TypeScript  │                       │ FastAPI + Python            │
+│ Vite-built bundle   │ ◄──────────────────── │ Survey/report/follow-up     │
+│ Served by backend   │                       │ orchestration               │
+└─────────────────────┘                       │ Persona parquet loading     │
+                                              │ SQLite history persistence  │
+                                              └──────────────┬──────────────┘
+                                                             │ OpenAI-compatible API
+                                                             ▼
+                                              ┌─────────────────────────────┐
+                                              │ vLLM                        │
+                                              │ Nemotron Nano v2 Japanese   │
+                                              │ Repo-owned reasoning parser │
+                                              └─────────────────────────────┘
+```
 
 ## Start Here
 
