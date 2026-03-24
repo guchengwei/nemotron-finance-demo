@@ -903,6 +903,49 @@ def test_followup_strips_leading_score_prefix_from_assistant_answer(followup_cli
     assert rows[-1][1] == "手数料が明確なら検討しやすいです。"
 
 
+def test_followup_strips_normalized_question_echo_prefix_from_first_visible_chunk(followup_client):
+    raw_question = "\n```json```\n「追加の質問です？」"
+
+    async def mock_stream(*args, **kwargs):
+        yield ("answer", "追加の質問です？ 実際の回答です。")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={
+                "run_id": "run1",
+                "persona_uuid": "p1",
+                "question": raw_question,
+            },
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert "追加の質問です？" not in resp.text
+
+    done_block = next(
+        block for block in resp.text.split("\n\n") if block.startswith("event: done\n")
+    )
+    done_data = json.loads(
+        next(line for line in done_block.splitlines() if line.startswith("data: "))[6:]
+    )
+    assert done_data["full_answer"] == "実際の回答です。"
+
+    conn = sqlite3.connect(settings.history_db_path)
+    try:
+        rows = conn.execute(
+            "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? ORDER BY id",
+            ("run1", "p1"),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert rows[-2][0] == "user"
+    assert rows[-2][1] == raw_question.strip()
+    assert rows[-1][0] == "assistant"
+    assert rows[-1][1] == "実際の回答です。"
+
+
 def test_followup_skips_contaminated_assistant_history_when_building_messages(followup_client):
     """Persisted English meta-reasoning should not be fed back into later follow-up turns."""
     conn = sqlite3.connect(settings.history_db_path)
