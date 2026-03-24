@@ -83,6 +83,8 @@ _QUESTION_ECHO_SKIP_CHARS = set(
     "、。，．.!！?？:：;；-ー～〜…"
 )
 
+_FENCE_ONLY_LINE_RE = re.compile(r"(?is)^\s*```(?:[a-z0-9_-]+)?\s*```\s*$|^\s*```\s*$")
+
 
 def _strip_leading_assistant_label(text: str) -> str:
     stripped = text.lstrip()
@@ -186,13 +188,19 @@ def sanitize_followup_message_content(role: str, text: str) -> str:
 
 def normalize_followup_user_question(text: str) -> str:
     """Normalize persisted user question text for replay and dedupe comparisons."""
-    fallback = str(text or "").strip()
     cleaned = sanitize_answer_text(text or "")
-    cleaned = re.sub(r"```(?:json)?", "", cleaned, flags=re.IGNORECASE)
+
+    lines = cleaned.splitlines()
+    while lines and _FENCE_ONLY_LINE_RE.match(lines[0]):
+        lines.pop(0)
+    while lines and _FENCE_ONLY_LINE_RE.match(lines[-1]):
+        lines.pop()
+    cleaned = "\n".join(lines)
+
     cleaned = re.sub(r"[\r\n\t\u3000]+", " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
-    wrappers = (("「", "」"), ("『", "』"), ('"', '"'), ("'", "'"), ("`", "`"))
+    wrappers = (("「", "」"), ("『", "』"))
     for left, right in wrappers:
         if len(cleaned) >= 2 and cleaned.startswith(left) and cleaned.endswith(right):
             inner = cleaned[1:-1].strip()
@@ -200,4 +208,6 @@ def normalize_followup_user_question(text: str) -> str:
                 cleaned = inner
             break
 
-    return cleaned or fallback
+    if cleaned in {"「」", "『』", '""', "''", "``", "```", "```json```"}:
+        return ""
+    return cleaned

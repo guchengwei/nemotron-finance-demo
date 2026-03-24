@@ -20,6 +20,7 @@ from models import (
 )
 from followup_sanitizer import (
     match_followup_question_echo_prefix,
+    normalize_followup_user_question,
     sanitize_followup_message_content,
     strip_followup_question_echo_prefix,
 )
@@ -237,7 +238,11 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
     except Exception:
         persona = {}
 
-    asked = set(asked_questions)
+    asked = {
+        normalized
+        for question in asked_questions
+        if (normalized := normalize_followup_user_question(question))
+    }
     generated = await generate_followup_suggestions(
         survey_theme=run["survey_theme"],
         persona=persona,
@@ -246,11 +251,20 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
     )
 
     filtered: list[str] = []
+    filtered_keys: set[str] = set()
     for question in generated:
         cleaned = str(question).strip()
-        if not cleaned or cleaned in asked or cleaned in filtered:
+        if not cleaned:
+            continue
+        comparison_key = normalize_followup_user_question(cleaned)
+        if (
+            not comparison_key
+            or comparison_key in asked
+            or comparison_key in filtered_keys
+        ):
             continue
         filtered.append(cleaned)
+        filtered_keys.add(comparison_key)
         if len(filtered) == 3:
             break
 
