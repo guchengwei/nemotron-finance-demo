@@ -2,6 +2,7 @@ import asyncio
 import json
 import sqlite3
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -255,6 +256,54 @@ def test_followup_suggestions_endpoint_returns_questions_and_excludes_asked_item
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["questions"] == ["新しい質問1", "新しい質問2", "新しい質問3"]
+
+
+def test_followup_suggestions_backfill_after_older_asked_question_is_filtered(followup_client):
+    """Older asked questions outside replayed history must still be excluded during backfill."""
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    for idx in range(1, 5):
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+            ("run1", "p1", f"過去の質問{idx}"),
+        )
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+            ("run1", "p1", f"過去の回答{idx}"),
+        )
+    hist_conn.commit()
+    hist_conn.close()
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='["過去の質問1", "新しい質問1"]'
+                        )
+                    )
+                ]
+            )
+
+    class _FakeClient:
+        chat = SimpleNamespace(completions=_FakeCompletions())
+
+    with patch("llm.get_client", return_value=_FakeClient()):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    questions = resp.json()["questions"]
+    assert len(questions) == 3
+    assert "過去の質問1" not in questions
+    assert "新しい質問1" in questions
+    assert questions == [
+        "新しい質問1",
+        "具体的にどの程度の手数料なら許容できますか？",
+        "どのような情報があれば判断しやすいですか？",
+    ]
 
 
 def test_followup_does_not_retry_or_switch_thinking_modes_on_english_meta_reasoning(followup_client):
@@ -649,7 +698,14 @@ def test_followup_suggestions_normalize_history_but_still_exclude_asked_question
 
     captured_chat_history: list[list[dict]] = []
 
-    async def mock_generate_followup_suggestions(*, survey_theme, persona, previous_answers, chat_history):
+    async def mock_generate_followup_suggestions(
+        *,
+        survey_theme,
+        persona,
+        previous_answers,
+        chat_history,
+        excluded_questions,
+    ):
         captured_chat_history.append(chat_history)
         return ["未回答の過去質問", "新しい質問1", "新しい質問2", "新しい質問3"]
 

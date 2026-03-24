@@ -249,23 +249,24 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
         persona=persona,
         previous_answers=answers,
         chat_history=chat_history,
+        excluded_questions=asked,
     )
 
     filtered: list[str] = []
-    filtered_keys: set[str] = set()
+    filtered_seen: set[str] = set()
     for question in generated:
         cleaned = str(question).strip()
         if not cleaned:
             continue
-        comparison_key = normalize_followup_user_question(cleaned)
+        normalized_cleaned = normalize_followup_user_question(cleaned)
         if (
-            not comparison_key
-            or comparison_key in asked
-            or comparison_key in filtered_keys
+            not normalized_cleaned
+            or normalized_cleaned in asked
+            or normalized_cleaned in filtered_seen
         ):
             continue
         filtered.append(cleaned)
-        filtered_keys.add(comparison_key)
+        filtered_seen.add(normalized_cleaned)
         if len(filtered) == 3:
             break
 
