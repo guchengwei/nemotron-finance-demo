@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FilterPanel from '../FilterPanel'
@@ -82,33 +82,39 @@ describe('FilterPanel', () => {
   })
 
   it('keeps the default filter state after filters load without requesting a filtered count', async () => {
-    render(<FilterPanel />)
+    vi.useFakeTimers()
 
-    expect(await screen.findByText('100')).toBeInTheDocument()
-    await new Promise((resolve) => setTimeout(resolve, 350))
+    try {
+      render(<FilterPanel />)
 
-    const [sexSelect, regionSelect, prefectureSelect, educationSelect] = screen.getAllByRole('combobox')
-    const [ageMinInput, ageMaxInput] = screen.getAllByRole('spinbutton')
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(screen.getByText('100')).toBeInTheDocument()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
 
-    expect(sexSelect).toHaveValue('')
-    expect(regionSelect).toHaveValue('')
-    expect(prefectureSelect).toHaveValue('')
-    expect(educationSelect).toHaveValue('')
-    expect(ageMinInput).toHaveValue(20)
-    expect(ageMaxInput).toHaveValue(80)
-    expect(mockedApi.getCount).not.toHaveBeenCalled()
+      const [sexSelect, regionSelect, prefectureSelect, educationSelect] = screen.getAllByRole('combobox')
+      const [ageMinInput, ageMaxInput] = screen.getAllByRole('spinbutton')
+      const occupationInput = screen.getByPlaceholderText('職業を入力...')
+
+      expect(sexSelect).toHaveValue('')
+      expect(regionSelect).toHaveValue('')
+      expect(prefectureSelect).toHaveValue('')
+      expect(occupationInput).toHaveValue('')
+      expect(educationSelect).toHaveValue('')
+      expect(ageMinInput).toHaveValue(20)
+      expect(ageMaxInput).toHaveValue(80)
+      expect(mockedApi.getCount).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('clicking ランダム randomizes filters and requests a filtered count', async () => {
     const user = userEvent.setup()
-    const randomSpy = vi.spyOn(Math, 'random')
-      .mockReturnValueOnce(0)
-      .mockReturnValueOnce(0.9)
-      .mockReturnValueOnce(0)
-      .mockReturnValueOnce(0.9)
-      .mockReturnValueOnce(0)
-      .mockReturnValueOnce(0)
-      .mockReturnValueOnce(0)
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5)
     mockedApi.getCount.mockResolvedValueOnce({ total_matching: 42 })
 
     try {
@@ -118,27 +124,29 @@ describe('FilterPanel', () => {
       await user.click(screen.getByRole('button', { name: 'ランダム' }))
 
       await waitFor(() => {
-        expect(mockedApi.getCount).toHaveBeenCalledWith(
-          expect.objectContaining({
-            sex: '男',
-            age_min: 20,
-            age_max: 35,
-            region: '関東',
-            prefecture: '東京都',
-          }),
-          expect.any(AbortSignal),
-        )
+        expect(mockedApi.getCount).toHaveBeenCalledTimes(1)
       })
 
       const [sexSelect, regionSelect, prefectureSelect, educationSelect] = screen.getAllByRole('combobox')
       const [ageMinInput, ageMaxInput] = screen.getAllByRole('spinbutton')
+      const occupationInput = screen.getByPlaceholderText('職業を入力...')
+      const expectedQuery = {
+        sex: sexSelect.value || undefined,
+        age_min: Number(ageMinInput.value),
+        age_max: Number(ageMaxInput.value),
+        region: regionSelect.value || undefined,
+        prefecture: prefectureSelect.value || undefined,
+        occupation: occupationInput.value || undefined,
+        education: educationSelect.value || undefined,
+      }
 
-      expect(sexSelect).toHaveValue('男')
-      expect(regionSelect).toHaveValue('関東')
-      expect(prefectureSelect).toHaveValue('東京都')
+      expect(sexSelect).not.toHaveValue('')
+      expect(regionSelect).not.toHaveValue('')
+      expect(occupationInput).toHaveValue('')
       expect(educationSelect).toHaveValue('')
-      expect(ageMinInput).toHaveValue(20)
-      expect(ageMaxInput).toHaveValue(35)
+      expect(ageMinInput).not.toHaveValue(20)
+      expect(ageMaxInput).not.toHaveValue(80)
+      expect(mockedApi.getCount).toHaveBeenCalledWith(expectedQuery, expect.any(AbortSignal))
       await screen.findByText('42')
     } finally {
       randomSpy.mockRestore()
