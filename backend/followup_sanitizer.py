@@ -55,10 +55,32 @@ _JAPANESE_RULE_ECHO_PHRASES = (
     "アンケートに関する重要なルール",
 )
 
+_FOLLOWUP_INSTRUCTION_ECHO_PREFIX_RE = re.compile(
+    r"(?is)^\s*(?:"
+    r"現在の質問にだけ答えてください|"
+    r"先の回答内容を再利用するのではなく|"
+    r"新しい質問への応答として|"
+    r"この人物の立場から自然に返答してください|"
+    r"ユーザーの追加質問に一貫性を持って応答してください"
+    r")"
+)
+
+_FOLLOWUP_TRAILING_INSTRUCTION_RE = re.compile(
+    r"(?is)\s*(?:過去アンケート回答を参考にし、?\s*)?"
+    r"ユーザーの追加質問に一貫性を持って応答してください。?\s*$"
+)
+
 _JAPANESE_CHAR_RE = re.compile(r"[ぁ-んァ-ヶ一-龠々ー]")
 _LATIN_CHAR_RE = re.compile(r"[A-Za-z]")
 _TOKEN_SOUP_FRAGMENT_RE = re.compile(
     r"(?i)(?:tasksinmoneygin|#include|console|function|comments|import|from|while|models|account-free)"
+)
+
+_QUESTION_ECHO_SKIP_CHARS = set(
+    " \t\r\n\u3000"
+    "「」『』“”‘’'\"`"
+    "（）()【】[]<>〈〉《》"
+    "、。，．.!！?？:：;；-ー～〜…"
 )
 
 
@@ -95,6 +117,51 @@ def _looks_like_token_soup(text: str) -> bool:
     return japanese_chars <= 2 and latin_chars >= 20 and symbol_chars >= 8 and fragment_hits >= 2
 
 
+def _is_question_echo_skip_char(char: str) -> bool:
+    return char.isspace() or char in _QUESTION_ECHO_SKIP_CHARS
+
+
+def match_followup_question_echo_prefix(text: str, question: str) -> tuple[str, int]:
+    """Return whether text begins with a normalized copy of the user question.
+
+    Status values:
+    - "none": no question echo match at the start
+    - "partial": text is still only a prefix of the question
+    - "full": text contains the whole echoed question; index points after the prefix
+    """
+    candidate = text or ""
+    prompt = question or ""
+    i = 0
+    j = 0
+    matched = False
+
+    while True:
+        while i < len(candidate) and _is_question_echo_skip_char(candidate[i]):
+            i += 1
+        while j < len(prompt) and _is_question_echo_skip_char(prompt[j]):
+            j += 1
+
+        if j >= len(prompt):
+            while i < len(candidate) and _is_question_echo_skip_char(candidate[i]):
+                i += 1
+            return ("full", i) if matched else ("none", 0)
+        if i >= len(candidate):
+            return ("partial", i) if matched else ("none", 0)
+        if candidate[i].casefold() != prompt[j].casefold():
+            return ("none", 0)
+
+        matched = True
+        i += 1
+        j += 1
+
+
+def strip_followup_question_echo_prefix(text: str, question: str) -> str:
+    status, end_index = match_followup_question_echo_prefix(text, question)
+    if status != "full":
+        return text
+    return (text or "")[end_index:].lstrip()
+
+
 def sanitize_followup_message_content(role: str, text: str) -> str:
     """Remove leaked markup and discard non-user-facing assistant meta-reasoning."""
     cleaned = sanitize_answer_text(text or "")
@@ -107,6 +174,9 @@ def sanitize_followup_message_content(role: str, text: str) -> str:
     if sum(phrase in cleaned for phrase in _JAPANESE_RULE_ECHO_PHRASES) >= 2:
         return ""
     cleaned = _strip_followup_format_noise(cleaned)
+    cleaned = _FOLLOWUP_TRAILING_INSTRUCTION_RE.sub("", cleaned).strip()
+    if _FOLLOWUP_INSTRUCTION_ECHO_PREFIX_RE.match(cleaned):
+        return ""
     if _ENGLISH_META_PREFIX_RE.match(cleaned):
         return ""
     if _looks_like_token_soup(cleaned):

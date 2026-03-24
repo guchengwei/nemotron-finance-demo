@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 import aiosqlite
 
 from config import settings
-from followup_sanitizer import sanitize_followup_message_content
+from followup_sanitizer import sanitize_followup_message_content, strip_followup_question_echo_prefix
 from models import HistoryListResponse, SurveyRunSummary, SurveyRunDetail, ReportResponse
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ async def get_history_run(run_id: str):
             [run_id]
         )
 
-    # Group chats by persona
+    # Group chats by persona while preserving the stored sequence for display.
     followup_chats: dict = {}
     for row in chat_rows:
         r = dict(row)
@@ -82,6 +82,14 @@ async def get_history_run(run_id: str):
             continue
         if pid not in followup_chats:
             followup_chats[pid] = []
+
+        if r["role"] == "assistant" and followup_chats[pid]:
+            previous = followup_chats[pid][-1]
+            if previous["role"] == "user":
+                content = strip_followup_question_echo_prefix(content, previous["content"]).strip()
+                if not content:
+                    continue
+
         followup_chats[pid].append({"role": r["role"], "content": content})
 
     report = None

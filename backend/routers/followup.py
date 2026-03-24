@@ -18,7 +18,11 @@ from models import (
     FollowUpSuggestionRequest,
     FollowUpSuggestionResponse,
 )
-from followup_sanitizer import sanitize_followup_message_content
+from followup_sanitizer import (
+    match_followup_question_echo_prefix,
+    sanitize_followup_message_content,
+    strip_followup_question_echo_prefix,
+)
 from llm import generate_followup_suggestions, sanitize_answer_text, stream_followup_answer
 from prompts import build_followup_system_prompt
 
@@ -142,8 +146,16 @@ async def _followup_stream(request: FollowUpRequest):
                             if pending_visible_prefix
                             else clean_chunk
                         )
-                    clean_chunk = sanitize_followup_message_content("assistant", pending_visible_prefix)
-                    if not clean_chunk:
+                    candidate = sanitize_followup_message_content("assistant", pending_visible_prefix)
+                    if not candidate:
+                        continue
+
+                    echo_status, _echo_end = match_followup_question_echo_prefix(candidate, request.question)
+                    if echo_status == "partial":
+                        continue
+
+                    clean_chunk = strip_followup_question_echo_prefix(candidate, request.question)
+                    if not clean_chunk.strip():
                         continue
                     emitted = True
                     for thinking_chunk in pending_thinking:

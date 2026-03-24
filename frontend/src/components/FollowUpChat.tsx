@@ -297,22 +297,29 @@ export default function FollowUpChat() {
           </div>
         </div>
 
-        <button
-          onClick={() => setStep(4)}
-          className="text-xs text-fin-muted transition-colors hover:text-fin-accent"
-        >
-          ← レポートに戻る
-        </button>
+        <div className="rounded-[1.5rem] border border-fin-border bg-fin-panel/55 p-3">
+          <div className="mb-2 text-[10px] font-semibold tracking-[0.16em] text-fin-muted">操作</div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setStep(4)}
+              className="flex items-center justify-between rounded-[1.15rem] border border-fin-border bg-fin-surface px-3 py-2.5 text-left text-sm text-fin-ink shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent"
+            >
+              <span>← レポートに戻る</span>
+              <span aria-hidden="true" className="text-[10px] font-semibold tracking-[0.14em] text-fin-muted">TAB 4</span>
+            </button>
 
-        <button
-          onClick={() => {
-            void clearHistory()
-          }}
-          disabled={sending}
-          className="text-xs text-fin-muted transition-colors hover:text-fin-accent disabled:opacity-50"
-        >
-          履歴を消去
-        </button>
+            <button
+              onClick={() => {
+                void clearHistory()
+              }}
+              disabled={sending}
+              className="flex items-center justify-between rounded-[1.15rem] border border-fin-danger/30 bg-fin-danger/5 px-3 py-2.5 text-left text-sm text-fin-danger transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-danger hover:bg-fin-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span>履歴を消去</span>
+              <span aria-hidden="true" className="text-[10px] font-semibold tracking-[0.14em] text-fin-danger/80">RESET</span>
+            </button>
+          </div>
+        </div>
 
         {theme && (
           <div className="rounded-[1.5rem] border border-fin-border bg-fin-panel/60 p-3">

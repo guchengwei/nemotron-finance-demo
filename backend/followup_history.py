@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from followup_sanitizer import sanitize_followup_message_content
+from followup_sanitizer import sanitize_followup_message_content, strip_followup_question_echo_prefix
 
 
 def normalize_followup_history(
@@ -37,6 +37,11 @@ def normalize_followup_history(
             continue
 
         if role != "assistant" or pending_user is None:
+            continue
+
+        content = strip_followup_question_echo_prefix(content, pending_user).strip()
+        if not content:
+            pending_user = None
             continue
 
         replay_history.append({"role": "user", "content": pending_user})

@@ -281,6 +281,81 @@ def test_followup_does_not_retry_or_switch_thinking_modes_on_english_meta_reason
     assert calls == [True]
 
 
+def test_followup_think_off_replaces_question_echo_only_answer_with_fallback(followup_client_with_thinking):
+    """Think-off follow-up should not persist or return the user's question as the assistant answer."""
+    question = "資産運用に対する印象を教えてください"
+    calls: list[bool] = []
+
+    async def mock_stream(*args, **kwargs):
+        calls.append(kwargs["enable_thinking"])
+        yield ("answer", question)
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client_with_thinking.post(
+            "/api/followup/ask",
+            json={
+                "run_id": "run-think-off",
+                "persona_uuid": "p1",
+                "question": question,
+            },
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert calls == [False]
+    assert question not in resp.text
+    assert "（回答を取得できませんでした。もう一度お試しください。）" in resp.text
+
+    conn = sqlite3.connect(settings.history_db_path)
+    try:
+        rows = conn.execute(
+            "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? ORDER BY id",
+            ("run-think-off", "p1"),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert rows[-2] == ("user", question)
+    assert rows[-1] == ("assistant", "（回答を取得できませんでした。もう一度お試しください。）")
+
+
+def test_followup_replaces_followup_instruction_echo_only_answer_with_fallback(followup_client):
+    """Follow-up instruction echo must not be persisted as the assistant answer."""
+
+    async def mock_stream(*args, **kwargs):
+        yield (
+            "answer",
+            "現在の質問にだけ答えてください。先の回答内容を再利用するのではなく、新しい質問への応答として、"
+            "この人物の立場から自然に返答してください。【質問】投資信託のオンライン販売プラットフォームで、"
+            "特に注目している機能は何ですか？",
+        )
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={
+                "run_id": "run1",
+                "persona_uuid": "p1",
+                "question": "料金面で気になる点はありますか？",
+            },
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert "（回答を取得できませんでした。もう一度お試しください。）" in resp.text
+
+    conn = sqlite3.connect(settings.history_db_path)
+    try:
+        rows = conn.execute(
+            "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? ORDER BY id",
+            ("run1", "p1"),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert rows[-1][1] == "（回答を取得できませんでした。もう一度お試しください。）"
+
+
 def test_followup_excludes_dangling_trailing_user_turn_from_replayed_history(followup_client):
     hist_conn = sqlite3.connect(settings.history_db_path)
     hist_conn.execute(
@@ -315,6 +390,38 @@ def test_followup_excludes_dangling_trailing_user_turn_from_replayed_history(fol
     assert captured_messages == [[
         {"role": "user", "content": "過去の質問1"},
         {"role": "assistant", "content": "過去の回答1"},
+        {"role": "user", "content": "今回の質問"},
+    ]]
+
+
+def test_followup_excludes_echoed_assistant_turn_from_replayed_history(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "資産運用に対する印象を教えてください"),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "資産運用に対する印象を教えてください"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    captured_messages: list[list[dict]] = []
+
+    async def mock_stream(system_prompt, messages, enable_thinking=True):
+        captured_messages.append(messages)
+        yield ("answer", "正常回答")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={"run_id": "run1", "persona_uuid": "p1", "question": "今回の質問"},
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert captured_messages == [[
         {"role": "user", "content": "今回の質問"},
     ]]
 
