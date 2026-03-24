@@ -182,3 +182,22 @@ def sanitize_followup_message_content(role: str, text: str) -> str:
     if _looks_like_token_soup(cleaned):
         return ""
     return cleaned
+
+
+def normalize_followup_user_question(text: str) -> str:
+    """Normalize persisted user question text for replay and dedupe comparisons."""
+    fallback = str(text or "").strip()
+    cleaned = sanitize_answer_text(text or "")
+    cleaned = re.sub(r"```(?:json)?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"[\r\n\t\u3000]+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    wrappers = (("「", "」"), ("『", "』"), ('"', '"'), ("'", "'"), ("`", "`"))
+    for left, right in wrappers:
+        if len(cleaned) >= 2 and cleaned.startswith(left) and cleaned.endswith(right):
+            inner = cleaned[1:-1].strip()
+            if inner:
+                cleaned = inner
+            break
+
+    return cleaned or fallback
