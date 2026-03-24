@@ -643,7 +643,7 @@ async def generate_followup_suggestions(
                     break
             if len(accepted) < 3:
                 backfill = _fallback_followup_suggestions(
-                    [],
+                    previous_answers,
                     chat_history,
                     excluded_questions=excluded | accepted_keys,
                 )

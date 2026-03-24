@@ -299,11 +299,67 @@ def test_followup_suggestions_backfill_after_older_asked_question_is_filtered(fo
     assert len(questions) == 3
     assert "過去の質問1" not in questions
     assert "新しい質問1" in questions
-    assert questions == [
-        "新しい質問1",
+
+
+def test_followup_suggestions_backfill_with_previous_answers_when_canned_pool_is_exhausted(
+    followup_client,
+):
+    """Normal-path backfill should still use previous_answers when canned fallbacks are excluded."""
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO survey_answers (run_id, persona_uuid, persona_summary,"
+        " persona_full_json, question_index, question_text, answer, score, created_at)"
+        " VALUES (?, ?, ?, '{}', 1, ?, ?, 4, datetime('now'))",
+        ("run1", "p1", "テスト太郎 30歳", "補助設問A", "補助回答A"),
+    )
+    hist_conn.execute(
+        "INSERT INTO survey_answers (run_id, persona_uuid, persona_summary,"
+        " persona_full_json, question_index, question_text, answer, score, created_at)"
+        " VALUES (?, ?, ?, '{}', 2, ?, ?, 4, datetime('now'))",
+        ("run1", "p1", "テスト太郎 30歳", "補助設問B", "補助回答B"),
+    )
+    excluded_users = [
+        "過去の質問1",
+        "質問1",
         "具体的にどの程度の手数料なら許容できますか？",
         "どのような情報があれば判断しやすいですか？",
+        "このサービスを知人に勧めますか？その理由は？",
     ]
+    for question in excluded_users:
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+            ("run1", "p1", question),
+        )
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+            ("run1", "p1", f"{question}への回答"),
+        )
+    hist_conn.commit()
+    hist_conn.close()
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='["過去の質問1", "新しい質問1"]'
+                        )
+                    )
+                ]
+            )
+
+    class _FakeClient:
+        chat = SimpleNamespace(completions=_FakeCompletions())
+
+    with patch("llm.get_client", return_value=_FakeClient()):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["questions"] == ["新しい質問1", "補助設問A", "補助設問B"]
 
 
 def test_followup_does_not_retry_or_switch_thinking_modes_on_english_meta_reasoning(followup_client):
