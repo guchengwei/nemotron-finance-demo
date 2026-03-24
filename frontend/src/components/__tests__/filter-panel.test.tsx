@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FilterPanel from '../FilterPanel'
@@ -62,6 +62,7 @@ function deferred<T>() {
 
 describe('FilterPanel', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     useStore.setState({ filters: null })
     mockedApi.getFilters.mockResolvedValue(filtersResponse)
     mockedApi.getCount.mockResolvedValue({ total_matching: 100 })
@@ -69,6 +70,7 @@ describe('FilterPanel', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.useRealTimers()
   })
 
@@ -77,6 +79,78 @@ describe('FilterPanel', () => {
 
     expect(await screen.findByText('100')).toBeInTheDocument()
     expect(mockedApi.getFilters).toHaveBeenCalled()
+  })
+
+  it('keeps the default filter state after filters load without requesting a filtered count', async () => {
+    vi.useFakeTimers()
+
+    try {
+      render(<FilterPanel />)
+
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(screen.getByText('100')).toBeInTheDocument()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      const [sexSelect, regionSelect, prefectureSelect, educationSelect] = screen.getAllByRole('combobox')
+      const [ageMinInput, ageMaxInput] = screen.getAllByRole('spinbutton')
+      const occupationInput = screen.getByPlaceholderText('職業を入力...')
+
+      expect(sexSelect).toHaveValue('')
+      expect(regionSelect).toHaveValue('')
+      expect(prefectureSelect).toHaveValue('')
+      expect(occupationInput).toHaveValue('')
+      expect(educationSelect).toHaveValue('')
+      expect(ageMinInput).toHaveValue(20)
+      expect(ageMaxInput).toHaveValue(80)
+      expect(mockedApi.getCount).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('clicking ランダム randomizes filters and requests a filtered count', async () => {
+    const user = userEvent.setup()
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    mockedApi.getCount.mockResolvedValueOnce({ total_matching: 42 })
+
+    try {
+      render(<FilterPanel />)
+
+      await screen.findByText('100')
+      await user.click(screen.getByRole('button', { name: 'ランダム' }))
+
+      await waitFor(() => {
+        expect(mockedApi.getCount).toHaveBeenCalledTimes(1)
+      })
+
+      const [sexSelect, regionSelect, prefectureSelect, educationSelect] = screen.getAllByRole('combobox')
+      const [ageMinInput, ageMaxInput] = screen.getAllByRole('spinbutton')
+      const occupationInput = screen.getByPlaceholderText('職業を入力...')
+      const expectedQuery = {
+        sex: sexSelect.value || undefined,
+        age_min: Number(ageMinInput.value),
+        age_max: Number(ageMaxInput.value),
+        region: regionSelect.value || undefined,
+        prefecture: prefectureSelect.value || undefined,
+        occupation: occupationInput.value || undefined,
+        education: educationSelect.value || undefined,
+      }
+
+      expect(sexSelect).not.toHaveValue('')
+      expect(regionSelect).not.toHaveValue('')
+      expect(occupationInput).toHaveValue('')
+      expect(educationSelect).toHaveValue('')
+      expect(ageMinInput).not.toHaveValue(20)
+      expect(ageMaxInput).not.toHaveValue(80)
+      expect(mockedApi.getCount).toHaveBeenCalledWith(expectedQuery, expect.any(AbortSignal))
+      await screen.findByText('42')
+    } finally {
+      randomSpy.mockRestore()
+    }
   })
 
   it('changing filter requests updated hit count', async () => {

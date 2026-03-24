@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App'
 import { api } from '../../api'
 import { useStore } from '../../store'
@@ -56,8 +56,13 @@ const sampledPersona = {
   career_goals_and_ambitions: '昇進',
 }
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe('Sidebar new survey', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     useStore.setState({ dbReady: true })
     mockedApi.getHistory.mockResolvedValue({ runs: [] })
     mockedApi.getFilters.mockResolvedValue(filtersResponse)
@@ -102,6 +107,43 @@ describe('Sidebar new survey', () => {
     await user.click(screen.getByRole('button', { name: '＋ 新規調査' }))
 
     expect(await screen.findByRole('heading', { name: 'ペルソナ選択' })).toBeInTheDocument()
+  })
+
+  it('new survey remounts step one with default filters and no count request', async () => {
+    vi.useFakeTimers()
+    useStore.setState({ selectedPersonas: [sampledPersona] })
+
+    try {
+      render(<App />)
+
+      expect(screen.getByText('設定済み（閲覧のみ）')).toBeInTheDocument()
+      expect(screen.getByText('1名 抽出済み')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: '＋ 新規調査' }))
+
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(screen.getByRole('heading', { name: 'ペルソナ選択' })).toBeInTheDocument()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      const [sexSelect, regionSelect, prefectureSelect, educationSelect] = screen.getAllByRole('combobox')
+      const [ageMinInput, ageMaxInput] = screen.getAllByRole('spinbutton')
+      const occupationInput = screen.getByPlaceholderText('職業を入力...')
+
+      expect(sexSelect).toHaveValue('')
+      expect(regionSelect).toHaveValue('')
+      expect(prefectureSelect).toHaveValue('')
+      expect(occupationInput).toHaveValue('')
+      expect(educationSelect).toHaveValue('')
+      expect(ageMinInput).toHaveValue(20)
+      expect(ageMaxInput).toHaveValue(80)
+      expect(mockedApi.getCount).toHaveBeenCalledTimes(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
