@@ -40,7 +40,6 @@ export default function FilterPanel() {
   const [countLoading, setCountLoading] = useState(false)
   const [personas, setPersonas] = useState<Persona[]>([])
   const latestCountRequest = useRef(0)
-  const autoRandomized = useRef(false)
 
   const queryParams = useMemo(() => ({
     sex: sex || undefined,
@@ -77,12 +76,6 @@ export default function FilterPanel() {
       active = false
     }
   }, [filters, setFilters])
-
-  useEffect(() => {
-    if (!filters || autoRandomized.current) return
-    autoRandomized.current = true
-    randomizeFilters()
-  }, [filters])
 
   useEffect(() => {
     if (!filters) return

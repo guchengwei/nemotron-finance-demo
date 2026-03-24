@@ -62,6 +62,7 @@ function deferred<T>() {
 
 describe('FilterPanel', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     useStore.setState({ filters: null })
     mockedApi.getFilters.mockResolvedValue(filtersResponse)
     mockedApi.getCount.mockResolvedValue({ total_matching: 100 })
@@ -69,6 +70,7 @@ describe('FilterPanel', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.useRealTimers()
   })
 
@@ -77,6 +79,70 @@ describe('FilterPanel', () => {
 
     expect(await screen.findByText('100')).toBeInTheDocument()
     expect(mockedApi.getFilters).toHaveBeenCalled()
+  })
+
+  it('keeps the default filter state after filters load without requesting a filtered count', async () => {
+    render(<FilterPanel />)
+
+    expect(await screen.findByText('100')).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 350))
+
+    const [sexSelect, regionSelect, prefectureSelect, educationSelect] = screen.getAllByRole('combobox')
+    const [ageMinInput, ageMaxInput] = screen.getAllByRole('spinbutton')
+
+    expect(sexSelect).toHaveValue('')
+    expect(regionSelect).toHaveValue('')
+    expect(prefectureSelect).toHaveValue('')
+    expect(educationSelect).toHaveValue('')
+    expect(ageMinInput).toHaveValue(20)
+    expect(ageMaxInput).toHaveValue(80)
+    expect(mockedApi.getCount).not.toHaveBeenCalled()
+  })
+
+  it('clicking ランダム randomizes filters and requests a filtered count', async () => {
+    const user = userEvent.setup()
+    const randomSpy = vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0.9)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0.9)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+    mockedApi.getCount.mockResolvedValueOnce({ total_matching: 42 })
+
+    try {
+      render(<FilterPanel />)
+
+      await screen.findByText('100')
+      await user.click(screen.getByRole('button', { name: 'ランダム' }))
+
+      await waitFor(() => {
+        expect(mockedApi.getCount).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sex: '男',
+            age_min: 20,
+            age_max: 35,
+            region: '関東',
+            prefecture: '東京都',
+          }),
+          expect.any(AbortSignal),
+        )
+      })
+
+      const [sexSelect, regionSelect, prefectureSelect, educationSelect] = screen.getAllByRole('combobox')
+      const [ageMinInput, ageMaxInput] = screen.getAllByRole('spinbutton')
+
+      expect(sexSelect).toHaveValue('男')
+      expect(regionSelect).toHaveValue('関東')
+      expect(prefectureSelect).toHaveValue('東京都')
+      expect(educationSelect).toHaveValue('')
+      expect(ageMinInput).toHaveValue(20)
+      expect(ageMaxInput).toHaveValue(35)
+      await screen.findByText('42')
+    } finally {
+      randomSpy.mockRestore()
+    }
   })
 
   it('changing filter requests updated hit count', async () => {
