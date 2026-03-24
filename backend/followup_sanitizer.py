@@ -83,6 +83,10 @@ _QUESTION_ECHO_SKIP_CHARS = set(
     "、。，．.!！?？:：;；-ー～〜…"
 )
 
+_FENCE_OPEN_LINE_RE = re.compile(r"(?i)^\s*```(?:[a-z0-9_-]+)?\s*$")
+_FENCE_CLOSE_LINE_RE = re.compile(r"^\s*```\s*$")
+_FENCE_SENTINEL_LINE_RE = re.compile(r"(?i)^\s*```(?:[a-z0-9_-]+)?\s*```\s*$")
+
 
 def _strip_leading_assistant_label(text: str) -> str:
     stripped = text.lstrip()
@@ -180,5 +184,32 @@ def sanitize_followup_message_content(role: str, text: str) -> str:
     if _ENGLISH_META_PREFIX_RE.match(cleaned):
         return ""
     if _looks_like_token_soup(cleaned):
+        return ""
+    return cleaned
+
+
+def normalize_followup_user_question(text: str) -> str:
+    """Normalize persisted user question text for replay and dedupe comparisons."""
+    cleaned = sanitize_answer_text(text or "")
+
+    lines = cleaned.splitlines()
+    while lines and (_FENCE_OPEN_LINE_RE.match(lines[0]) or _FENCE_SENTINEL_LINE_RE.match(lines[0])):
+        lines.pop(0)
+    while lines and (_FENCE_CLOSE_LINE_RE.match(lines[-1]) or _FENCE_SENTINEL_LINE_RE.match(lines[-1])):
+        lines.pop()
+    cleaned = "\n".join(lines)
+
+    cleaned = re.sub(r"[\r\n\t\u3000]+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    wrappers = (("「", "」"), ("『", "』"))
+    for left, right in wrappers:
+        if len(cleaned) >= 2 and cleaned.startswith(left) and cleaned.endswith(right):
+            inner = cleaned[1:-1].strip()
+            if inner:
+                cleaned = inner
+            break
+
+    if cleaned in {"「」", "『』", '""', "''", "``", "```", "```json```"}:
         return ""
     return cleaned

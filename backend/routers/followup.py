@@ -20,6 +20,7 @@ from models import (
 )
 from followup_sanitizer import (
     match_followup_question_echo_prefix,
+    normalize_followup_user_question,
     sanitize_followup_message_content,
     strip_followup_question_echo_prefix,
 )
@@ -67,6 +68,7 @@ async def _followup_stream(request: FollowUpRequest):
             [request.run_id, request.persona_uuid]
         )
         chat_history, _asked_questions = normalize_followup_history(chat_rows)
+        normalized_question = normalize_followup_user_question(request.question)
 
         # Get financial extension from persona data (may be nested under financial_extension)
         fe = persona.get("financial_extension") or {}
@@ -150,11 +152,11 @@ async def _followup_stream(request: FollowUpRequest):
                     if not candidate:
                         continue
 
-                    echo_status, _echo_end = match_followup_question_echo_prefix(candidate, request.question)
+                    echo_status, _echo_end = match_followup_question_echo_prefix(candidate, normalized_question)
                     if echo_status == "partial":
                         continue
 
-                    clean_chunk = strip_followup_question_echo_prefix(candidate, request.question)
+                    clean_chunk = strip_followup_question_echo_prefix(candidate, normalized_question)
                     if not clean_chunk.strip():
                         continue
                     emitted = True
@@ -237,20 +239,34 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
     except Exception:
         persona = {}
 
-    asked = set(asked_questions)
+    asked = {
+        normalized
+        for question in asked_questions
+        if (normalized := normalize_followup_user_question(question))
+    }
     generated = await generate_followup_suggestions(
         survey_theme=run["survey_theme"],
         persona=persona,
         previous_answers=answers,
         chat_history=chat_history,
+        excluded_questions=asked,
     )
 
     filtered: list[str] = []
+    filtered_seen: set[str] = set()
     for question in generated:
         cleaned = str(question).strip()
-        if not cleaned or cleaned in asked or cleaned in filtered:
+        if not cleaned:
+            continue
+        normalized_cleaned = normalize_followup_user_question(cleaned)
+        if (
+            not normalized_cleaned
+            or normalized_cleaned in asked
+            or normalized_cleaned in filtered_seen
+        ):
             continue
         filtered.append(cleaned)
+        filtered_seen.add(normalized_cleaned)
         if len(filtered) == 3:
             break
 
