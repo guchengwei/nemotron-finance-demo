@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test'
 import { filtersFixture, samplePersona } from './fixtures/personas'
 
 test('new survey resets app from progressed state', async ({ page }) => {
+  let countRequests = 0
+
   await page.route('**/ready', async (route) => {
     await route.fulfill({
       status: 200,
@@ -35,6 +37,7 @@ test('new survey resets app from progressed state', async ({ page }) => {
   })
 
   await page.route('**/api/personas/count**', async (route) => {
+    countRequests += 1
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -61,4 +64,13 @@ test('new survey resets app from progressed state', async ({ page }) => {
 
   await expect(page.getByTestId('quick-demo-button')).toBeVisible()
   await expect(page.getByText('設定済み（閲覧のみ）')).toHaveCount(0)
+  await expect(page.locator('select').first()).toHaveValue('')
+  await expect(page.locator('select').nth(1)).toHaveValue('')
+  await expect(page.locator('select').nth(2)).toHaveValue('')
+  await expect(page.locator('select').nth(3)).toHaveValue('')
+  await expect(page.locator('input[type="number"]').first()).toHaveValue('20')
+  await expect(page.locator('input[type="number"]').nth(1)).toHaveValue('80')
+  await expect(page.getByPlaceholder('職業を入力...')).toHaveValue('')
+  await page.waitForTimeout(300)
+  expect(countRequests).toBe(0)
 })
