@@ -496,6 +496,40 @@ def test_followup_replays_historical_user_turn_preserves_ascii_quoted_content(fo
     ]]
 
 
+def test_followup_replays_normalized_multiline_fenced_historical_user_turn(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "```json\n過去の質問です？\n```"),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "過去の回答です"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    captured_messages: list[list[dict]] = []
+
+    async def mock_stream(system_prompt, messages, enable_thinking=True):
+        captured_messages.append(messages)
+        yield ("answer", "正常回答")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={"run_id": "run1", "persona_uuid": "p1", "question": "今回の質問"},
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert captured_messages == [[
+        {"role": "user", "content": "過去の質問です？"},
+        {"role": "assistant", "content": "過去の回答です"},
+        {"role": "user", "content": "今回の質問"},
+    ]]
+
+
 def test_followup_excludes_echoed_assistant_turn_from_replayed_history(followup_client):
     hist_conn = sqlite3.connect(settings.history_db_path)
     hist_conn.execute(
@@ -678,6 +712,32 @@ def test_followup_suggestions_exclude_wrapped_generated_duplicate_question(follo
     with patch(
         "routers.followup.generate_followup_suggestions",
         return_value=["「過去の質問です？」", "新しい質問1", "新しい質問2", "新しい質問3"],
+    ):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["questions"] == ["新しい質問1", "新しい質問2", "新しい質問3"]
+
+
+def test_followup_suggestions_exclude_multiline_fenced_historical_duplicate_question(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "```json\n過去の質問です？\n```"),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "過去の回答です"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    with patch(
+        "routers.followup.generate_followup_suggestions",
+        return_value=["過去の質問です？", "新しい質問1", "新しい質問2", "新しい質問3"],
     ):
         resp = followup_client.post(
             "/api/followup/suggestions",

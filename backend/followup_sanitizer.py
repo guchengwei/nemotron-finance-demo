@@ -83,7 +83,9 @@ _QUESTION_ECHO_SKIP_CHARS = set(
     "、。，．.!！?？:：;；-ー～〜…"
 )
 
-_FENCE_ONLY_LINE_RE = re.compile(r"(?is)^\s*```(?:[a-z0-9_-]+)?\s*```\s*$|^\s*```\s*$")
+_FENCE_OPEN_LINE_RE = re.compile(r"(?i)^\s*```(?:[a-z0-9_-]+)?\s*$")
+_FENCE_CLOSE_LINE_RE = re.compile(r"^\s*```\s*$")
+_FENCE_SENTINEL_LINE_RE = re.compile(r"(?i)^\s*```(?:[a-z0-9_-]+)?\s*```\s*$")
 
 
 def _strip_leading_assistant_label(text: str) -> str:
@@ -191,9 +193,9 @@ def normalize_followup_user_question(text: str) -> str:
     cleaned = sanitize_answer_text(text or "")
 
     lines = cleaned.splitlines()
-    while lines and _FENCE_ONLY_LINE_RE.match(lines[0]):
+    while lines and (_FENCE_OPEN_LINE_RE.match(lines[0]) or _FENCE_SENTINEL_LINE_RE.match(lines[0])):
         lines.pop(0)
-    while lines and _FENCE_ONLY_LINE_RE.match(lines[-1]):
+    while lines and (_FENCE_CLOSE_LINE_RE.match(lines[-1]) or _FENCE_SENTINEL_LINE_RE.match(lines[-1])):
         lines.pop()
     cleaned = "\n".join(lines)
 
