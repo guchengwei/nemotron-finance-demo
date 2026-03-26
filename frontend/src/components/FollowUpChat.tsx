@@ -24,9 +24,9 @@ function looksLikeCode(s: string) {
   return /[{}]/.test(s) || /"\w+":\s*"/.test(s)
 }
 
-function isRenderableSuggestion(question: string) {
+function normalizeRenderableSuggestion(question: string) {
   const trimmed = question.trim()
-  return trimmed.length > 0 && !looksLikeCode(trimmed)
+  return trimmed.length > 0 && !looksLikeCode(trimmed) ? trimmed : null
 }
 
 function scrollToBottom(container: HTMLDivElement | null) {
@@ -123,7 +123,7 @@ export default function FollowUpChat() {
     api.getFollowupSuggestions(runId, followupPersona.uuid)
       .then((response) => {
         if (active) {
-          setSuggestedQuestions(response.questions.filter(isRenderableSuggestion))
+          setSuggestedQuestions(response.questions.map(normalizeRenderableSuggestion).filter((question): question is string => question !== null))
         }
       })
       .catch(() => {
@@ -178,7 +178,7 @@ export default function FollowUpChat() {
         // Re-fetch suggestions for the next turn
         api.getFollowupSuggestions(runId, followupPersona.uuid)
           .then((res) => {
-            setSuggestedQuestions(res.questions.filter(isRenderableSuggestion))
+            setSuggestedQuestions(res.questions.map(normalizeRenderableSuggestion).filter((question): question is string => question !== null))
           })
           .catch(() => setSuggestedQuestions(FALLBACK_SUGGESTED_QUESTIONS))
       },

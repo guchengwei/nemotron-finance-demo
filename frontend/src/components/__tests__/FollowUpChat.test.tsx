@@ -81,7 +81,10 @@ function setScrollMetrics(element: HTMLElement, { scrollTop }: { scrollTop: numb
 describe('FollowUpChat', () => {
   beforeEach(() => {
     seedStore()
-    mockedApi.getFollowupSuggestions?.mockResolvedValue({ questions: ['履歴質問1', '履歴質問2', '履歴質問3'] } as never)
+    mockedApi.getFollowupSuggestions.mockReset()
+    mockedApi.clearFollowupHistory.mockReset()
+    mockedStartFollowupSSE.mockReset()
+    mockedApi.getFollowupSuggestions.mockResolvedValue({ questions: ['履歴質問1', '履歴質問2', '履歴質問3'] } as never)
   })
 
   it('clears suggestion chips immediately when the user sends a message', async () => {
@@ -182,6 +185,35 @@ describe('FollowUpChat', () => {
     mockedApi.getFollowupSuggestions.mockRejectedValueOnce(new Error('network failed'))
 
     render(<FollowUpChat />)
+
+    expect(await screen.findByRole('button', { name: '具体的にどの程度の手数料なら許容できますか？' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'どのような情報があれば判断しやすいですか？' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'このサービスを知人に勧めますか？その理由は？' })).toBeInTheDocument()
+  })
+
+  it('shows trimmed fallback chips after the post-answer suggestion refresh fails', async () => {
+    const user = userEvent.setup()
+    let onDone: ((text: string) => void) | undefined
+
+    mockedApi.getFollowupSuggestions
+      .mockResolvedValueOnce({ questions: ['  初期候補1  ', '  初期候補2  ', '  初期候補3  '] } as never)
+      .mockRejectedValueOnce(new Error('network failed'))
+
+    mockedStartFollowupSSE.mockImplementation((_request, _onToken, handleDone) => {
+      onDone = handleDone
+      return vi.fn()
+    })
+
+    render(<FollowUpChat />)
+
+    const initialChip = await screen.findByRole('button', { name: '初期候補1' })
+    expect(initialChip.textContent).toBe('初期候補1')
+
+    await user.click(initialChip)
+
+    await act(async () => {
+      onDone?.('回答完了')
+    })
 
     expect(await screen.findByRole('button', { name: '具体的にどの程度の手数料なら許容できますか？' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'どのような情報があれば判断しやすいですか？' })).toBeInTheDocument()
