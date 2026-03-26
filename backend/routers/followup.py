@@ -206,7 +206,7 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
 
         # Read user chat rows only; assistant replies are not part of suggestion context.
         user_chat_rows = await history_db.execute_fetchall(
-            "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? AND role = 'user' ORDER BY created_at",
+            "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? AND role = 'user' ORDER BY created_at, id",
             [request.run_id, request.persona_uuid]
         )
 

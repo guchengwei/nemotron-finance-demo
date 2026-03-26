@@ -522,6 +522,76 @@ def test_followup_suggestions_passes_only_recent_user_questions_to_generator(fol
     assert call["excluded_questions"] == {normalize_followup_question(question) for question in user_questions}
 
 
+def test_followup_suggestions_orders_user_history_deterministically(followup_client):
+    """Suggestion history read must break created_at ties with id so the last 3 questions are stable."""
+
+    captured_queries: list[tuple[str, list[str]]] = []
+
+    class _FakeConn:
+        row_factory = None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute_fetchall(self, query, params):
+            captured_queries.append((query, list(params)))
+            if "FROM survey_runs" in query:
+                return [{"id": "run1", "survey_theme": "テスト"}]
+            if "FROM survey_answers" in query:
+                return [
+                    {
+                        "persona_full_json": "{}",
+                        "question_index": 0,
+                        "question_text": "Q1",
+                        "answer": "A1",
+                    }
+                ]
+            if "FROM followup_chats" in query:
+                return [
+                    {"role": "user", "content": "質問1"},
+                    {"role": "user", "content": "質問2"},
+                    {"role": "user", "content": "質問3"},
+                    {"role": "user", "content": "質問4"},
+                ]
+            raise AssertionError(f"Unexpected query: {query}")
+
+        async def execute(self, *args, **kwargs):
+            return None
+
+        async def commit(self):
+            return None
+
+    class _FakeConnect:
+        def __init__(self, conn):
+            self._conn = conn
+
+        async def __aenter__(self):
+            return self._conn
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def mock_generate_followup_suggestions(**kwargs):
+        return ["新しい質問1", "新しい質問2", "新しい質問3"]
+
+    fake_conn = _FakeConn()
+    with (
+        patch("routers.followup.aiosqlite.connect", return_value=_FakeConnect(fake_conn)),
+        patch("routers.followup.generate_followup_suggestions", side_effect=mock_generate_followup_suggestions),
+    ):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    followup_query = next(query for query, _ in captured_queries if "FROM followup_chats" in query)
+    assert "ORDER BY created_at, id" in followup_query
+
+
 def test_followup_suggestions_normalizes_candidates_before_final_filter(followup_client):
     hist_conn = sqlite3.connect(settings.history_db_path)
     hist_conn.execute(
