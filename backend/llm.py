@@ -619,48 +619,66 @@ async def generate_followup_suggestions(
         )
         text = sanitize_answer_text(resp.choices[0].message.content or "[]")
         text = re.sub(r'```(?:json)?\s*', '', text).strip()
-        json_match = re.search(r'\[.*\]', text, re.DOTALL)
-        if json_match:
-            text = json_match.group(0)
-        questions = json.loads(text)
-        if isinstance(questions, list):
-            accepted: list[str] = []
-            accepted_keys: set[str] = set()
-            for item in questions:
-                cleaned = str(item).strip()
-                if not cleaned:
-                    continue
-                normalized_cleaned = _normalize_followup_question(cleaned)
+
+        # Primary: numbered-line parser (more robust for this model)
+        raw_items: list[str] = re.findall(r'^\d+[.。)）]\s*(.+)', text, re.MULTILINE)
+        if len(raw_items) < 3:
+            # Fallback: JSON array parser
+            json_match = re.search(r'\[.*\]', text, re.DOTALL)
+            if json_match:
+                text = json_match.group(0)
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict):
+                        # Extract first string value from dict (e.g. {"question": "..."})
+                        extracted = next(
+                            (v for v in item.values() if isinstance(v, str) and v.strip()),
+                            None,
+                        )
+                        if extracted:
+                            raw_items.append(extracted)
+                    elif isinstance(item, str):
+                        raw_items.append(item)
+
+        accepted: list[str] = []
+        accepted_keys: set[str] = set()
+        for raw in raw_items:
+            cleaned = str(raw).strip()
+            # Safety guard: reject strings that look like code/JSON objects
+            if not cleaned or "{" in cleaned or "}" in cleaned:
+                continue
+            normalized_cleaned = _normalize_followup_question(cleaned)
+            if (
+                not normalized_cleaned
+                or normalized_cleaned in excluded
+                or normalized_cleaned in accepted_keys
+            ):
+                continue
+            accepted.append(cleaned)
+            accepted_keys.add(normalized_cleaned)
+            if len(accepted) == 3:
+                break
+        if len(accepted) < 3:
+            backfill = _fallback_followup_suggestions(
+                previous_answers,
+                chat_history,
+                excluded_questions=excluded | accepted_keys,
+            )
+            for candidate in backfill:
+                normalized_candidate = _normalize_followup_question(candidate)
                 if (
-                    not normalized_cleaned
-                    or normalized_cleaned in excluded
-                    or normalized_cleaned in accepted_keys
+                    not normalized_candidate
+                    or normalized_candidate in excluded
+                    or normalized_candidate in accepted_keys
                 ):
                     continue
-                accepted.append(cleaned)
-                accepted_keys.add(normalized_cleaned)
+                accepted.append(candidate)
+                accepted_keys.add(normalized_candidate)
                 if len(accepted) == 3:
                     break
-            if len(accepted) < 3:
-                backfill = _fallback_followup_suggestions(
-                    previous_answers,
-                    chat_history,
-                    excluded_questions=excluded | accepted_keys,
-                )
-                for candidate in backfill:
-                    normalized_candidate = _normalize_followup_question(candidate)
-                    if (
-                        not normalized_candidate
-                        or normalized_candidate in excluded
-                        or normalized_candidate in accepted_keys
-                    ):
-                        continue
-                    accepted.append(candidate)
-                    accepted_keys.add(normalized_candidate)
-                    if len(accepted) == 3:
-                        break
-            if accepted:
-                return accepted[:3]
+        if accepted:
+            return accepted[:3]
     except Exception as e:
         logger.warning("Followup suggestions generation failed: %s", e)
 

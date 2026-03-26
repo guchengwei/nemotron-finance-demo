@@ -84,7 +84,7 @@ describe('FollowUpChat', () => {
     mockedApi.getFollowupSuggestions?.mockResolvedValue({ questions: ['履歴質問1', '履歴質問2', '履歴質問3'] } as never)
   })
 
-  it('keeps survey-derived suggestions visible after conversation starts', async () => {
+  it('clears suggestion chips immediately when the user sends a message', async () => {
     const user = userEvent.setup()
     mockedStartFollowupSSE.mockReturnValue(vi.fn())
 
@@ -95,7 +95,8 @@ describe('FollowUpChat', () => {
 
     await user.click(screen.getByRole('button', { name: '履歴質問1' }))
 
-    expect(screen.getByRole('button', { name: '履歴質問1' })).toBeInTheDocument()
+    // Suggestions must be cleared immediately on send (before response arrives)
+    expect(screen.queryByRole('button', { name: '履歴質問1' })).not.toBeInTheDocument()
   })
 
   it('stops auto-follow when the user scrolls away from the bottom', async () => {
@@ -251,6 +252,22 @@ describe('FollowUpChat', () => {
     })
 
     expect(screen.getByText('保存される回答')).toBeInTheDocument()
+  })
+
+  it('does not show suggestion chips that look like JSON objects or dicts', async () => {
+    mockedApi.getFollowupSuggestions?.mockResolvedValue({
+      questions: [
+        "{'question': '質問A', 'reason': '理由'}",
+        '{"q": "質問B"}',
+        '有効な日本語の質問？',
+      ],
+    } as never)
+
+    render(<FollowUpChat />)
+
+    await screen.findByRole('button', { name: '有効な日本語の質問？' })
+
+    expect(screen.queryAllByRole('button', { name: /[{}]/ })).toHaveLength(0)
   })
 
   it('clears follow-up history for the selected persona after confirmation', async () => {

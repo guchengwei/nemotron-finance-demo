@@ -24,13 +24,17 @@ function sanitizeSuggestedQuestion(question: string) {
   return question.replace(/（[^）]*）/g, '').trim()
 }
 
+function looksLikeCode(s: string) {
+  return /[{}]/.test(s) || /"\w+":\s*"/.test(s)
+}
+
 function getSuggestedQuestions(sourceQuestions: string[]) {
   const seen = new Set<string>()
   const suggestions: string[] = []
 
   for (const question of sourceQuestions) {
     const cleaned = sanitizeSuggestedQuestion(question)
-    if (!cleaned || seen.has(cleaned)) continue
+    if (!cleaned || seen.has(cleaned) || looksLikeCode(cleaned)) continue
     seen.add(cleaned)
     suggestions.push(cleaned)
     if (suggestions.length === 3) break
@@ -135,7 +139,8 @@ export default function FollowUpChat() {
     api.getFollowupSuggestions(runId, followupPersona.uuid)
       .then((response) => {
         if (active) {
-          setSuggestedQuestions(response.questions.length > 0 ? response.questions : fallbackSuggestions)
+          const filtered = getSuggestedQuestions(response.questions)
+          setSuggestedQuestions(filtered.length > 0 ? filtered : fallbackSuggestions)
         }
       })
       .catch(() => {
@@ -147,13 +152,14 @@ export default function FollowUpChat() {
     return () => {
       active = false
     }
-  }, [followupPersona, runId, currentHistoryRun, questions])
+  }, [followupPersona, runId, questions])
 
   const send = (text: string) => {
     if (!text.trim() || !followupPersona || !runId || sending) return
     const questionText = text.trim()
     setInput('')
     setSending(true)
+    setSuggestedQuestions([])
     stickToBottomRef.current = true
 
     const userMsg: Message = { role: 'user', content: questionText }
@@ -186,6 +192,14 @@ export default function FollowUpChat() {
         ])
         setSending(false)
         cancelRef.current = null
+        // Re-fetch suggestions for the next turn
+        const fallback = getSuggestedQuestions(currentHistoryRun?.questions ?? questions)
+        api.getFollowupSuggestions(runId, followupPersona.uuid)
+          .then((res) => {
+            const filtered = getSuggestedQuestions(res.questions)
+            setSuggestedQuestions(filtered.length > 0 ? filtered : fallback)
+          })
+          .catch(() => setSuggestedQuestions(fallback))
       },
       (err) => {
         console.error('Followup error:', err)
