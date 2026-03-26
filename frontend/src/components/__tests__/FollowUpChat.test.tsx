@@ -178,6 +178,16 @@ describe('FollowUpChat', () => {
     consoleError.mockRestore()
   })
 
+  it('falls back to the static suggestion chips when suggestion fetch fails', async () => {
+    mockedApi.getFollowupSuggestions.mockRejectedValueOnce(new Error('network failed'))
+
+    render(<FollowUpChat />)
+
+    expect(await screen.findByRole('button', { name: '具体的にどの程度の手数料なら許容できますか？' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'どのような情報があれば判断しやすいですか？' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'このサービスを知人に勧めますか？その理由は？' })).toBeInTheDocument()
+  })
+
   it('refreshes suggestions after a completed answer', async () => {
     const user = userEvent.setup()
     let onDone: ((text: string) => void) | undefined
