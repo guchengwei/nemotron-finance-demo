@@ -678,3 +678,35 @@ def test_followup_limits_history_to_3_turns(followup_client):
     assert len(captured) == 7, f"Expected 7 messages, got {len(captured)}: {captured}"
     # The new question must be last
     assert captured[-1] == {"role": "user", "content": "最新質問"}
+
+
+def test_repetitive_answer_saved_as_placeholder(followup_client):
+    """If LLM repeats the previous answer, save （回答省略） instead of the repetition."""
+    sticky = "このサービスは勧めます。理由は、AIが客観的なデータに基づき、感情に左右されない資産設計を提案してくれるからです。"
+    # Seed history with the sticky phrase as the last assistant message
+    _seed_history(settings.history_db_path, [
+        ("user", "最初の質問"),
+        ("assistant", sticky),
+    ])
+
+    async def mock_stream_repeat(system_prompt, messages, enable_thinking=True):
+        # Simulate the model repeating the same sticky answer
+        yield ("answer", sticky)
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream_repeat):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={"run_id": "run1", "persona_uuid": "p1", "question": "次の質問"},
+            headers={"Accept": "text/event-stream"},
+        )
+    assert resp.status_code == 200, resp.text
+
+    # The DB should have the placeholder, not the repetitive answer
+    conn = sqlite3.connect(settings.history_db_path)
+    row = conn.execute(
+        "SELECT content FROM followup_chats WHERE run_id='run1' AND persona_uuid='p1'"
+        " AND role='assistant' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert row[0] == "（回答省略）", f"Expected placeholder, got: {row[0]!r}"
