@@ -2,6 +2,7 @@ import asyncio
 import json
 import sqlite3
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -257,6 +258,110 @@ def test_followup_suggestions_endpoint_returns_questions_and_excludes_asked_item
     assert body["questions"] == ["新しい質問1", "新しい質問2", "新しい質問3"]
 
 
+def test_followup_suggestions_backfill_after_older_asked_question_is_filtered(followup_client):
+    """Older asked questions outside replayed history must still be excluded during backfill."""
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    for idx in range(1, 5):
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+            ("run1", "p1", f"過去の質問{idx}"),
+        )
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+            ("run1", "p1", f"過去の回答{idx}"),
+        )
+    hist_conn.commit()
+    hist_conn.close()
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='["過去の質問1", "新しい質問1"]'
+                        )
+                    )
+                ]
+            )
+
+    class _FakeClient:
+        chat = SimpleNamespace(completions=_FakeCompletions())
+
+    with patch("llm.get_client", return_value=_FakeClient()):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    questions = resp.json()["questions"]
+    assert len(questions) == 3
+    assert "過去の質問1" not in questions
+    assert "新しい質問1" in questions
+
+
+def test_followup_suggestions_backfill_with_previous_answers_when_canned_pool_is_exhausted(
+    followup_client,
+):
+    """Normal-path backfill should still use previous_answers when canned fallbacks are excluded."""
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO survey_answers (run_id, persona_uuid, persona_summary,"
+        " persona_full_json, question_index, question_text, answer, score, created_at)"
+        " VALUES (?, ?, ?, '{}', 1, ?, ?, 4, datetime('now'))",
+        ("run1", "p1", "テスト太郎 30歳", "補助設問A", "補助回答A"),
+    )
+    hist_conn.execute(
+        "INSERT INTO survey_answers (run_id, persona_uuid, persona_summary,"
+        " persona_full_json, question_index, question_text, answer, score, created_at)"
+        " VALUES (?, ?, ?, '{}', 2, ?, ?, 4, datetime('now'))",
+        ("run1", "p1", "テスト太郎 30歳", "補助設問B", "補助回答B"),
+    )
+    excluded_users = [
+        "過去の質問1",
+        "質問1",
+        "具体的にどの程度の手数料なら許容できますか？",
+        "どのような情報があれば判断しやすいですか？",
+        "このサービスを知人に勧めますか？その理由は？",
+    ]
+    for question in excluded_users:
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+            ("run1", "p1", question),
+        )
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+            ("run1", "p1", f"{question}への回答"),
+        )
+    hist_conn.commit()
+    hist_conn.close()
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='["過去の質問1", "新しい質問1"]'
+                        )
+                    )
+                ]
+            )
+
+    class _FakeClient:
+        chat = SimpleNamespace(completions=_FakeCompletions())
+
+    with patch("llm.get_client", return_value=_FakeClient()):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["questions"] == ["新しい質問1", "補助設問A", "補助設問B"]
+
+
 def test_followup_does_not_retry_or_switch_thinking_modes_on_english_meta_reasoning(followup_client):
     """English meta-reasoning should not trigger a hidden retry or leak into the final answer."""
     calls: list[bool] = []
@@ -394,6 +499,142 @@ def test_followup_excludes_dangling_trailing_user_turn_from_replayed_history(fol
     ]]
 
 
+def test_followup_replays_normalized_historical_user_turn(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "\n```json```\n「過去の質問です？」"),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "過去の回答です"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    captured_messages: list[list[dict]] = []
+
+    async def mock_stream(system_prompt, messages, enable_thinking=True):
+        captured_messages.append(messages)
+        yield ("answer", "正常回答")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={"run_id": "run1", "persona_uuid": "p1", "question": "今回の質問"},
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert captured_messages == [[
+        {"role": "user", "content": "過去の質問です？"},
+        {"role": "assistant", "content": "過去の回答です"},
+        {"role": "user", "content": "今回の質問"},
+    ]]
+
+
+def test_followup_replays_historical_user_turn_preserves_inline_json_fence_text(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "これは```json```という文字列を含む質問ですか？"),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "過去の回答です"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    captured_messages: list[list[dict]] = []
+
+    async def mock_stream(system_prompt, messages, enable_thinking=True):
+        captured_messages.append(messages)
+        yield ("answer", "正常回答")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={"run_id": "run1", "persona_uuid": "p1", "question": "今回の質問"},
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert captured_messages == [[
+        {"role": "user", "content": "これは```json```という文字列を含む質問ですか？"},
+        {"role": "assistant", "content": "過去の回答です"},
+        {"role": "user", "content": "今回の質問"},
+    ]]
+
+
+def test_followup_replays_historical_user_turn_preserves_ascii_quoted_content(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", '"ETF"'),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "過去の回答です"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    captured_messages: list[list[dict]] = []
+
+    async def mock_stream(system_prompt, messages, enable_thinking=True):
+        captured_messages.append(messages)
+        yield ("answer", "正常回答")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={"run_id": "run1", "persona_uuid": "p1", "question": "今回の質問"},
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert captured_messages == [[
+        {"role": "user", "content": '"ETF"'},
+        {"role": "assistant", "content": "過去の回答です"},
+        {"role": "user", "content": "今回の質問"},
+    ]]
+
+
+def test_followup_replays_normalized_multiline_fenced_historical_user_turn(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "```json\n過去の質問です？\n```"),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "過去の回答です"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    captured_messages: list[list[dict]] = []
+
+    async def mock_stream(system_prompt, messages, enable_thinking=True):
+        captured_messages.append(messages)
+        yield ("answer", "正常回答")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={"run_id": "run1", "persona_uuid": "p1", "question": "今回の質問"},
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert captured_messages == [[
+        {"role": "user", "content": "過去の質問です？"},
+        {"role": "assistant", "content": "過去の回答です"},
+        {"role": "user", "content": "今回の質問"},
+    ]]
+
+
 def test_followup_excludes_echoed_assistant_turn_from_replayed_history(followup_client):
     hist_conn = sqlite3.connect(settings.history_db_path)
     hist_conn.execute(
@@ -513,7 +754,14 @@ def test_followup_suggestions_normalize_history_but_still_exclude_asked_question
 
     captured_chat_history: list[list[dict]] = []
 
-    async def mock_generate_followup_suggestions(*, survey_theme, persona, previous_answers, chat_history):
+    async def mock_generate_followup_suggestions(
+        *,
+        survey_theme,
+        persona,
+        previous_answers,
+        chat_history,
+        excluded_questions,
+    ):
         captured_chat_history.append(chat_history)
         return ["未回答の過去質問", "新しい質問1", "新しい質問2", "新しい質問3"]
 
@@ -531,6 +779,84 @@ def test_followup_suggestions_normalize_history_but_still_exclude_asked_question
         {"role": "user", "content": "過去の質問1"},
         {"role": "assistant", "content": "過去の回答1"},
     ]]
+    assert resp.json()["questions"] == ["新しい質問1", "新しい質問2", "新しい質問3"]
+
+
+def test_followup_suggestions_exclude_normalized_historical_question(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "\n```json```\n「過去の質問です？」"),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "過去の回答です"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    with patch(
+        "routers.followup.generate_followup_suggestions",
+        return_value=["過去の質問です？", "新しい質問1", "新しい質問2", "新しい質問3"],
+    ):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["questions"] == ["新しい質問1", "新しい質問2", "新しい質問3"]
+
+
+def test_followup_suggestions_exclude_wrapped_generated_duplicate_question(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "過去の質問です？"),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "過去の回答です"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    with patch(
+        "routers.followup.generate_followup_suggestions",
+        return_value=["「過去の質問です？」", "新しい質問1", "新しい質問2", "新しい質問3"],
+    ):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["questions"] == ["新しい質問1", "新しい質問2", "新しい質問3"]
+
+
+def test_followup_suggestions_exclude_multiline_fenced_historical_duplicate_question(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "```json\n過去の質問です？\n```"),
+    )
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+        ("run1", "p1", "過去の回答です"),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    with patch(
+        "routers.followup.generate_followup_suggestions",
+        return_value=["過去の質問です？", "新しい質問1", "新しい質問2", "新しい質問3"],
+    ):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
     assert resp.json()["questions"] == ["新しい質問1", "新しい質問2", "新しい質問3"]
 
 
@@ -687,6 +1013,49 @@ def test_followup_strips_leading_score_prefix_from_assistant_answer(followup_cli
 
     assert rows[-1][0] == "assistant"
     assert rows[-1][1] == "手数料が明確なら検討しやすいです。"
+
+
+def test_followup_strips_normalized_question_echo_prefix_from_first_visible_chunk(followup_client):
+    raw_question = "\n```json```\n「追加の質問です？」"
+
+    async def mock_stream(*args, **kwargs):
+        yield ("answer", "追加の質問です？ 実際の回答です。")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={
+                "run_id": "run1",
+                "persona_uuid": "p1",
+                "question": raw_question,
+            },
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert "追加の質問です？" not in resp.text
+
+    done_block = next(
+        block for block in resp.text.split("\n\n") if block.startswith("event: done\n")
+    )
+    done_data = json.loads(
+        next(line for line in done_block.splitlines() if line.startswith("data: "))[6:]
+    )
+    assert done_data["full_answer"] == "実際の回答です。"
+
+    conn = sqlite3.connect(settings.history_db_path)
+    try:
+        rows = conn.execute(
+            "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? ORDER BY id",
+            ("run1", "p1"),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert rows[-2][0] == "user"
+    assert rows[-2][1] == raw_question
+    assert rows[-1][0] == "assistant"
+    assert rows[-1][1] == "実際の回答です。"
 
 
 def test_followup_skips_contaminated_assistant_history_when_building_messages(followup_client):

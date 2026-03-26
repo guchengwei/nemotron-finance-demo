@@ -282,6 +282,13 @@ def _extract_string_array_field(text: str, field_name: str) -> list[str] | None:
     return cleaned or None
 
 
+def _normalize_followup_question(text: str) -> str:
+    # Local import avoids llm <-> followup_sanitizer import cycle.
+    from followup_sanitizer import normalize_followup_user_question
+
+    return normalize_followup_user_question(text)
+
+
 async def _stream_split_thinking(
     source: AsyncGenerator[str, None],
 ) -> AsyncGenerator[tuple[str, str], None]:
@@ -521,22 +528,34 @@ async def generate_questions(survey_theme: str, enable_thinking: bool = True) ->
     return MOCK_QUESTIONS[:3]
 
 
-def _fallback_followup_suggestions(previous_answers: list[dict], chat_history: list[dict]) -> list[str]:
-    asked = {
-        str(msg.get("content") or "").strip()
-        for msg in chat_history
-        if msg.get("role") == "user"
-    }
+def _fallback_followup_suggestions(
+    previous_answers: list[dict],
+    chat_history: list[dict],
+    excluded_questions: set[str] | None = None,
+) -> list[str]:
+    del chat_history  # fallback exclusions are controlled by normalized exclusion keys
+    excluded = {q for q in (excluded_questions or set()) if q}
     suggestions: list[str] = []
+    suggestion_keys: set[str] = set()
+
+    def try_append(candidate: str) -> None:
+        cleaned = str(candidate).strip()
+        if not cleaned:
+            return
+        normalized = _normalize_followup_question(cleaned)
+        if not normalized or normalized in excluded or normalized in suggestion_keys:
+            return
+        suggestions.append(cleaned)
+        suggestion_keys.add(normalized)
+
     for answer in previous_answers:
         question = str(answer.get("question_text") or "").strip()
-        if question and question not in asked and question not in suggestions:
-            suggestions.append(question)
+        if question:
+            try_append(question)
         if len(suggestions) == 3:
             break
     for fallback in FALLBACK_SUGGESTIONS:
-        if fallback not in asked and fallback not in suggestions:
-            suggestions.append(fallback)
+        try_append(fallback)
         if len(suggestions) == 3:
             break
     return suggestions[:3]
@@ -554,13 +573,19 @@ async def generate_followup_suggestions(
     persona: dict,
     previous_answers: list[dict],
     chat_history: list[dict],
+    excluded_questions: set[str] | None = None,
 ) -> list[str]:
     """Generate 3 follow-up question suggestions."""
     from prompts import FOLLOWUP_SUGGESTIONS_PROMPT
+    excluded = {q for q in (excluded_questions or set()) if q}
 
     if settings.mock_llm:
         await asyncio.sleep(0.05)
-        return _fallback_followup_suggestions(previous_answers, chat_history)
+        return _fallback_followup_suggestions(
+            previous_answers,
+            chat_history,
+            excluded_questions=excluded,
+        )
 
     persona_summary = (
         f"{persona.get('name', '不明')}、{persona.get('age', '不明')}歳、"
@@ -594,18 +619,74 @@ async def generate_followup_suggestions(
         )
         text = sanitize_answer_text(resp.choices[0].message.content or "[]")
         text = re.sub(r'```(?:json)?\s*', '', text).strip()
-        json_match = re.search(r'\[.*\]', text, re.DOTALL)
-        if json_match:
-            text = json_match.group(0)
-        questions = json.loads(text)
-        if isinstance(questions, list):
-            cleaned = [str(q).strip() for q in questions if str(q).strip()]
-            if cleaned:
-                return cleaned[:3]
+
+        # Primary: numbered-line parser (more robust for this model)
+        raw_items: list[str] = re.findall(r'^\d+[.。)）]\s*(.+)', text, re.MULTILINE)
+        if len(raw_items) < 3:
+            # Fallback: JSON array parser
+            json_match = re.search(r'\[.*\]', text, re.DOTALL)
+            if json_match:
+                text = json_match.group(0)
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict):
+                        # Extract first string value from dict (e.g. {"question": "..."})
+                        extracted = next(
+                            (v for v in item.values() if isinstance(v, str) and v.strip()),
+                            None,
+                        )
+                        if extracted:
+                            raw_items.append(extracted)
+                    elif isinstance(item, str):
+                        raw_items.append(item)
+
+        accepted: list[str] = []
+        accepted_keys: set[str] = set()
+        for raw in raw_items:
+            cleaned = str(raw).strip()
+            # Safety guard: reject strings that look like code/JSON objects
+            if not cleaned or "{" in cleaned or "}" in cleaned:
+                continue
+            normalized_cleaned = _normalize_followup_question(cleaned)
+            if (
+                not normalized_cleaned
+                or normalized_cleaned in excluded
+                or normalized_cleaned in accepted_keys
+            ):
+                continue
+            accepted.append(cleaned)
+            accepted_keys.add(normalized_cleaned)
+            if len(accepted) == 3:
+                break
+        if len(accepted) < 3:
+            backfill = _fallback_followup_suggestions(
+                previous_answers,
+                chat_history,
+                excluded_questions=excluded | accepted_keys,
+            )
+            for candidate in backfill:
+                normalized_candidate = _normalize_followup_question(candidate)
+                if (
+                    not normalized_candidate
+                    or normalized_candidate in excluded
+                    or normalized_candidate in accepted_keys
+                ):
+                    continue
+                accepted.append(candidate)
+                accepted_keys.add(normalized_candidate)
+                if len(accepted) == 3:
+                    break
+        if accepted:
+            return accepted[:3]
     except Exception as e:
         logger.warning("Followup suggestions generation failed: %s", e)
 
-    return _fallback_followup_suggestions(previous_answers, chat_history)
+    return _fallback_followup_suggestions(
+        previous_answers,
+        chat_history,
+        excluded_questions=excluded,
+    )
 
 
 async def check_llm_health() -> bool:

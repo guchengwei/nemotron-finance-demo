@@ -2,7 +2,11 @@
 
 from collections.abc import Sequence
 
-from followup_sanitizer import sanitize_followup_message_content, strip_followup_question_echo_prefix
+from followup_sanitizer import (
+    normalize_followup_user_question,
+    sanitize_followup_message_content,
+    strip_followup_question_echo_prefix,
+)
 
 
 def normalize_followup_history(
@@ -27,7 +31,7 @@ def normalize_followup_history(
             continue
 
         if role == "user":
-            content = content.strip()
+            content = normalize_followup_user_question(content)
             if not content:
                 continue
             if content not in asked_seen:

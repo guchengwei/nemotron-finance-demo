@@ -134,6 +134,52 @@ def _delete_run(run_id: str) -> None:
         conn.close()
 
 
+def _first_persona_uuid_for_run(run_id: str) -> str:
+    conn = sqlite3.connect(HISTORY_DB)
+    try:
+        row = conn.execute(
+            "SELECT DISTINCT persona_uuid FROM survey_answers WHERE run_id = ? LIMIT 1",
+            (run_id,),
+        ).fetchone()
+        assert row is not None, f"Expected seeded persona for run {run_id}"
+        return row[0]
+    finally:
+        conn.close()
+
+
+def _stream_followup_done_payload(run_id: str, persona_uuid: str, question: str) -> dict:
+    done_payload = None
+    current_event = None
+    current_data: list[str] = []
+    with requests.post(
+        f"{APP_BASE}/api/followup/ask",
+        json={"run_id": run_id, "persona_uuid": persona_uuid, "question": question},
+        stream=True,
+        timeout=90,
+    ) as resp:
+        assert resp.status_code == 200, resp.text
+        for line in resp.iter_lines(decode_unicode=True):
+            if not line:
+                if current_event == "done" and current_data:
+                    done_payload = json.loads("\n".join(current_data))
+                current_event = None
+                current_data = []
+                continue
+
+            if line.startswith("event: "):
+                current_event = line[7:].strip()
+                continue
+
+            if line.startswith("data: "):
+                current_data.append(line[6:])
+
+        if current_event == "done" and current_data and done_payload is None:
+            done_payload = json.loads("\n".join(current_data))
+
+    assert done_payload is not None, "SSE stream should complete with done payload"
+    return done_payload
+
+
 @requires_real_llm
 def test_bug1_report_text_not_empty():
     """Bug 1: group_tendency and conclusion are non-empty with real LLM."""
@@ -197,16 +243,7 @@ def test_bug3_enable_thinking_false_no_thinking_in_followup():
     run_id = f"e2e-bug3-{uuid.uuid4().hex[:8]}"
     _seed_multi_question_run(run_id, enable_thinking=0)
     try:
-        # Get first persona from the seeded run
-        conn = sqlite3.connect(HISTORY_DB)
-        try:
-            row = conn.execute(
-                "SELECT DISTINCT persona_uuid FROM survey_answers WHERE run_id = ? LIMIT 1",
-                (run_id,),
-            ).fetchone()
-            persona_uuid = row[0]
-        finally:
-            conn.close()
+        persona_uuid = _first_persona_uuid_for_run(run_id)
 
         # Stream a followup question and inspect the SSE event stream.
         thinking_chunks = []
@@ -257,15 +294,7 @@ def test_bug3_enable_thinking_true_may_have_thinking_in_followup():
     run_id = f"e2e-bug3-think-{uuid.uuid4().hex[:8]}"
     _seed_multi_question_run(run_id, enable_thinking=1)
     try:
-        conn = sqlite3.connect(HISTORY_DB)
-        try:
-            row = conn.execute(
-                "SELECT DISTINCT persona_uuid FROM survey_answers WHERE run_id = ? LIMIT 1",
-                (run_id,),
-            ).fetchone()
-            persona_uuid = row[0]
-        finally:
-            conn.close()
+        persona_uuid = _first_persona_uuid_for_run(run_id)
 
         got_done = False
         with requests.post(
@@ -283,5 +312,43 @@ def test_bug3_enable_thinking_true_may_have_thinking_in_followup():
                         break
 
         assert got_done, "SSE stream should complete with done event"
+    finally:
+        _delete_run(run_id)
+
+
+@requires_real_llm
+def test_followup_four_turns_and_suggestions_stay_user_facing_with_real_llm():
+    run_id = f"e2e-followup-suggestions-{uuid.uuid4().hex[:8]}"
+    _seed_multi_question_run(run_id, enable_thinking=0)
+    try:
+        persona_uuid = _first_persona_uuid_for_run(run_id)
+        questions = [
+            "このサービスを使い始めるきっかけは何ですか？",
+            "料金面で特に気になることはありますか？",
+            "長く使い続けるうえで重要な条件は何ですか？",
+            "家族や周囲の人に勧めるとしたら、どんな点を伝えますか？",
+        ]
+
+        for question in questions:
+            done_payload = _stream_followup_done_payload(run_id, persona_uuid, question)
+            full_answer = str(done_payload.get("full_answer") or "")
+            assert full_answer.strip(), "followup done payload should contain visible answer text"
+            assert "<think>" not in full_answer
+            assert "```" not in full_answer
+
+        resp = requests.post(
+            f"{APP_BASE}/api/followup/suggestions",
+            json={"run_id": run_id, "persona_uuid": persona_uuid},
+            timeout=60,
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        suggestions = body["questions"]
+
+        assert len(suggestions) == 3, f"expected 3 suggestions, got {suggestions!r}"
+        assert all(isinstance(question, str) and question.strip() for question in suggestions)
+        assert all("<think>" not in question for question in suggestions)
+        assert all("```" not in question for question in suggestions)
+        assert len({question.strip() for question in suggestions}) == 3
     finally:
         _delete_run(run_id)
