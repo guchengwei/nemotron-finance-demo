@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import settings
 from db import _create_history_db
-from llm import stream_followup_answer
+from llm import normalize_followup_question, stream_followup_answer
 from models import FollowUpRequest
 from routers import followup
 from prompts import build_followup_system_prompt
@@ -519,7 +519,39 @@ def test_followup_suggestions_passes_only_recent_user_questions_to_generator(fol
         {"role": "user", "content": user_questions[4]},
     ]
     assert all("ASSISTANT_ONLY_PHRASE" not in msg["content"] for msg in call["chat_history"])
-    assert call["excluded_questions"] == {question.strip() for question in user_questions}
+    assert call["excluded_questions"] == {normalize_followup_question(question) for question in user_questions}
+
+
+def test_followup_suggestions_normalizes_candidates_before_final_filter(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "  既存質問  "),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    captured_calls: list[dict] = []
+
+    async def mock_generate_followup_suggestions(**kwargs):
+        captured_calls.append(kwargs)
+        return ["既 存  質 問", "既  存 質 問", "別の質問"]
+
+    def strong_normalize(text: str) -> str:
+        return "".join(str(text).split())
+
+    with (
+        patch("routers.followup.normalize_followup_question", side_effect=strong_normalize),
+        patch("routers.followup.generate_followup_suggestions", side_effect=mock_generate_followup_suggestions),
+    ):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert len(captured_calls) == 1
+    assert resp.json()["questions"] == ["別の質問"]
 
 
 def test_clear_followup_history_deletes_only_target_persona_rows(followup_client):

@@ -247,10 +247,15 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
         cleaned = str(question).strip()
         if not cleaned:
             continue
-        if cleaned in excluded_questions or cleaned in filtered_seen:
+        normalized_cleaned = normalize_followup_question(cleaned)
+        if (
+            not normalized_cleaned
+            or normalized_cleaned in excluded_questions
+            or normalized_cleaned in filtered_seen
+        ):
             continue
         filtered.append(cleaned)
-        filtered_seen.add(cleaned)
+        filtered_seen.add(normalized_cleaned)
         if len(filtered) == 3:
             break
 
