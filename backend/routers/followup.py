@@ -17,7 +17,12 @@ from models import (
     FollowUpSuggestionRequest,
     FollowUpSuggestionResponse,
 )
-from llm import generate_followup_suggestions, sanitize_answer_text, stream_followup_answer
+from llm import (
+    _normalize_followup_question,
+    generate_followup_suggestions,
+    sanitize_answer_text,
+    stream_followup_answer,
+)
 from prompts import build_followup_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -199,9 +204,9 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
         if not answers:
             raise HTTPException(status_code=404, detail="No answers found for this persona in this run")
 
-        # Read all chat rows for this persona
-        all_chat_rows = await history_db.execute_fetchall(
-            "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? ORDER BY created_at",
+        # Read user chat rows only; assistant replies are not part of suggestion context.
+        user_chat_rows = await history_db.execute_fetchall(
+            "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? AND role = 'user' ORDER BY created_at",
             [request.run_id, request.persona_uuid]
         )
 
@@ -210,21 +215,30 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
     except Exception:
         persona = {}
 
-    # Build chat history for LLM context (last 12 messages)
-    chat_history = [
+    # Build chat history for LLM context (last 3 user questions only)
+    recent_user_questions = [
         {"role": r["role"], "content": r["content"]}
-        for r in all_chat_rows[-12:]
+        for r in user_chat_rows[-3:]
     ]
 
-    # Dedupe: all user messages asked so far
-    asked = {r["content"].strip() for r in all_chat_rows if r["role"] == "user"}
+    # Dedupe exclusions against the full asked-question set, normalized to match generator policy.
+    excluded_questions = {
+        _normalize_followup_question(str(r["content"] or ""))
+        for r in user_chat_rows
+        if str(r["content"] or "").strip()
+    }
+
+    chat_history = [
+        {"role": msg["role"], "content": msg["content"]}
+        for msg in recent_user_questions
+    ]
 
     generated = await generate_followup_suggestions(
         survey_theme=run["survey_theme"],
         persona=persona,
         previous_answers=answers,
         chat_history=chat_history,
-        excluded_questions=asked,
+        excluded_questions=excluded_questions,
     )
 
     filtered: list[str] = []
@@ -233,7 +247,7 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
         cleaned = str(question).strip()
         if not cleaned:
             continue
-        if cleaned in asked or cleaned in filtered_seen:
+        if cleaned in excluded_questions or cleaned in filtered_seen:
             continue
         filtered.append(cleaned)
         filtered_seen.add(cleaned)
