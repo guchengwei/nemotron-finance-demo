@@ -513,12 +513,13 @@ def test_followup_suggestions_passes_only_recent_user_questions_to_generator(fol
     assert len(captured_calls) == 1
 
     call = captured_calls[0]
-    assert call["chat_history"] == [
+    assert call["recent_user_questions"] == [
         {"role": "user", "content": user_questions[2]},
         {"role": "user", "content": user_questions[3]},
         {"role": "user", "content": user_questions[4]},
     ]
-    assert all("ASSISTANT_ONLY_PHRASE" not in msg["content"] for msg in call["chat_history"])
+    assert "chat_history" not in call
+    assert all("ASSISTANT_ONLY_PHRASE" not in msg["content"] for msg in call["recent_user_questions"])
     assert call["excluded_questions"] == {normalize_followup_question(question) for question in user_questions}
 
 
