@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import settings
 from db import _create_history_db
-from llm import _normalize_followup_question, stream_followup_answer
+from llm import stream_followup_answer
 from models import FollowUpRequest
 from routers import followup
 from prompts import build_followup_system_prompt
@@ -519,9 +519,7 @@ def test_followup_suggestions_passes_only_recent_user_questions_to_generator(fol
         {"role": "user", "content": user_questions[4]},
     ]
     assert all("ASSISTANT_ONLY_PHRASE" not in msg["content"] for msg in call["chat_history"])
-    assert call["excluded_questions"] == {
-        _normalize_followup_question(question) for question in user_questions
-    }
+    assert call["excluded_questions"] == {question.strip() for question in user_questions}
 
 
 def test_clear_followup_history_deletes_only_target_persona_rows(followup_client):

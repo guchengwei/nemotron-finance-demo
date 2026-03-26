@@ -18,8 +18,8 @@ from models import (
     FollowUpSuggestionResponse,
 )
 from llm import (
-    _normalize_followup_question,
     generate_followup_suggestions,
+    normalize_followup_question,
     sanitize_answer_text,
     stream_followup_answer,
 )
@@ -223,7 +223,7 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
 
     # Dedupe exclusions against the full asked-question set, normalized to match generator policy.
     excluded_questions = {
-        _normalize_followup_question(str(r["content"] or ""))
+        normalize_followup_question(str(r["content"] or ""))
         for r in user_chat_rows
         if str(r["content"] or "").strip()
     }

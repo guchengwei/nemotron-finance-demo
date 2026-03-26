@@ -282,8 +282,11 @@ def _extract_string_array_field(text: str, field_name: str) -> list[str] | None:
     return cleaned or None
 
 
-def _normalize_followup_question(text: str) -> str:
+def normalize_followup_question(text: str) -> str:
     return text.strip()
+
+
+_normalize_followup_question = normalize_followup_question
 
 
 async def _stream_split_thinking(
@@ -539,7 +542,7 @@ def _fallback_followup_suggestions(
         cleaned = str(candidate).strip()
         if not cleaned:
             return
-        normalized = _normalize_followup_question(cleaned)
+        normalized = normalize_followup_question(cleaned)
         if not normalized or normalized in excluded or normalized in suggestion_keys:
             return
         suggestions.append(cleaned)
@@ -645,7 +648,7 @@ async def generate_followup_suggestions(
             # Safety guard: reject strings that look like code/JSON objects
             if not cleaned or "{" in cleaned or "}" in cleaned:
                 continue
-            normalized_cleaned = _normalize_followup_question(cleaned)
+            normalized_cleaned = normalize_followup_question(cleaned)
             if (
                 not normalized_cleaned
                 or normalized_cleaned in excluded
@@ -663,7 +666,7 @@ async def generate_followup_suggestions(
                 excluded_questions=excluded | accepted_keys,
             )
             for candidate in backfill:
-                normalized_candidate = _normalize_followup_question(candidate)
+                normalized_candidate = normalize_followup_question(candidate)
                 if (
                     not normalized_candidate
                     or normalized_candidate in excluded
