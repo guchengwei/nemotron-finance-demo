@@ -1275,3 +1275,137 @@ def test_followup_replaces_mixed_japanese_token_soup_answer_with_fallback(follow
     assert rows[-2][0] == "user"
     assert rows[-1][0] == "assistant"
     assert rows[-1][1] == "（回答を取得できませんでした。もう一度お試しください。）"
+
+# ---------------------------------------------------------------------------
+# Cycle 2: Config settings + LLM params
+# ---------------------------------------------------------------------------
+
+def test_followup_default_max_tokens_is_768():
+    """followup_max_tokens default should be 768, not 2048."""
+    from config import Settings
+    assert Settings().followup_max_tokens == 768
+
+
+def test_followup_uses_dedicated_temperature_and_penalties():
+    """stream_followup_answer must pass followup-specific temperature, repetition_penalty, frequency_penalty."""
+    import asyncio
+    from types import SimpleNamespace as _SN
+    from llm import stream_followup_answer
+
+    captured: dict = {}
+
+    class _FakeAsyncIter:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return _FakeAsyncIter()
+
+    class _FakeClient:
+        chat = _SN(completions=_FakeCompletions())
+
+    async def _run():
+        async for _ in stream_followup_answer(
+            "system", [{"role": "user", "content": "test"}], enable_thinking=False
+        ):
+            pass
+
+    with patch("llm.get_client", return_value=_FakeClient()), \
+         patch("llm.settings") as mock_settings:
+        mock_settings.mock_llm = False
+        mock_settings.llm_concurrency = 4
+        mock_settings.followup_temperature = 0.4
+        mock_settings.followup_repetition_penalty = 1.15
+        mock_settings.followup_frequency_penalty = 0.3
+        mock_settings.followup_max_tokens = 768
+        mock_settings.vllm_model = "test-model"
+        asyncio.run(_run())
+
+    assert captured.get("temperature") == 0.4, f"temperature was {captured.get('temperature')}"
+    extra = captured.get("extra_body", {})
+    assert extra.get("repetition_penalty") == 1.15, f"extra_body={extra}"
+    assert captured.get("frequency_penalty") == 0.3, f"frequency_penalty was {captured.get('frequency_penalty')}"
+
+
+# ---------------------------------------------------------------------------
+# Cycle 3: Streaming repetition detection with retry
+# ---------------------------------------------------------------------------
+
+def test_followup_retries_on_repetition_before_emit(followup_client):
+    """When repetition fires before first emit, retry transparently (garbage not sent to client)."""
+    call_count = 0
+
+    async def mock_stream(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # Attempt 1: pure repetition garbage before anything is emitted
+            yield ("answer", "と思います。" * 60)
+        else:
+            # Attempt 2: clean answer
+            yield ("answer", "投資信託は長期的な資産形成に適しています。")
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={"run_id": "run1", "persona_uuid": "p1", "question": "投資信託について教えてください"},
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert call_count == 2, f"Expected 2 calls (retry), got {call_count}"
+    # Clean answer should appear in output
+    assert "投資信託は長期的な資産形成に適しています" in resp.text
+    # Garbage should NOT appear in output
+    assert "と思います。と思います。" not in resp.text
+
+
+def test_followup_truncates_on_repetition_after_emit(followup_client):
+    """When repetition fires after first emit, truncate cleanly without sending more garbage."""
+    async def mock_stream(*args, **kwargs):
+        # First yield a clean prefix to trigger emit
+        yield ("answer", "長期投資は非常にお勧めです。詳しく説明しますと、リスク分散の観点から重要です。")
+        # Then degenerate into garbage
+        yield ("answer", "と思います。" * 60)
+
+    with patch("routers.followup.stream_followup_answer", side_effect=mock_stream):
+        resp = followup_client.post(
+            "/api/followup/ask",
+            json={"run_id": "run1", "persona_uuid": "p1", "question": "資産運用について教えてください"},
+            headers={"Accept": "text/event-stream"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    # Stream should complete (done event emitted)
+    assert "event: done" in resp.text
+    # Good prefix should be in output
+    assert "長期投資は非常にお勧めです" in resp.text
+    # Garbage repetition should NOT be in output
+    assert "と思います。と思います。" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Cycle 4: Enhanced Japanese token soup detection
+# ---------------------------------------------------------------------------
+
+def test_token_soup_detects_japanese_repetition_loop():
+    """_looks_like_token_soup should detect Japanese repetition loop (10-char substring 3+ times)."""
+    from followup_sanitizer import _looks_like_token_soup
+    assert _looks_like_token_soup("と思います。" * 30) is True
+
+
+def test_token_soup_no_false_positive_normal_japanese():
+    """_looks_like_token_soup should not flag varied normal Japanese text."""
+    from followup_sanitizer import _looks_like_token_soup
+    normal = (
+        "投資信託は長期的な資産形成に向いています。"
+        "リスク許容度に応じた商品選びが大切です。"
+        "定期的な積立投資は時間分散効果があります。"
+        "老後の資金準備は早めに始めることが重要です。"
+    )
+    assert _looks_like_token_soup(normal) is False

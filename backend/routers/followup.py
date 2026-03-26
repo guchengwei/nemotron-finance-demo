@@ -25,6 +25,7 @@ from followup_sanitizer import (
     strip_followup_question_echo_prefix,
 )
 from llm import generate_followup_suggestions, sanitize_answer_text, stream_followup_answer
+from repetition_detector import RepetitionDetector
 from prompts import build_followup_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -123,50 +124,87 @@ async def _followup_stream(request: FollowUpRequest):
             assistant_saved = True
 
         try:
-            pending_thinking: list[str] = []
-            pending_visible_prefix = ""
-            emitted = False
+            _MAX_ATTEMPTS = 2
+            for _attempt in range(_MAX_ATTEMPTS):
+                pending_thinking: list[str] = []
+                pending_visible_prefix = ""
+                emitted = False
+                full_answer = ""
+                rep_det = RepetitionDetector()
+                temperature_override = (
+                    None if _attempt == 0
+                    else settings.followup_temperature * 0.3
+                )
+                _repetition_truncated = False
 
-            async for kind, chunk in stream_followup_answer(
-                system_prompt,
-                messages,
-                enable_thinking=enable_thinking,
-            ):
-                if kind == 'think':
-                    if emitted:
-                        data = json.dumps({"thinking": chunk}, ensure_ascii=False)
-                        yield f"event: thinking\ndata: {data}\n\n"
-                    else:
-                        pending_thinking.append(chunk)
-                    continue
-
-                clean_chunk = sanitize_answer_text(chunk)
-                if not emitted:
-                    if clean_chunk:
-                        pending_visible_prefix = (
-                            f"{pending_visible_prefix}\n{clean_chunk}"
-                            if pending_visible_prefix
-                            else clean_chunk
-                        )
-                    candidate = sanitize_followup_message_content("assistant", pending_visible_prefix)
-                    if not candidate:
+                async for kind, chunk in stream_followup_answer(
+                    system_prompt,
+                    messages,
+                    enable_thinking=enable_thinking,
+                    **({"temperature_override": temperature_override} if temperature_override is not None else {}),
+                ):
+                    if kind == 'think':
+                        if emitted:
+                            data = json.dumps({"thinking": chunk}, ensure_ascii=False)
+                            yield f"event: thinking\ndata: {data}\n\n"
+                        else:
+                            pending_thinking.append(chunk)
                         continue
 
-                    echo_status, _echo_end = match_followup_question_echo_prefix(candidate, normalized_question)
-                    if echo_status == "partial":
-                        continue
+                    clean_chunk = sanitize_answer_text(chunk)
 
-                    clean_chunk = strip_followup_question_echo_prefix(candidate, normalized_question)
-                    if not clean_chunk.strip():
-                        continue
-                    emitted = True
-                    for thinking_chunk in pending_thinking:
-                        data = json.dumps({"thinking": thinking_chunk}, ensure_ascii=False)
-                        yield f"event: thinking\ndata: {data}\n\n"
+                    # Feed chunk to repetition detector
+                    if rep_det.feed(clean_chunk or chunk):
+                        if not emitted:
+                            # Before first emit — retry transparently
+                            logger.warning(
+                                "Repetition detected before emit (attempt %d) for %s, retrying",
+                                _attempt + 1, request.persona_uuid,
+                            )
+                            break  # break inner for-loop → retry outer loop
+                        else:
+                            # After first emit — truncate cleanly
+                            logger.warning(
+                                "Repetition detected after emit for %s, truncating",
+                                request.persona_uuid,
+                            )
+                            _repetition_truncated = True
+                            break
 
-                full_answer += clean_chunk
-                data = json.dumps({"text": clean_chunk}, ensure_ascii=False)
-                yield f"event: token\ndata: {data}\n\n"
+                    if not emitted:
+                        if clean_chunk:
+                            pending_visible_prefix = (
+                                f"{pending_visible_prefix}\n{clean_chunk}"
+                                if pending_visible_prefix
+                                else clean_chunk
+                            )
+                        candidate = sanitize_followup_message_content("assistant", pending_visible_prefix)
+                        if not candidate:
+                            continue
+
+                        echo_status, _echo_end = match_followup_question_echo_prefix(candidate, normalized_question)
+                        if echo_status == "partial":
+                            continue
+
+                        clean_chunk = strip_followup_question_echo_prefix(candidate, normalized_question)
+                        if not clean_chunk.strip():
+                            continue
+                        emitted = True
+                        for thinking_chunk in pending_thinking:
+                            data = json.dumps({"thinking": thinking_chunk}, ensure_ascii=False)
+                            yield f"event: thinking\ndata: {data}\n\n"
+
+                    full_answer += clean_chunk
+                    data = json.dumps({"text": clean_chunk}, ensure_ascii=False)
+                    yield f"event: token\ndata: {data}\n\n"
+                else:
+                    # Inner loop completed without break — stream finished normally
+                    break
+
+                # If we broke due to post-emit truncation, stop retrying
+                if _repetition_truncated or emitted:
+                    break
+                # Otherwise: pre-emit repetition — loop to next attempt
 
             if not full_answer:
                 full_answer = assistant_fallback
