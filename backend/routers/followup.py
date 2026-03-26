@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from difflib import SequenceMatcher
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -106,6 +107,16 @@ async def _followup_stream(request: FollowUpRequest):
             if assistant_saved:
                 return
             save_answer = full_answer or assistant_fallback
+            prev_assistant = ""
+            for r in chat_rows:
+                if r["role"] == "assistant":
+                    prev_assistant = r["content"]
+            if prev_assistant and SequenceMatcher(None, save_answer, prev_assistant).ratio() > 0.75:
+                logger.warning(
+                    "Repetitive answer detected for %s, saving placeholder",
+                    request.persona_uuid,
+                )
+                save_answer = "（回答省略）"
             async with aiosqlite.connect(settings.history_db_path) as persist_db:
                 await persist_db.execute(
                     "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
