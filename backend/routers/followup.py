@@ -228,16 +228,11 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
         if str(r["content"] or "").strip()
     }
 
-    chat_history = [
-        {"role": msg["role"], "content": msg["content"]}
-        for msg in recent_user_questions
-    ]
-
     generated = await generate_followup_suggestions(
         survey_theme=run["survey_theme"],
         persona=persona,
         previous_answers=answers,
-        chat_history=chat_history,
+        recent_user_questions=recent_user_questions,
         excluded_questions=excluded_questions,
     )
 

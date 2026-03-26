@@ -530,10 +530,10 @@ async def generate_questions(survey_theme: str, enable_thinking: bool = True) ->
 
 def _fallback_followup_suggestions(
     previous_answers: list[dict],
-    chat_history: list[dict],
+    recent_user_questions: list[dict],
     excluded_questions: set[str] | None = None,
 ) -> list[str]:
-    del chat_history  # fallback exclusions are controlled by normalized exclusion keys
+    del recent_user_questions  # fallback exclusions are controlled by normalized exclusion keys
     excluded = {q for q in (excluded_questions or set()) if q}
     suggestions: list[str] = []
     suggestion_keys: set[str] = set()
@@ -572,18 +572,21 @@ async def generate_followup_suggestions(
     survey_theme: str,
     persona: dict,
     previous_answers: list[dict],
-    chat_history: list[dict],
+    recent_user_questions: list[dict] | None = None,
+    chat_history: list[dict] | None = None,
     excluded_questions: set[str] | None = None,
 ) -> list[str]:
     """Generate 3 follow-up question suggestions."""
     from prompts import FOLLOWUP_SUGGESTIONS_PROMPT
+    if recent_user_questions is None:
+        recent_user_questions = chat_history or []
     excluded = {q for q in (excluded_questions or set()) if q}
 
     if settings.mock_llm:
         await asyncio.sleep(0.05)
         return _fallback_followup_suggestions(
             previous_answers,
-            chat_history,
+            recent_user_questions,
             excluded_questions=excluded,
         )
 
@@ -596,16 +599,16 @@ async def generate_followup_suggestions(
         f"  回答要旨: {sanitize_answer_text(str(a.get('answer') or ''))}"
         for a in previous_answers
     )
-    chat_history_formatted = "\n".join(
-        f"- {msg.get('role')}: {sanitize_answer_text(str(msg.get('content') or ''))}"
-        for msg in chat_history[-6:]
+    recent_user_questions_formatted = "\n".join(
+        f"- {sanitize_answer_text(str(msg.get('content') or ''))}"
+        for msg in recent_user_questions[-3:]
     ) or "（まだ会話なし）"
 
     prompt = FOLLOWUP_SUGGESTIONS_PROMPT.format(
         survey_theme=survey_theme,
         persona_summary=persona_summary,
         previous_answers_formatted=previous_answers_formatted,
-        chat_history_formatted=chat_history_formatted,
+        recent_user_questions_formatted=recent_user_questions_formatted,
     )
     extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
 
@@ -662,7 +665,7 @@ async def generate_followup_suggestions(
         if len(accepted) < 3:
             backfill = _fallback_followup_suggestions(
                 previous_answers,
-                chat_history,
+                recent_user_questions,
                 excluded_questions=excluded | accepted_keys,
             )
             for candidate in backfill:
@@ -684,7 +687,7 @@ async def generate_followup_suggestions(
 
     return _fallback_followup_suggestions(
         previous_answers,
-        chat_history,
+        recent_user_questions,
         excluded_questions=excluded,
     )
 
