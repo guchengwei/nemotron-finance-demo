@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 512
     followup_max_tokens: int = 512
     followup_temperature: float = 0.7
-    followup_max_history_messages: int = 20
+    followup_max_history_messages: int = 6  # 3 turns × 2 messages (user + assistant)
     report_max_tokens: int = 4096
     report_temperature: float = 0.1
     report_repetition_penalty: float = 1.15

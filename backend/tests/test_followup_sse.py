@@ -666,3 +666,15 @@ def test_followup_includes_all_history_roles(followup_client):
     captured = _capture_stream_messages(followup_client, "今回の質問")
     assert len(captured) == 4, f"Expected 4 messages, got {len(captured)}: {captured}"
     assert captured[2] == {"role": "user", "content": "未回答の質問"}
+
+
+def test_followup_limits_history_to_3_turns(followup_client):
+    """Only the last 3 turns (6 messages) should be sent to the LLM."""
+    _seed_history(settings.history_db_path, [
+        (role, f"msg{i}") for i in range(10) for role in ["user", "assistant"]
+    ])
+    captured = _capture_stream_messages(followup_client, "最新質問")
+    # 6 history messages + 1 new user question = 7 total
+    assert len(captured) == 7, f"Expected 7 messages, got {len(captured)}: {captured}"
+    # The new question must be last
+    assert captured[-1] == {"role": "user", "content": "最新質問"}
