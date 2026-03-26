@@ -77,7 +77,7 @@ async def get_history_run(run_id: str):
     for row in chat_rows:
         r = dict(row)
         pid = r["persona_uuid"]
-        content = sanitize_answer_text(r["content"]) or r["content"]
+        content = (sanitize_answer_text(r["content"]) or r["content"]) if r["role"] == "assistant" else r["content"]
         if pid not in followup_chats:
             followup_chats[pid] = []
         followup_chats[pid].append({"role": r["role"], "content": content})

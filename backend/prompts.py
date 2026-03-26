@@ -313,7 +313,7 @@ def build_followup_system_prompt(
         answers_lines.append(line[:80])
     previous_answers_brief = "\n".join(answers_lines)
 
-    return FOLLOWUP_SYSTEM_PROMPT.format(
+    prompt = FOLLOWUP_SYSTEM_PROMPT.format(
         name=persona.get("name", "不明"),
         age=persona.get("age", "不明"),
         sex_display=sex_display(persona.get("sex", "")),
@@ -326,3 +326,5 @@ def build_followup_system_prompt(
         survey_theme=survey_theme,
         previous_answers_brief=previous_answers_brief,
     )
+    # Collapse consecutive blank lines left by empty optional sections
+    return re.sub(r"\n{3,}", "\n\n", prompt)
