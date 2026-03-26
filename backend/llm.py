@@ -453,6 +453,7 @@ async def stream_followup_answer(
     system_prompt: str,
     messages: list[dict],
     enable_thinking: bool = True,
+    temperature_override: float | None = None,
 ) -> AsyncGenerator[tuple[str, str], None]:
     """Stream a follow-up chat response. Yields ('think', full_text) then ('answer', chunk) tuples."""
     async with get_semaphore():
@@ -463,17 +464,23 @@ async def stream_followup_answer(
             return
 
         client = get_client()
-        extra_body = {}
+        extra_body: dict = {
+            "repetition_penalty": settings.followup_repetition_penalty,
+        }
         if not enable_thinking:
             extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+
+        temperature = temperature_override if temperature_override is not None else settings.followup_temperature
 
         raw = await client.chat.completions.create(
             model=settings.vllm_model,
             messages=[{"role": "system", "content": system_prompt}] + messages,
-            temperature=settings.llm_temperature,
+            temperature=temperature,
+            frequency_penalty=settings.followup_frequency_penalty,
             max_tokens=settings.followup_max_tokens,
             stream=True,
-            **({"extra_body": extra_body} if extra_body else {}),
+            stop=["【過去アンケート回答】", "【アンケートテーマ】", "【回答ルール】"],
+            extra_body=extra_body,
         )
 
         async for item in _stream_split_reasoning(raw):

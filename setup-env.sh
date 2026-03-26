@@ -135,8 +135,8 @@ read -r LLM_MAX_TOKENS; LLM_MAX_TOKENS="${LLM_MAX_TOKENS:-512}"
 ask "Max tokens for report generation" "4096"
 read -r REPORT_MAX_TOKENS; REPORT_MAX_TOKENS="${REPORT_MAX_TOKENS:-4096}"
 
-ask "Max tokens for deep-dive follow-up chat responses" "2048"
-read -r FOLLOWUP_MAX_TOKENS; FOLLOWUP_MAX_TOKENS="${FOLLOWUP_MAX_TOKENS:-2048}"
+ask "Max tokens for follow-up chat responses" "768"
+read -r FOLLOWUP_MAX_TOKENS; FOLLOWUP_MAX_TOKENS="${FOLLOWUP_MAX_TOKENS:-768}"
 
 ask "Concurrent LLM calls (semaphore)" "$DEFAULT_CONCURRENCY"
 read -r LLM_CONCURRENCY; LLM_CONCURRENCY="${LLM_CONCURRENCY:-$DEFAULT_CONCURRENCY}"

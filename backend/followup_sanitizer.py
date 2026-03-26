@@ -107,14 +107,24 @@ def _strip_followup_format_noise(text: str) -> str:
 
 
 def _looks_like_token_soup(text: str) -> bool:
-    sample = text.strip()[:160]
+    sample = text.strip()[:300]
     if not sample:
         return False
-    japanese_chars = len(_JAPANESE_CHAR_RE.findall(sample))
-    latin_chars = len(_LATIN_CHAR_RE.findall(sample))
-    symbol_chars = len(re.findall(r"[^0-9A-Za-zぁ-んァ-ヶ一-龠々ー\s]", sample))
-    fragment_hits = len(_TOKEN_SOUP_FRAGMENT_RE.findall(sample))
-    if sample.startswith("【") and japanese_chars <= 2 and latin_chars >= 10 and fragment_hits >= 1:
+    # Japanese repetition loop: any 10-char substring appearing 3+ times in first 300 chars
+    substr_size = 10
+    if len(sample) >= substr_size:
+        counts: dict[str, int] = {}
+        for i in range(len(sample) - substr_size + 1):
+            sub = sample[i: i + substr_size]
+            counts[sub] = counts.get(sub, 0) + 1
+            if counts[sub] >= 3:
+                return True
+    short_sample = sample[:160]
+    japanese_chars = len(_JAPANESE_CHAR_RE.findall(short_sample))
+    latin_chars = len(_LATIN_CHAR_RE.findall(short_sample))
+    symbol_chars = len(re.findall(r"[^0-9A-Za-zぁ-んァ-ヶ一-龠々ー\s]", short_sample))
+    fragment_hits = len(_TOKEN_SOUP_FRAGMENT_RE.findall(short_sample))
+    if short_sample.startswith("【") and japanese_chars <= 2 and latin_chars >= 10 and fragment_hits >= 1:
         return True
     if japanese_chars <= 3 and latin_chars >= 18 and symbol_chars >= 6 and fragment_hits >= 1:
         return True
