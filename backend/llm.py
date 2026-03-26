@@ -572,14 +572,11 @@ async def generate_followup_suggestions(
     survey_theme: str,
     persona: dict,
     previous_answers: list[dict],
-    recent_user_questions: list[dict] | None = None,
-    chat_history: list[dict] | None = None,
+    recent_user_questions: list[dict],
     excluded_questions: set[str] | None = None,
 ) -> list[str]:
     """Generate 3 follow-up question suggestions."""
     from prompts import FOLLOWUP_SUGGESTIONS_PROMPT
-    if recent_user_questions is None:
-        recent_user_questions = chat_history or []
     excluded = {q for q in (excluded_questions or set()) if q}
 
     if settings.mock_llm:
