@@ -3,14 +3,12 @@
 import asyncio
 import json
 import logging
-import re
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 import aiosqlite
 
 from config import settings
-from followup_history import normalize_followup_history
 from models import (
     FollowUpClearRequest,
     FollowUpClearResponse,
@@ -18,14 +16,7 @@ from models import (
     FollowUpSuggestionRequest,
     FollowUpSuggestionResponse,
 )
-from followup_sanitizer import (
-    match_followup_question_echo_prefix,
-    normalize_followup_user_question,
-    sanitize_followup_message_content,
-    strip_followup_question_echo_prefix,
-)
 from llm import generate_followup_suggestions, sanitize_answer_text, stream_followup_answer
-from repetition_detector import RepetitionDetector
 from prompts import build_followup_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -68,8 +59,6 @@ async def _followup_stream(request: FollowUpRequest):
             "ORDER BY created_at",
             [request.run_id, request.persona_uuid]
         )
-        chat_history, _asked_questions = normalize_followup_history(chat_rows)
-        normalized_question = normalize_followup_user_question(request.question)
 
         # Get financial extension from persona data (may be nested under financial_extension)
         fe = persona.get("financial_extension") or {}
@@ -99,128 +88,62 @@ async def _followup_stream(request: FollowUpRequest):
         )
         await history_db.commit()
 
-        # Stream response
-        messages = chat_history + [{"role": "user", "content": request.question}]
+        # Build messages: raw history (last N) + new question
+        messages = [
+            {"role": r["role"], "content": r["content"]}
+            for r in chat_rows[-settings.followup_max_history_messages:]
+        ] + [{"role": "user", "content": request.question}]
+
         full_answer = ""
         enable_thinking = bool(run.get("enable_thinking", True))
         assistant_fallback = "（回答を取得できませんでした。もう一度お試しください。）"
         interrupted_fallback = "（通信が中断されたため、回答を完了できませんでした）"
-        completed = False
-        cancelled = False
-        errored = False
         assistant_saved = False
+        stream_stopped = False  # True once try-except exits cleanly or via known exception
 
         async def save_assistant_response() -> None:
             nonlocal assistant_saved, full_answer
             if assistant_saved:
                 return
-            full_answer = sanitize_followup_message_content("assistant", full_answer) or assistant_fallback
+            save_answer = full_answer or assistant_fallback
             async with aiosqlite.connect(settings.history_db_path) as persist_db:
                 await persist_db.execute(
                     "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
-                    [request.run_id, request.persona_uuid, full_answer]
+                    [request.run_id, request.persona_uuid, save_answer]
                 )
                 await persist_db.commit()
             assistant_saved = True
 
         try:
-            _MAX_ATTEMPTS = 2
-            for _attempt in range(_MAX_ATTEMPTS):
-                pending_thinking: list[str] = []
-                pending_visible_prefix = ""
-                emitted = False
-                full_answer = ""
-                rep_det = RepetitionDetector()
-                temperature_override = (
-                    None if _attempt == 0
-                    else settings.followup_temperature * 0.3
-                )
-                _repetition_truncated = False
-
-                async for kind, chunk in stream_followup_answer(
-                    system_prompt,
-                    messages,
-                    enable_thinking=enable_thinking,
-                    **({"temperature_override": temperature_override} if temperature_override is not None else {}),
-                ):
-                    if kind == 'think':
-                        if emitted:
-                            data = json.dumps({"thinking": chunk}, ensure_ascii=False)
-                            yield f"event: thinking\ndata: {data}\n\n"
-                        else:
-                            pending_thinking.append(chunk)
-                        continue
-
-                    clean_chunk = sanitize_answer_text(chunk)
-
-                    # Feed chunk to repetition detector
-                    if rep_det.feed(clean_chunk or chunk):
-                        if not emitted:
-                            # Before first emit — retry transparently
-                            logger.warning(
-                                "Repetition detected before emit (attempt %d) for %s, retrying",
-                                _attempt + 1, request.persona_uuid,
-                            )
-                            break  # break inner for-loop → retry outer loop
-                        else:
-                            # After first emit — truncate cleanly
-                            logger.warning(
-                                "Repetition detected after emit for %s, truncating",
-                                request.persona_uuid,
-                            )
-                            _repetition_truncated = True
-                            break
-
-                    if not emitted:
-                        if clean_chunk:
-                            pending_visible_prefix = (
-                                f"{pending_visible_prefix}\n{clean_chunk}"
-                                if pending_visible_prefix
-                                else clean_chunk
-                            )
-                        candidate = sanitize_followup_message_content("assistant", pending_visible_prefix)
-                        if not candidate:
-                            continue
-
-                        echo_status, _echo_end = match_followup_question_echo_prefix(candidate, normalized_question)
-                        if echo_status == "partial":
-                            continue
-
-                        clean_chunk = strip_followup_question_echo_prefix(candidate, normalized_question)
-                        if not clean_chunk.strip():
-                            continue
-                        emitted = True
-                        for thinking_chunk in pending_thinking:
-                            data = json.dumps({"thinking": thinking_chunk}, ensure_ascii=False)
-                            yield f"event: thinking\ndata: {data}\n\n"
-
-                    full_answer += clean_chunk
-                    data = json.dumps({"text": clean_chunk}, ensure_ascii=False)
-                    yield f"event: token\ndata: {data}\n\n"
+            async for kind, chunk in stream_followup_answer(
+                system_prompt, messages, enable_thinking=enable_thinking
+            ):
+                if kind == "think":
+                    data = json.dumps({"thinking": chunk}, ensure_ascii=False)
+                    yield f"event: thinking\ndata: {data}\n\n"
                 else:
-                    # Inner loop completed without break — stream finished normally
-                    break
-
-                # If we broke due to post-emit truncation, stop retrying
-                if _repetition_truncated or emitted:
-                    break
-                # Otherwise: pre-emit repetition — loop to next attempt
+                    clean = sanitize_answer_text(chunk)
+                    if clean:
+                        full_answer += clean
+                        data = json.dumps({"text": clean}, ensure_ascii=False)
+                        yield f"event: token\ndata: {data}\n\n"
 
             if not full_answer:
                 full_answer = assistant_fallback
-            completed = True
+            stream_stopped = True
         except asyncio.CancelledError:
             logger.warning("Followup stream cancelled for %s", request.persona_uuid)
             full_answer = interrupted_fallback
-            cancelled = True
+            stream_stopped = True
         except Exception as e:
             logger.error("Followup LLM error for %s: %s", request.persona_uuid, e)
             err_data = json.dumps({"error": str(e)}, ensure_ascii=False)
             yield f"event: error\ndata: {err_data}\n\n"
             full_answer = assistant_fallback
-            errored = True
+            stream_stopped = True
         finally:
-            if not completed and not cancelled and not errored:
+            # GeneratorExit (early aclose) leaves stream_stopped=False
+            if not stream_stopped:
                 full_answer = interrupted_fallback
             save_task = asyncio.create_task(save_assistant_response())
             try:
@@ -228,9 +151,8 @@ async def _followup_stream(request: FollowUpRequest):
             except asyncio.CancelledError:
                 await asyncio.shield(save_task)
 
-        if completed:
-            done_data = json.dumps({"full_answer": full_answer}, ensure_ascii=False)
-            yield f"event: done\ndata: {done_data}\n\n"
+        done_data = json.dumps({"full_answer": full_answer}, ensure_ascii=False)
+        yield f"event: done\ndata: {done_data}\n\n"
 
 
 @router.post("/ask")
@@ -266,22 +188,26 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
         if not answers:
             raise HTTPException(status_code=404, detail="No answers found for this persona in this run")
 
-        chat_rows = await history_db.execute_fetchall(
+        # Read all chat rows for this persona
+        all_chat_rows = await history_db.execute_fetchall(
             "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? ORDER BY created_at",
             [request.run_id, request.persona_uuid]
         )
-        chat_history, asked_questions = normalize_followup_history(chat_rows)
 
     try:
         persona = json.loads(answers[0].get("persona_full_json") or "{}")
     except Exception:
         persona = {}
 
-    asked = {
-        normalized
-        for question in asked_questions
-        if (normalized := normalize_followup_user_question(question))
-    }
+    # Build chat history for LLM context (last 12 messages)
+    chat_history = [
+        {"role": r["role"], "content": r["content"]}
+        for r in all_chat_rows[-12:]
+    ]
+
+    # Dedupe: all user messages asked so far
+    asked = {r["content"].strip() for r in all_chat_rows if r["role"] == "user"}
+
     generated = await generate_followup_suggestions(
         survey_theme=run["survey_theme"],
         persona=persona,
@@ -296,15 +222,10 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
         cleaned = str(question).strip()
         if not cleaned:
             continue
-        normalized_cleaned = normalize_followup_user_question(cleaned)
-        if (
-            not normalized_cleaned
-            or normalized_cleaned in asked
-            or normalized_cleaned in filtered_seen
-        ):
+        if cleaned in asked or cleaned in filtered_seen:
             continue
         filtered.append(cleaned)
-        filtered_seen.add(normalized_cleaned)
+        filtered_seen.add(cleaned)
         if len(filtered) == 3:
             break
 

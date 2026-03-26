@@ -18,10 +18,9 @@ class Settings(BaseSettings):
     mock_llm: bool = False
     llm_temperature: float = 0.7
     llm_max_tokens: int = 512
-    followup_max_tokens: int = 768
-    followup_temperature: float = 0.4
-    followup_repetition_penalty: float = 1.15
-    followup_frequency_penalty: float = 0.3
+    followup_max_tokens: int = 512
+    followup_temperature: float = 0.7
+    followup_max_history_messages: int = 20
     report_max_tokens: int = 4096
     report_temperature: float = 0.1
     report_repetition_penalty: float = 1.15
