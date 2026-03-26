@@ -107,9 +107,10 @@ async def _followup_stream(request: FollowUpRequest):
             if assistant_saved:
                 return
             save_answer = full_answer or assistant_fallback
-            prev_assistant = next(
-                (r["content"] for r in reversed(chat_rows) if r["role"] == "assistant"), ""
-            )
+            prev_assistant = ""
+            for r in chat_rows:
+                if r["role"] == "assistant":
+                    prev_assistant = r["content"]
             if prev_assistant and SequenceMatcher(None, save_answer, prev_assistant).ratio() > 0.75:
                 logger.warning(
                     "Repetitive answer detected for %s, saving placeholder",
