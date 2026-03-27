@@ -20,27 +20,13 @@ function sanitizeVisibleText(text: string) {
   return text.replace(/<\/?think>/gi, '').trim()
 }
 
-function sanitizeSuggestedQuestion(question: string) {
-  return question.replace(/（[^）]*）/g, '').trim()
-}
-
 function looksLikeCode(s: string) {
   return /[{}]/.test(s) || /"\w+":\s*"/.test(s)
 }
 
-function getSuggestedQuestions(sourceQuestions: string[]) {
-  const seen = new Set<string>()
-  const suggestions: string[] = []
-
-  for (const question of sourceQuestions) {
-    const cleaned = sanitizeSuggestedQuestion(question)
-    if (!cleaned || seen.has(cleaned) || looksLikeCode(cleaned)) continue
-    seen.add(cleaned)
-    suggestions.push(cleaned)
-    if (suggestions.length === 3) break
-  }
-
-  return suggestions.length > 0 ? suggestions : FALLBACK_SUGGESTED_QUESTIONS
+function normalizeRenderableSuggestion(question: string) {
+  const trimmed = question.trim()
+  return trimmed.length > 0 && !looksLikeCode(trimmed) ? trimmed : null
 }
 
 function scrollToBottom(container: HTMLDivElement | null) {
@@ -73,7 +59,6 @@ export default function FollowUpChat() {
     setStep,
     currentHistoryRun,
     surveyTheme,
-    questions,
     openPersonaDetail,
     enableThinking,
     appendFollowupMessages,
@@ -127,10 +112,9 @@ export default function FollowUpChat() {
 
   useEffect(() => {
     let active = true
-    const fallbackSuggestions = getSuggestedQuestions(currentHistoryRun?.questions ?? questions)
 
     if (!followupPersona || !runId) {
-      setSuggestedQuestions(fallbackSuggestions)
+      setSuggestedQuestions(FALLBACK_SUGGESTED_QUESTIONS)
       return () => {
         active = false
       }
@@ -139,20 +123,19 @@ export default function FollowUpChat() {
     api.getFollowupSuggestions(runId, followupPersona.uuid)
       .then((response) => {
         if (active) {
-          const filtered = getSuggestedQuestions(response.questions)
-          setSuggestedQuestions(filtered.length > 0 ? filtered : fallbackSuggestions)
+          setSuggestedQuestions(response.questions.map(normalizeRenderableSuggestion).filter((question): question is string => question !== null))
         }
       })
       .catch(() => {
         if (active) {
-          setSuggestedQuestions(fallbackSuggestions)
+          setSuggestedQuestions(FALLBACK_SUGGESTED_QUESTIONS)
         }
       })
 
     return () => {
       active = false
     }
-  }, [followupPersona, runId, questions])
+  }, [followupPersona, runId])
 
   const send = (text: string) => {
     if (!text.trim() || !followupPersona || !runId || sending) return
@@ -193,13 +176,11 @@ export default function FollowUpChat() {
         setSending(false)
         cancelRef.current = null
         // Re-fetch suggestions for the next turn
-        const fallback = getSuggestedQuestions(currentHistoryRun?.questions ?? questions)
         api.getFollowupSuggestions(runId, followupPersona.uuid)
           .then((res) => {
-            const filtered = getSuggestedQuestions(res.questions)
-            setSuggestedQuestions(filtered.length > 0 ? filtered : fallback)
+            setSuggestedQuestions(res.questions.map(normalizeRenderableSuggestion).filter((question): question is string => question !== null))
           })
-          .catch(() => setSuggestedQuestions(fallback))
+          .catch(() => setSuggestedQuestions(FALLBACK_SUGGESTED_QUESTIONS))
       },
       (err) => {
         console.error('Followup error:', err)

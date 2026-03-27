@@ -282,8 +282,11 @@ def _extract_string_array_field(text: str, field_name: str) -> list[str] | None:
     return cleaned or None
 
 
-def _normalize_followup_question(text: str) -> str:
+def normalize_followup_question(text: str) -> str:
     return text.strip()
+
+
+_normalize_followup_question = normalize_followup_question
 
 
 async def _stream_split_thinking(
@@ -527,10 +530,10 @@ async def generate_questions(survey_theme: str, enable_thinking: bool = True) ->
 
 def _fallback_followup_suggestions(
     previous_answers: list[dict],
-    chat_history: list[dict],
+    recent_user_questions: list[dict],
     excluded_questions: set[str] | None = None,
 ) -> list[str]:
-    del chat_history  # fallback exclusions are controlled by normalized exclusion keys
+    del recent_user_questions  # fallback exclusions are controlled by normalized exclusion keys
     excluded = {q for q in (excluded_questions or set()) if q}
     suggestions: list[str] = []
     suggestion_keys: set[str] = set()
@@ -539,7 +542,7 @@ def _fallback_followup_suggestions(
         cleaned = str(candidate).strip()
         if not cleaned:
             return
-        normalized = _normalize_followup_question(cleaned)
+        normalized = normalize_followup_question(cleaned)
         if not normalized or normalized in excluded or normalized in suggestion_keys:
             return
         suggestions.append(cleaned)
@@ -569,7 +572,7 @@ async def generate_followup_suggestions(
     survey_theme: str,
     persona: dict,
     previous_answers: list[dict],
-    chat_history: list[dict],
+    recent_user_questions: list[dict],
     excluded_questions: set[str] | None = None,
 ) -> list[str]:
     """Generate 3 follow-up question suggestions."""
@@ -580,7 +583,7 @@ async def generate_followup_suggestions(
         await asyncio.sleep(0.05)
         return _fallback_followup_suggestions(
             previous_answers,
-            chat_history,
+            recent_user_questions,
             excluded_questions=excluded,
         )
 
@@ -593,16 +596,16 @@ async def generate_followup_suggestions(
         f"  回答要旨: {sanitize_answer_text(str(a.get('answer') or ''))}"
         for a in previous_answers
     )
-    chat_history_formatted = "\n".join(
-        f"- {msg.get('role')}: {sanitize_answer_text(str(msg.get('content') or ''))}"
-        for msg in chat_history[-6:]
+    recent_user_questions_formatted = "\n".join(
+        f"- {sanitize_answer_text(str(msg.get('content') or ''))}"
+        for msg in recent_user_questions[-3:]
     ) or "（まだ会話なし）"
 
     prompt = FOLLOWUP_SUGGESTIONS_PROMPT.format(
         survey_theme=survey_theme,
         persona_summary=persona_summary,
         previous_answers_formatted=previous_answers_formatted,
-        chat_history_formatted=chat_history_formatted,
+        recent_user_questions_formatted=recent_user_questions_formatted,
     )
     extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
 
@@ -645,7 +648,7 @@ async def generate_followup_suggestions(
             # Safety guard: reject strings that look like code/JSON objects
             if not cleaned or "{" in cleaned or "}" in cleaned:
                 continue
-            normalized_cleaned = _normalize_followup_question(cleaned)
+            normalized_cleaned = normalize_followup_question(cleaned)
             if (
                 not normalized_cleaned
                 or normalized_cleaned in excluded
@@ -659,11 +662,11 @@ async def generate_followup_suggestions(
         if len(accepted) < 3:
             backfill = _fallback_followup_suggestions(
                 previous_answers,
-                chat_history,
+                recent_user_questions,
                 excluded_questions=excluded | accepted_keys,
             )
             for candidate in backfill:
-                normalized_candidate = _normalize_followup_question(candidate)
+                normalized_candidate = normalize_followup_question(candidate)
                 if (
                     not normalized_candidate
                     or normalized_candidate in excluded
@@ -681,7 +684,7 @@ async def generate_followup_suggestions(
 
     return _fallback_followup_suggestions(
         previous_answers,
-        chat_history,
+        recent_user_questions,
         excluded_questions=excluded,
     )
 

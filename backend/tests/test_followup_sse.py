@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import settings
 from db import _create_history_db
-from llm import stream_followup_answer
+from llm import normalize_followup_question, stream_followup_answer
 from models import FollowUpRequest
 from routers import followup
 from prompts import build_followup_system_prompt
@@ -466,6 +466,163 @@ def test_followup_suggestions_backfill_with_previous_answers_when_canned_pool_is
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["questions"] == ["新しい質問1", "補助設問A", "補助設問B"]
+
+
+def test_followup_suggestions_passes_only_recent_user_questions_to_generator(followup_client):
+    """Suggestion generation must see only recent user turns and all asked questions."""
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    user_questions = [
+        "  質問Aはどうですか？  ",
+        "質問Bの条件は？",
+        "質問Cで気にする点は？",
+        "質問Dはどの程度重要ですか？",
+        "質問Eについても知りたいですか？",
+    ]
+    assistant_replies = [
+        "ASSISTANT_ONLY_PHRASE_1: this must never reach suggestion generation",
+        "ASSISTANT_ONLY_PHRASE_2: this must never reach suggestion generation",
+        "ASSISTANT_ONLY_PHRASE_3: this must never reach suggestion generation",
+        "ASSISTANT_ONLY_PHRASE_4: this must never reach suggestion generation",
+        "ASSISTANT_ONLY_PHRASE_5: this must never reach suggestion generation",
+    ]
+    for question, reply in zip(user_questions, assistant_replies, strict=True):
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+            ("run1", "p1", question),
+        )
+        hist_conn.execute(
+            "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
+            ("run1", "p1", reply),
+        )
+    hist_conn.commit()
+    hist_conn.close()
+
+    captured_calls: list[dict] = []
+
+    async def mock_generate_followup_suggestions(**kwargs):
+        captured_calls.append(kwargs)
+        return ["新しい質問1", "新しい質問2", "新しい質問3"]
+
+    with patch("routers.followup.generate_followup_suggestions", side_effect=mock_generate_followup_suggestions):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert len(captured_calls) == 1
+
+    call = captured_calls[0]
+    assert call["recent_user_questions"] == [
+        {"role": "user", "content": user_questions[2]},
+        {"role": "user", "content": user_questions[3]},
+        {"role": "user", "content": user_questions[4]},
+    ]
+    assert "chat_history" not in call
+    assert all("ASSISTANT_ONLY_PHRASE" not in msg["content"] for msg in call["recent_user_questions"])
+    assert call["excluded_questions"] == {normalize_followup_question(question) for question in user_questions}
+
+
+def test_followup_suggestions_orders_user_history_deterministically(followup_client):
+    """Suggestion history read must break created_at ties with id so the last 3 questions are stable."""
+
+    captured_queries: list[tuple[str, list[str]]] = []
+
+    class _FakeConn:
+        row_factory = None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute_fetchall(self, query, params):
+            captured_queries.append((query, list(params)))
+            if "FROM survey_runs" in query:
+                return [{"id": "run1", "survey_theme": "テスト"}]
+            if "FROM survey_answers" in query:
+                return [
+                    {
+                        "persona_full_json": "{}",
+                        "question_index": 0,
+                        "question_text": "Q1",
+                        "answer": "A1",
+                    }
+                ]
+            if "FROM followup_chats" in query:
+                return [
+                    {"role": "user", "content": "質問1"},
+                    {"role": "user", "content": "質問2"},
+                    {"role": "user", "content": "質問3"},
+                    {"role": "user", "content": "質問4"},
+                ]
+            raise AssertionError(f"Unexpected query: {query}")
+
+        async def execute(self, *args, **kwargs):
+            return None
+
+        async def commit(self):
+            return None
+
+    class _FakeConnect:
+        def __init__(self, conn):
+            self._conn = conn
+
+        async def __aenter__(self):
+            return self._conn
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def mock_generate_followup_suggestions(**kwargs):
+        return ["新しい質問1", "新しい質問2", "新しい質問3"]
+
+    fake_conn = _FakeConn()
+    with (
+        patch("routers.followup.aiosqlite.connect", return_value=_FakeConnect(fake_conn)),
+        patch("routers.followup.generate_followup_suggestions", side_effect=mock_generate_followup_suggestions),
+    ):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    followup_query = next(query for query, _ in captured_queries if "FROM followup_chats" in query)
+    assert "ORDER BY created_at, id" in followup_query
+
+
+def test_followup_suggestions_normalizes_candidates_before_final_filter(followup_client):
+    hist_conn = sqlite3.connect(settings.history_db_path)
+    hist_conn.execute(
+        "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
+        ("run1", "p1", "  既存質問  "),
+    )
+    hist_conn.commit()
+    hist_conn.close()
+
+    captured_calls: list[dict] = []
+
+    async def mock_generate_followup_suggestions(**kwargs):
+        captured_calls.append(kwargs)
+        return ["既 存  質 問", "既  存 質 問", "別の質問"]
+
+    def strong_normalize(text: str) -> str:
+        return "".join(str(text).split())
+
+    with (
+        patch("routers.followup.normalize_followup_question", side_effect=strong_normalize),
+        patch("routers.followup.generate_followup_suggestions", side_effect=mock_generate_followup_suggestions),
+    ):
+        resp = followup_client.post(
+            "/api/followup/suggestions",
+            json={"run_id": "run1", "persona_uuid": "p1"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert len(captured_calls) == 1
+    assert resp.json()["questions"] == ["別の質問"]
 
 
 def test_clear_followup_history_deletes_only_target_persona_rows(followup_client):
