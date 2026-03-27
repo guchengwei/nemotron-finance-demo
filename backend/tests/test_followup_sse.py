@@ -747,9 +747,9 @@ def test_followup_default_temperature_is_0_7():
     assert Settings().followup_temperature == 0.7
 
 
-def test_followup_default_max_tokens_is_512():
+def test_followup_code_default_max_tokens_is_512_without_env_file():
     from config import Settings
-    assert Settings().followup_max_tokens == 512
+    assert Settings(_env_file=None).followup_max_tokens == 512
 
 
 def test_followup_no_repetition_or_frequency_penalty():
