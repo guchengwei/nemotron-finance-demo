@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from routers import personas, survey, report, followup, history
+from routers.report_matrix import router as report_matrix_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +76,7 @@ app.include_router(survey.router)
 app.include_router(report.router)
 app.include_router(followup.router)
 app.include_router(history.router)
+app.include_router(report_matrix_router, prefix="/api")
 
 
 @app.get("/health")

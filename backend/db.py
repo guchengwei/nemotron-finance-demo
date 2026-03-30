@@ -92,6 +92,13 @@ def _create_history_db():
         logger.info("Migrated survey_runs: added enable_thinking column")
     except Exception:
         pass  # Column already exists
+    # Migrate: add matrix_report_json if missing
+    try:
+        conn.execute("ALTER TABLE survey_runs ADD COLUMN matrix_report_json TEXT")
+        conn.commit()
+        logger.info("Migrated survey_runs: added matrix_report_json column")
+    except Exception:
+        pass  # Column already exists
     # Fix any surveys stuck in 'running' status from previous crashes
     stuck = conn.execute(
         "UPDATE survey_runs SET status = 'failed' WHERE status = 'running'"
