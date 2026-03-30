@@ -15,7 +15,7 @@ export default function RecommendationCards({ recommendations }: RecommendationC
 
   return (
     <div className="space-y-3">
-      {recommendations.map((rec, i) => (
+      {recommendations.map((rec) => (
         <div
           key={rec.highlight_tag + rec.title}
           className="rounded-[1.5rem] border border-fin-border bg-fin-surface p-5"
