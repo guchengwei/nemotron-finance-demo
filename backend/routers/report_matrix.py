@@ -35,7 +35,7 @@ async def _matrix_stream(request: MatrixReportRequest):
         return
 
     answers_rows = await db.execute(
-        "SELECT persona_uuid, persona_name, answer_text, question_index "
+        "SELECT persona_uuid, persona_summary, answer, question_index "
         "FROM survey_answers WHERE run_id = ? ORDER BY persona_uuid, question_index",
         [request.survey_id],
     )
@@ -45,8 +45,9 @@ async def _matrix_stream(request: MatrixReportRequest):
     for a in answers:
         pid = a["persona_uuid"]
         if pid not in persona_map:
-            persona_map[pid] = {"persona_id": pid, "name": a["persona_name"], "industry": "", "age": 0, "qa_parts": []}
-        persona_map[pid]["qa_parts"].append(f"Q{a['question_index']+1}: {a['answer_text']}")
+            name = (a["persona_summary"] or pid[:8]).split()[0]
+            persona_map[pid] = {"persona_id": pid, "name": name, "industry": "", "age": 0, "qa_parts": []}
+        persona_map[pid]["qa_parts"].append(f"Q{a['question_index']+1}: {a['answer']}")
 
     if persona_map:
         from persona_store import get_store
