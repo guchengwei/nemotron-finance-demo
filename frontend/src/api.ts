@@ -287,3 +287,37 @@ export function startFollowupSSE(
     controller.abort()
   }
 }
+
+export function startMatrixReportSSE(
+  request: { survey_id: string; preset_key: string },
+  onEvent: (event: string, data: unknown) => void,
+  onError: (err: Error) => void,
+): () => void {
+  let aborted = false
+  const controller = new AbortController()
+
+  streamSSE(
+    '/api/report/matrix',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    },
+    {
+      onEvent: (event, data) => {
+        if (!aborted) onEvent(event, data)
+      },
+      onError: (err) => {
+        if (!aborted) onError(err)
+      },
+    },
+  ).catch((err) => {
+    if (!aborted) onError(err instanceof Error ? err : new Error(String(err)))
+  })
+
+  return () => {
+    aborted = true
+    controller.abort()
+  }
+}
