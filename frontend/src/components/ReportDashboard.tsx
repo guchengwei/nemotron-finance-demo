@@ -4,6 +4,7 @@ import { api } from '../api'
 import DemographicCharts from './DemographicCharts'
 import TopPickCard from './TopPickCard'
 import { scoreColor } from '../utils/scoreParser'
+import MatrixReport from './report-matrix/MatrixReport'
 
 function ScoreCircle({ score }: { score: number }) {
   const color = scoreColor(Math.round(score))
@@ -28,6 +29,7 @@ export default function ReportDashboard() {
 
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reportTab, setReportTab] = useState<'text' | 'matrix'>('matrix')
 
   const triggerGenerate = useCallback(() => {
     if (!currentRunId) return
@@ -144,71 +146,100 @@ export default function ReportDashboard() {
         </button>
       </div>
 
-      <div className="rounded-[1.75rem] border border-fin-border bg-fin-surface p-6 shadow-card">
-        <div className="flex items-center gap-8">
-          {report.overall_score !== undefined && (
-            <ScoreCircle score={report.overall_score} />
-          )}
-          <div className="flex-1">
-            {report.group_tendency && (
-              <div data-testid="report-group-tendency" className="mb-3">
-                <div className="mb-1 text-xs font-semibold tracking-[0.12em] text-fin-accent">グループ傾向</div>
-                <div className="text-sm leading-relaxed text-fin-ink">{report.group_tendency}</div>
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={() => setReportTab('matrix')}
+          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
+            reportTab === 'matrix'
+              ? 'bg-fin-accent text-fin-surface'
+              : 'border border-fin-border bg-fin-surface text-fin-muted hover:text-fin-ink'
+          }`}
+        >
+          マトリクス分析
+        </button>
+        <button
+          onClick={() => setReportTab('text')}
+          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
+            reportTab === 'text'
+              ? 'bg-fin-accent text-fin-surface'
+              : 'border border-fin-border bg-fin-surface text-fin-muted hover:text-fin-ink'
+          }`}
+        >
+          テキストレポート
+        </button>
       </div>
 
-      {hasStructuredConclusion ? (
-        <div data-testid="report-conclusion" className="rounded-[1.5rem] border border-fin-border bg-fin-panel/70 px-5 py-4">
-          <div className="mb-2 text-xs font-semibold tracking-[0.12em] text-fin-accent">総合結論・推奨アクション</div>
-          {report.conclusion_summary && (
-            <div className="text-sm leading-relaxed text-fin-ink">{report.conclusion_summary}</div>
-          )}
-          {report.recommended_actions && report.recommended_actions.length > 0 && (
-            <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fin-ink">
-              {report.recommended_actions.map((action, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="mt-1 text-fin-accent">•</span>
-                  <span>{action}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : report.conclusion ? (
-        <div data-testid="report-conclusion" className="rounded-[1.5rem] border border-fin-border bg-fin-panel/70 px-5 py-4">
-          <div className="mb-2 text-xs font-semibold tracking-[0.12em] text-fin-accent">総合結論・推奨アクション</div>
-          <div className="text-sm leading-relaxed text-fin-ink">{report.conclusion}</div>
-        </div>
-      ) : null}
-
-      <DemographicCharts report={report} />
-
-      {report.top_picks && report.top_picks.length > 0 ? (
-        <div data-testid="report-top-picks">
-          <h3 className="mb-3 text-sm font-bold text-fin-ink">注目回答者</h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {report.top_picks.slice(0, 3).map((pick, i) => {
-              const persona = resolvePersona(pick.persona_uuid)
-              return (
-                <TopPickCard
-                  key={i}
-                  pick={pick}
-                  persona={persona}
-                  variant={i === 0 ? 'positive' : i === 1 ? 'negative' : 'unique'}
-                  onChat={() => handleChatWithPersona(pick.persona_uuid)}
-                  onProfile={() => handleViewProfile(pick.persona_uuid)}
-                />
-              )
-            })}
-          </div>
-        </div>
+      {reportTab === 'matrix' && currentRunId ? (
+        <MatrixReport surveyId={currentRunId} />
       ) : (
-        <div className="rounded-[1.5rem] border border-fin-warning/30 bg-fin-warning/10 px-4 py-3 text-sm text-fin-warning">
-          注目回答者を特定できませんでした。回答データが少ない可能性があります。
-        </div>
+        <>
+          <div className="rounded-[1.75rem] border border-fin-border bg-fin-surface p-6 shadow-card">
+            <div className="flex items-center gap-8">
+              {report.overall_score !== undefined && (
+                <ScoreCircle score={report.overall_score} />
+              )}
+              <div className="flex-1">
+                {report.group_tendency && (
+                  <div data-testid="report-group-tendency" className="mb-3">
+                    <div className="mb-1 text-xs font-semibold tracking-[0.12em] text-fin-accent">グループ傾向</div>
+                    <div className="text-sm leading-relaxed text-fin-ink">{report.group_tendency}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {hasStructuredConclusion ? (
+            <div data-testid="report-conclusion" className="rounded-[1.5rem] border border-fin-border bg-fin-panel/70 px-5 py-4">
+              <div className="mb-2 text-xs font-semibold tracking-[0.12em] text-fin-accent">総合結論・推奨アクション</div>
+              {report.conclusion_summary && (
+                <div className="text-sm leading-relaxed text-fin-ink">{report.conclusion_summary}</div>
+              )}
+              {report.recommended_actions && report.recommended_actions.length > 0 && (
+                <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fin-ink">
+                  {report.recommended_actions.map((action, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="mt-1 text-fin-accent">•</span>
+                      <span>{action}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : report.conclusion ? (
+            <div data-testid="report-conclusion" className="rounded-[1.5rem] border border-fin-border bg-fin-panel/70 px-5 py-4">
+              <div className="mb-2 text-xs font-semibold tracking-[0.12em] text-fin-accent">総合結論・推奨アクション</div>
+              <div className="text-sm leading-relaxed text-fin-ink">{report.conclusion}</div>
+            </div>
+          ) : null}
+
+          <DemographicCharts report={report} />
+
+          {report.top_picks && report.top_picks.length > 0 ? (
+            <div data-testid="report-top-picks">
+              <h3 className="mb-3 text-sm font-bold text-fin-ink">注目回答者</h3>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {report.top_picks.slice(0, 3).map((pick, i) => {
+                  const persona = resolvePersona(pick.persona_uuid)
+                  return (
+                    <TopPickCard
+                      key={i}
+                      pick={pick}
+                      persona={persona}
+                      variant={i === 0 ? 'positive' : i === 1 ? 'negative' : 'unique'}
+                      onChat={() => handleChatWithPersona(pick.persona_uuid)}
+                      onProfile={() => handleViewProfile(pick.persona_uuid)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[1.5rem] border border-fin-warning/30 bg-fin-warning/10 px-4 py-3 text-sm text-fin-warning">
+              注目回答者を特定できませんでした。回答データが少ない可能性があります。
+            </div>
+          )}
+        </>
       )}
     </div>
   )
