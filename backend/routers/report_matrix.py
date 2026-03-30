@@ -6,9 +6,7 @@ GET  /api/report/matrix/{survey_id} — returns persisted report JSON.
 
 import json
 import logging
-from collections import defaultdict
-
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -94,7 +92,7 @@ async def _matrix_stream(request: MatrixReportRequest):
 
 
 @router.post("")
-async def generate_matrix_report(request: MatrixReportRequest, http_request: Request):
+async def generate_matrix_report(request: MatrixReportRequest):
     return StreamingResponse(
         _matrix_stream(request),
         media_type="text/event-stream",
