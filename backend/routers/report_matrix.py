@@ -24,7 +24,9 @@ class MatrixReportRequest(BaseModel):
 
 async def _matrix_stream(request: MatrixReportRequest):
     """Generator that yields SSE-formatted events from the pipeline."""
+    import aiosqlite
     db = await get_history_db()
+    db.row_factory = aiosqlite.Row
     row = await db.execute(
         "SELECT id, survey_theme, questions_json FROM survey_runs WHERE id = ?",
         [request.survey_id],
