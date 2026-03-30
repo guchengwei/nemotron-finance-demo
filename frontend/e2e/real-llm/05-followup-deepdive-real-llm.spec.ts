@@ -6,6 +6,8 @@ test('deep-dive follow-up shows expandable profile and sanitized Japanese answer
   await page.getByRole('button', { name: new RegExp(SEEDED_RUN_LABEL) }).click()
 
   await expect(page.getByTestId('report-dashboard-screen')).toBeVisible()
+  // Switch to text report tab (matrix tab is the default) to access top-pick follow-up buttons
+  await page.getByRole('button', { name: 'テキストレポート' }).click()
   await page.getByRole('button', { name: 'この人に質問する →' }).click()
 
   await expect(page.getByTestId('followup-screen')).toBeVisible()

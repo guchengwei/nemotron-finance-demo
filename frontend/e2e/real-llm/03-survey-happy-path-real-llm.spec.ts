@@ -21,6 +21,9 @@ test('single-person survey completes with separated answer rendering and a repor
 
   await expect(page.getByTestId('report-dashboard-screen')).toBeVisible({ timeout: 240_000 })
 
+  // Switch to text report tab (matrix tab is the default) to check text report content
+  await page.getByRole('button', { name: 'テキストレポート' }).click()
+
   const groupTendency = await textOf(page.getByTestId('report-group-tendency'))
   const conclusion = await textOf(page.getByTestId('report-conclusion'))
   expect((groupTendency || conclusion).trim().length).toBeGreaterThan(0)
