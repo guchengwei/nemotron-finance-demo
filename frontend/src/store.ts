@@ -7,6 +7,7 @@ import type {
   SurveyRunDetail,
   FiltersResponse,
 } from './types'
+import type { MatrixReportState } from './types/matrix-report'
 import { DEFAULT_SURVEY_QUESTIONS } from './config/surveyPresets'
 
 export type Step = 1 | 2 | 3 | 4 | 5
@@ -63,6 +64,9 @@ interface AppState {
   activeDetailPersona: import('./types').Persona | null
   openPersonaDetail: (p: import('./types').Persona) => void
   closePersonaDetail: () => void
+
+  matrixReport: MatrixReportState
+  setMatrixReport: (update: Partial<MatrixReportState>) => void
 
   resetVersion: number
   resetSurvey: () => void
@@ -152,6 +156,18 @@ export const useStore = create<AppState>((set) => ({
   activeDetailPersona: null,
   openPersonaDetail: (activeDetailPersona) => set({ activeDetailPersona }),
   closePersonaDetail: () => set({ activeDetailPersona: null }),
+
+  matrixReport: {
+    axes: null,
+    personas: [],
+    keywords: null,
+    recommendations: [],
+    scoreTable: [],
+    status: 'idle',
+    errorMessage: '',
+  },
+  setMatrixReport: (update) =>
+    set((s) => ({ matrixReport: { ...s.matrixReport, ...update } })),
 
   resetVersion: 0,
   resetSurvey: () =>
