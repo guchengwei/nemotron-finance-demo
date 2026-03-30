@@ -1,0 +1,90 @@
+import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import KeywordPanel from '../components/report-matrix/KeywordPanel'
+import RecommendationCards from '../components/report-matrix/RecommendationCards'
+import ScoreTable from '../components/report-matrix/ScoreTable'
+import type { KeywordSummary, Recommendation, ScoreTableRow, AxisConfig } from '../types/matrix-report'
+
+const MOCK_KEYWORDS: KeywordSummary = {
+  strengths: [
+    { text: '手数料の安さ', polarity: 'strength', count: 3, elaboration: '', persona_names: ['A', 'B', 'C'] },
+    { text: '24時間利用', polarity: 'strength', count: 2, elaboration: '', persona_names: ['A', 'B'] },
+  ],
+  weaknesses: [
+    { text: 'セキュリティ不安', polarity: 'weakness', count: 4, elaboration: '', persona_names: ['A', 'B', 'C', 'D'] },
+  ],
+}
+
+const MOCK_RECS: Recommendation[] = [
+  { title: '段階的な移行支援', highlight_tag: '併用モデル', body: '地方銀行との併用で不安を緩和' },
+  { title: '地域特化コンテンツ', highlight_tag: '地産地消', body: '高知の地産地消に特化した機能' },
+]
+
+const MOCK_ROWS: ScoreTableRow[] = [
+  { persona_id: 'p1', name: '田中', x_score: 4, y_score: 2, industry: '小売業', age: 40, quadrant_label: '即時採用層' },
+  { persona_id: 'p2', name: '佐藤', x_score: 2, y_score: 4, industry: '建設業', age: 35, quadrant_label: '様子見層' },
+]
+
+const MOCK_AXES: AxisConfig = {
+  x_axis: { name: '関心度', rubric: '', label_low: '', label_high: '' },
+  y_axis: { name: '利用障壁', rubric: '', label_low: '', label_high: '' },
+  quadrants: [],
+}
+
+describe('KeywordPanel', () => {
+  it('renders strength keywords', () => {
+    render(<KeywordPanel keywords={MOCK_KEYWORDS} />)
+    expect(screen.getByText('手数料の安さ')).toBeDefined()
+    expect(screen.getByText('24時間利用')).toBeDefined()
+  })
+
+  it('renders weakness keywords', () => {
+    render(<KeywordPanel keywords={MOCK_KEYWORDS} />)
+    expect(screen.getByText('セキュリティ不安')).toBeDefined()
+  })
+
+  it('shows count badge on keywords', () => {
+    render(<KeywordPanel keywords={MOCK_KEYWORDS} />)
+    expect(screen.getByText('3')).toBeDefined()
+    expect(screen.getByText('4')).toBeDefined()
+  })
+})
+
+describe('RecommendationCards', () => {
+  it('renders all recommendation titles', () => {
+    render(<RecommendationCards recommendations={MOCK_RECS} />)
+    expect(screen.getByText('段階的な移行支援')).toBeDefined()
+    expect(screen.getByText('地域特化コンテンツ')).toBeDefined()
+  })
+
+  it('renders highlight tags', () => {
+    render(<RecommendationCards recommendations={MOCK_RECS} />)
+    expect(screen.getByText('併用モデル')).toBeDefined()
+    expect(screen.getByText('地産地消')).toBeDefined()
+  })
+
+  it('renders empty state when no recommendations', () => {
+    render(<RecommendationCards recommendations={[]} />)
+    expect(screen.getByText('提案を生成中...')).toBeDefined()
+  })
+})
+
+describe('ScoreTable', () => {
+  it('renders all persona names', () => {
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
+    expect(screen.getByText('田中')).toBeDefined()
+    expect(screen.getByText('佐藤')).toBeDefined()
+  })
+
+  it('renders quadrant labels', () => {
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
+    expect(screen.getByText('即時採用層')).toBeDefined()
+    expect(screen.getByText('様子見層')).toBeDefined()
+  })
+
+  it('renders axis column headers', () => {
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
+    expect(screen.getByText('関心度')).toBeDefined()
+    expect(screen.getByText('利用障壁')).toBeDefined()
+  })
+})
