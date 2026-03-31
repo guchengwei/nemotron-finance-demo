@@ -72,8 +72,8 @@ describe('KeywordPanel', () => {
 describe('RecommendationCards', () => {
   it('renders all recommendation titles', () => {
     render(<RecommendationCards recommendations={MOCK_RECS} />)
-    expect(screen.getByText('段階的な移行支援')).toBeDefined()
-    expect(screen.getByText('地域特化コンテンツ')).toBeDefined()
+    expect(screen.getByText(/段階的な移行支援/)).toBeDefined()
+    expect(screen.getByText(/地域特化コンテンツ/)).toBeDefined()
   })
 
   it('renders highlight tags', () => {
@@ -85,6 +85,18 @@ describe('RecommendationCards', () => {
   it('renders empty state when no recommendations', () => {
     render(<RecommendationCards recommendations={[]} />)
     expect(screen.getByText('提案を生成中...')).toBeDefined()
+  })
+
+  it('renders recommendations in grid layout', () => {
+    const { container } = render(<RecommendationCards recommendations={MOCK_RECS} />)
+    const grid = container.querySelector('.grid')
+    expect(grid).not.toBeNull()
+  })
+
+  it('renders numbered titles with ① ② prefix', () => {
+    render(<RecommendationCards recommendations={MOCK_RECS} />)
+    expect(screen.getByText(/①/)).toBeDefined()
+    expect(screen.getByText(/②/)).toBeDefined()
   })
 })
 

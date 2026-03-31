@@ -4,6 +4,8 @@ interface RecommendationCardsProps {
   recommendations: Recommendation[]
 }
 
+const NUMBERED_PREFIXES = ['①', '②', '③', '④', '⑤']
+
 export default function RecommendationCards({ recommendations }: RecommendationCardsProps) {
   if (recommendations.length === 0) {
     return (
@@ -14,19 +16,19 @@ export default function RecommendationCards({ recommendations }: RecommendationC
   }
 
   return (
-    <div className="space-y-3">
-      {recommendations.map((rec) => (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      {recommendations.map((rec, index) => (
         <div
           key={rec.highlight_tag + rec.title}
-          className="rounded-[1.5rem] border border-fin-border bg-fin-surface p-5"
+          className="rounded-2xl border border-fin-border bg-fin-surface p-4"
         >
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className="rounded-full bg-fin-accent/10 px-2.5 py-0.5 text-xs font-bold text-fin-accent">
-              {rec.highlight_tag}
-            </span>
-            <h4 className="text-sm font-bold text-fin-ink">{rec.title}</h4>
-          </div>
-          <p className="text-sm text-fin-muted">{rec.body}</p>
+          <p className="text-sm font-bold text-fin-ink">
+            {NUMBERED_PREFIXES[index] ?? ''}{rec.title}
+          </p>
+          <span className="mt-2 inline-block rounded-full bg-fin-accent/10 px-2.5 py-0.5 text-xs font-bold text-fin-accent">
+            {rec.highlight_tag}
+          </span>
+          <p className="mt-2 text-xs text-fin-muted">{rec.body}</p>
         </div>
       ))}
     </div>
