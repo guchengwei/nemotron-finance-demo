@@ -118,7 +118,7 @@ export default function MatrixReport({ surveyId }: MatrixReportProps) {
       {scoreTable.length > 0 && axes && (
         <div>
           <h3 className="mb-3 text-sm font-bold text-fin-ink">回答者スコア一覧</h3>
-          <ScoreTable rows={scoreTable} axes={axes} />
+          <ScoreTable rows={scoreTable} axes={axes} onRowClick={(row) => handlePersonaClick({ ...row, keywords: [] })} />
         </div>
       )}
 

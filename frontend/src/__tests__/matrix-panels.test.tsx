@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import KeywordPanel from '../components/report-matrix/KeywordPanel'
 import RecommendationCards from '../components/report-matrix/RecommendationCards'
@@ -105,5 +105,51 @@ describe('ScoreTable', () => {
     render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
     expect(screen.getByText('関心度')).toBeDefined()
     expect(screen.getByText('利用障壁')).toBeDefined()
+  })
+
+  it('renders 氏名 column header', () => {
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
+    expect(screen.getByText('氏名')).toBeDefined()
+  })
+
+  it('renders 業種・年齢 combined column', () => {
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
+    const firstRow = MOCK_ROWS[0]
+    expect(screen.getByText(`${firstRow.industry}・${firstRow.age}歳`)).toBeDefined()
+  })
+
+  it('renders 分類 column header', () => {
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
+    expect(screen.getByText('分類')).toBeDefined()
+  })
+
+  it('renders star badge for 即時採用層', () => {
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
+    expect(screen.getByText('★')).toBeDefined()
+  })
+
+  it('renders barrier level as text chip not number', () => {
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
+    const lowBarrierRow = MOCK_ROWS.find(r => r.y_score <= 2)
+    const highBarrierRow = MOCK_ROWS.find(r => r.y_score >= 4)
+    if (lowBarrierRow) expect(screen.getByText('低')).toBeDefined()
+    if (highBarrierRow) expect(screen.getByText('高')).toBeDefined()
+  })
+
+  it('renders x_score as colored circle badge', () => {
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} />)
+    const firstRow = MOCK_ROWS[0]
+    const scoreText = screen.getAllByText(String(firstRow.x_score))
+    const badge = scoreText.find(el => el.classList.contains('rounded-full'))
+    expect(badge).toBeDefined()
+  })
+
+  it('calls onRowClick when row is clicked', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event')
+    const user = userEvent.setup()
+    const handleClick = vi.fn()
+    render(<ScoreTable rows={MOCK_ROWS} axes={MOCK_AXES} onRowClick={handleClick} />)
+    await user.click(screen.getByText(MOCK_ROWS[0].name))
+    expect(handleClick).toHaveBeenCalledWith(expect.objectContaining({ persona_id: MOCK_ROWS[0].persona_id }))
   })
 })
