@@ -184,3 +184,38 @@ async def test_pipeline_emits_keyword_elaborated_events(mock_survey_data):
         post_kw_events = event_types[kw_idx+1:]
         assert "keyword_elaborated" in post_kw_events, \
             "Should emit keyword_elaborated events after keywords_ready"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_emits_keyword_elaborated_in_real_llm_mode(mock_survey_data):
+    """keyword_elaborated must be emitted in real-LLM mode too."""
+    mock_scorer = AsyncMock(side_effect=lambda pid, name, ind, age, qa, axes:
+        {**_mock_score_result(pid, name, ind, age),
+         "keywords": [{"text": "手数料の安さ", "polarity": "strength"}]})
+
+    mock_elaborations = {"手数料の安さ": "コスト競争力の高さが評価されています。"}
+
+    with patch("matrix_pipeline.score_persona", mock_scorer), \
+         patch("matrix_pipeline.settings") as mock_settings, \
+         patch("matrix_pipeline.elaborate_keywords",
+               new=AsyncMock(return_value=mock_elaborations)):
+        mock_settings.mock_llm = False
+        mock_settings.llm_concurrency = 2
+
+        events = []
+        async for event_type, event_data in run_matrix_pipeline(
+            survey_data=mock_survey_data,
+            preset_key="interest_barrier",
+        ):
+            events.append((event_type, event_data))
+
+    event_types = [e[0] for e in events]
+    kw_idx = event_types.index("keywords_ready")
+    post_kw = event_types[kw_idx + 1:]
+    assert "keyword_elaborated" in post_kw, \
+        "keyword_elaborated must be emitted after keywords_ready in real-LLM mode"
+
+    elab_events = [(t, d) for t, d in events if t == "keyword_elaborated"]
+    assert len(elab_events) >= 1
+    assert elab_events[0][1]["keyword_text"] == "手数料の安さ"
+    assert elab_events[0][1]["elaboration"] == "コスト競争力の高さが評価されています。"

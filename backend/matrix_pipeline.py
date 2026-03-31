@@ -49,6 +49,55 @@ MOCK_ELABORATIONS: dict[str, str] = {
 
 DEFAULT_ELABORATION = "このキーワードは複数のペルソナに共通して言及されており、重要な意見として注目されます。"
 
+ELABORATION_PROMPT = """あなたはフィンテック調査の分析専門家です。アンケートで複数のペルソナから言及されたキーワードについて、それぞれ1〜2文の日本語で説明してください。
+
+【キーワード一覧】
+{keyword_list}
+
+以下のJSON形式のみで回答してください（他のテキストは不要）:
+{{"<キーワード>": "<1〜2文の説明>", "<キーワード>": "<1〜2文の説明>"}}"""
+
+
+async def elaborate_keywords(keywords: KeywordSummary) -> dict[str, str]:
+    """Call LLM once to elaborate all aggregated keywords.
+
+    Returns a dict mapping keyword text → elaboration sentence.
+    Falls back to empty dict on any error (caller uses DEFAULT_ELABORATION).
+    """
+    all_kws = [kw.text for kw in keywords.strengths + keywords.weaknesses]
+    if not all_kws:
+        return {}
+
+    keyword_list = "\n".join(f"- {t}" for t in all_kws)
+    prompt = ELABORATION_PROMPT.format(keyword_list=keyword_list)
+
+    try:
+        async with get_semaphore():
+            client = get_client()
+            response = await client.chat.completions.create(
+                model=settings.vllm_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=settings.report_temperature,
+                max_tokens=settings.report_max_tokens,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            )
+
+        raw = response.choices[0].message.content or ""
+        text = _strip_fences(raw)
+        match = re.search(r"\{[\s\S]*\}", text)
+        if not match:
+            logger.warning("No JSON object in elaboration response")
+            return {}
+
+        data = json_repair.loads(match.group())
+        if not isinstance(data, dict):
+            return {}
+        return {str(k): str(v) for k, v in data.items()}
+
+    except Exception as e:
+        logger.error("Keyword elaboration failed: %s", e)
+        return {}
+
 
 async def generate_recommendations(keywords: KeywordSummary, scored: list[ScoredPersona]) -> list[dict]:
     """Call LLM to generate 3 strategic recommendations.
@@ -181,11 +230,16 @@ async def run_matrix_pipeline(
     keywords = aggregate_keywords(scored)
     yield ("keywords_ready", keywords.model_dump())
 
-    # Stage 3b: Keyword elaboration (mock mode uses static strings)
+    # Stage 3b: Keyword elaboration
     all_keywords = list(keywords.strengths) + list(keywords.weaknesses)
     if settings.mock_llm:
         for kw in all_keywords:
             elaboration = MOCK_ELABORATIONS.get(kw.text, DEFAULT_ELABORATION)
+            yield ("keyword_elaborated", {"keyword_text": kw.text, "elaboration": elaboration})
+    else:
+        elaboration_map = await elaborate_keywords(keywords)
+        for kw in all_keywords:
+            elaboration = elaboration_map.get(kw.text, DEFAULT_ELABORATION)
             yield ("keyword_elaborated", {"keyword_text": kw.text, "elaboration": elaboration})
 
     # Stage 4: Recommendations
