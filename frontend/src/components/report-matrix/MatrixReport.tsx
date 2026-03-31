@@ -24,7 +24,13 @@ export default function MatrixReport({ surveyId }: MatrixReportProps) {
     if (fromSelected) return fromSelected
     if (currentHistoryRun) {
       const answer = currentHistoryRun.answers.find((a) => a.persona_uuid === personaId)
-      if (answer?.persona_full_json) return JSON.parse(answer.persona_full_json) as import('../../types').Persona
+      if (answer?.persona_full_json) {
+        try {
+          return JSON.parse(answer.persona_full_json) as import('../../types').Persona
+        } catch {
+          /* skip malformed stored JSON */
+        }
+      }
     }
     return null
   }
