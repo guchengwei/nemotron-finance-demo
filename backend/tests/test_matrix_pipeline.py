@@ -97,3 +97,125 @@ async def test_pipeline_empty_personas():
 
     event_types = [e[0] for e in events]
     assert "report_error" in event_types
+
+
+@pytest.mark.asyncio
+async def test_pipeline_emits_recommendations_ready_in_real_llm_mode(mock_survey_data):
+    """Bug 5: recommendations_ready must be emitted in non-mock mode."""
+    mock_scorer = AsyncMock(side_effect=lambda pid, name, ind, age, qa, axes:
+        _mock_score_result(pid, name, ind, age))
+
+    mock_recs = [
+        {"title": "テスト提案1", "body": "説明1", "tag": "教育"},
+        {"title": "テスト提案2", "body": "説明2", "tag": "サービス"},
+        {"title": "テスト提案3", "body": "説明3", "tag": "製品"},
+    ]
+    mock_gen_recs = AsyncMock(return_value=mock_recs)
+
+    with patch("matrix_pipeline.score_persona", mock_scorer), \
+         patch("matrix_pipeline.generate_recommendations", mock_gen_recs), \
+         patch("matrix_pipeline.settings") as mock_settings:
+        mock_settings.mock_llm = False
+        mock_settings.llm_concurrency = 2
+
+        events = []
+        async for event_type, event_data in run_matrix_pipeline(
+            survey_data=mock_survey_data,
+            preset_key="interest_barrier",
+        ):
+            events.append((event_type, event_data))
+
+        event_types = [e[0] for e in events]
+        assert "recommendations_ready" in event_types, \
+            "recommendations_ready event must be emitted in real LLM mode"
+
+        rec_events = [(t, d) for t, d in events if t == "recommendations_ready"]
+        assert rec_events[0][1] == mock_recs, \
+            "recommendations_ready data must match the generate_recommendations return value"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_recommendations_fallback_on_error(mock_survey_data):
+    """If recommendation generation fails, emit empty list instead of crashing."""
+    mock_scorer = AsyncMock(side_effect=lambda pid, name, ind, age, qa, axes:
+        _mock_score_result(pid, name, ind, age))
+
+    with patch("matrix_pipeline.score_persona", mock_scorer), \
+         patch("matrix_pipeline.settings") as mock_settings, \
+         patch("matrix_pipeline.generate_recommendations",
+               side_effect=Exception("LLM down")):
+        mock_settings.mock_llm = False
+        mock_settings.llm_concurrency = 2
+
+        events = []
+        async for event_type, event_data in run_matrix_pipeline(
+            survey_data=mock_survey_data,
+            preset_key="interest_barrier",
+        ):
+            events.append((event_type, event_data))
+
+        rec_events = [(t, d) for t, d in events if t == "recommendations_ready"]
+        assert len(rec_events) == 1, "Should emit recommendations_ready even on error"
+        assert rec_events[0][1] == [], "Should emit empty list on failure"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_emits_keyword_elaborated_events(mock_survey_data):
+    """After keywords_ready, pipeline should emit keyword_elaborated events."""
+    mock_scorer = AsyncMock(side_effect=lambda pid, name, ind, age, qa, axes:
+        {**_mock_score_result(pid, name, ind, age),
+         "keywords": [{"text": "手数料の安さ", "polarity": "strength"}]})
+
+    with patch("matrix_pipeline.score_persona", mock_scorer), \
+         patch("matrix_pipeline.settings") as mock_settings:
+        mock_settings.mock_llm = True
+        mock_settings.llm_concurrency = 2
+
+        events = []
+        async for event_type, event_data in run_matrix_pipeline(
+            survey_data=mock_survey_data,
+            preset_key="interest_barrier",
+        ):
+            events.append((event_type, event_data))
+
+        event_types = [e[0] for e in events]
+        kw_idx = event_types.index("keywords_ready")
+        # keyword_elaborated events should appear after keywords_ready
+        post_kw_events = event_types[kw_idx+1:]
+        assert "keyword_elaborated" in post_kw_events, \
+            "Should emit keyword_elaborated events after keywords_ready"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_emits_keyword_elaborated_in_real_llm_mode(mock_survey_data):
+    """keyword_elaborated must be emitted in real-LLM mode too."""
+    mock_scorer = AsyncMock(side_effect=lambda pid, name, ind, age, qa, axes:
+        {**_mock_score_result(pid, name, ind, age),
+         "keywords": [{"text": "手数料の安さ", "polarity": "strength"}]})
+
+    mock_elaborations = {"手数料の安さ": "コスト競争力の高さが評価されています。"}
+
+    with patch("matrix_pipeline.score_persona", mock_scorer), \
+         patch("matrix_pipeline.settings") as mock_settings, \
+         patch("matrix_pipeline.elaborate_keywords",
+               new=AsyncMock(return_value=mock_elaborations)):
+        mock_settings.mock_llm = False
+        mock_settings.llm_concurrency = 2
+
+        events = []
+        async for event_type, event_data in run_matrix_pipeline(
+            survey_data=mock_survey_data,
+            preset_key="interest_barrier",
+        ):
+            events.append((event_type, event_data))
+
+    event_types = [e[0] for e in events]
+    kw_idx = event_types.index("keywords_ready")
+    post_kw = event_types[kw_idx + 1:]
+    assert "keyword_elaborated" in post_kw, \
+        "keyword_elaborated must be emitted after keywords_ready in real-LLM mode"
+
+    elab_events = [(t, d) for t, d in events if t == "keyword_elaborated"]
+    assert len(elab_events) >= 1
+    assert elab_events[0][1]["keyword_text"] == "手数料の安さ"
+    assert elab_events[0][1]["elaboration"] == "コスト競争力の高さが評価されています。"
