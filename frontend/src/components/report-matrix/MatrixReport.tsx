@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useStore } from '../../store'
 import { startMatrixReportSSE } from '../../api'
-import type { AxisConfig, ScoredPersona, KeywordSummary, Recommendation, ScoreTableRow } from '../../types/matrix-report'
+import type { AxisConfig, ScoredPersona, KeywordSummary, Recommendation, ScoreTableRow, AggregatedKeyword } from '../../types/matrix-report'
 import QuadrantMatrix from './QuadrantMatrix'
 import KeywordPanel from './KeywordPanel'
 import RecommendationCards from './RecommendationCards'
@@ -14,7 +14,27 @@ interface MatrixReportProps {
 export default function MatrixReport({ surveyId }: MatrixReportProps) {
   const matrixReport = useStore((s) => s.matrixReport)
   const setMatrixReport = useStore((s) => s.setMatrixReport)
+  const selectedPersonas = useStore((s) => s.selectedPersonas)
+  const currentHistoryRun = useStore((s) => s.currentHistoryRun)
+  const openPersonaDetail = useStore((s) => s.openPersonaDetail)
   const abortRef = useRef<(() => void) | null>(null)
+
+  function resolvePersona(personaId: string) {
+    const fromSelected = selectedPersonas.find((p) => p.uuid === personaId)
+    if (fromSelected) return fromSelected
+    if (currentHistoryRun) {
+      const answer = currentHistoryRun.answers.find((a) => a.persona_uuid === personaId)
+      if (answer?.persona_full_json) return JSON.parse(answer.persona_full_json) as import('../../types').Persona
+    }
+    return null
+  }
+
+  function handlePersonaClick(scoredPersona: ScoredPersona) {
+    const persona = resolvePersona(scoredPersona.persona_id)
+    if (persona) {
+      openPersonaDetail(persona)
+    }
+  }
 
   useEffect(() => {
     if (!surveyId) return
@@ -38,6 +58,20 @@ export default function MatrixReport({ surveyId }: MatrixReportProps) {
           setMatrixReport({ recommendations: data as Recommendation[] })
         } else if (event === 'score_table_ready') {
           setMatrixReport({ scoreTable: data as ScoreTableRow[] })
+        } else if (event === 'keyword_elaborated') {
+          const { keyword_text, elaboration } = data as { keyword_text: string; elaboration: string }
+          useStore.setState((s) => {
+            const kw = s.matrixReport.keywords
+            if (!kw) return s
+            const update = (list: AggregatedKeyword[]) =>
+              list.map((k) => k.text === keyword_text ? { ...k, elaboration } : k)
+            return {
+              matrixReport: {
+                ...s.matrixReport,
+                keywords: { strengths: update(kw.strengths), weaknesses: update(kw.weaknesses) },
+              },
+            }
+          })
         } else if (event === 'report_complete') {
           setMatrixReport({ status: 'complete' })
         } else if (event === 'report_error') {
@@ -66,7 +100,7 @@ export default function MatrixReport({ surveyId }: MatrixReportProps) {
   return (
     <div className="space-y-6">
       {axes && (
-        <QuadrantMatrix axes={axes} personas={personas} />
+        <QuadrantMatrix axes={axes} personas={personas} onPersonaClick={handlePersonaClick} />
       )}
 
       {keywords && (
