@@ -43,10 +43,29 @@ describe('KeywordPanel', () => {
     expect(screen.getByText('セキュリティ不安')).toBeDefined()
   })
 
-  it('shows count badge on keywords', () => {
+  it('shows count as ×N format', () => {
     render(<KeywordPanel keywords={MOCK_KEYWORDS} />)
-    expect(screen.getByText('3')).toBeDefined()
-    expect(screen.getByText('4')).toBeDefined()
+    const strengthCount = MOCK_KEYWORDS.strengths[0].count
+    const weaknessCount = MOCK_KEYWORDS.weaknesses[0].count
+    expect(screen.getByText(`×${strengthCount}`)).toBeDefined()
+    expect(screen.getByText(`×${weaknessCount}`)).toBeDefined()
+  })
+
+  it('renders two separate panel cards', () => {
+    const { container } = render(<KeywordPanel keywords={MOCK_KEYWORDS} />)
+    const cards = container.querySelectorAll('.shadow-card')
+    expect(cards.length).toBe(2)
+  })
+
+  it('renders elaboration text when present', () => {
+    const withElab = {
+      ...MOCK_KEYWORDS,
+      strengths: [
+        { ...MOCK_KEYWORDS.strengths[0], elaboration: '複数名が低コストを評価' },
+      ],
+    }
+    render(<KeywordPanel keywords={withElab} />)
+    expect(screen.getByText('複数名が低コストを評価')).toBeDefined()
   })
 })
 
