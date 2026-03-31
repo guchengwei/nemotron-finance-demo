@@ -6,23 +6,111 @@ Each stage yields (event_type, event_data) tuples.
 
 import asyncio
 import logging
-from typing import AsyncGenerator
+import re
+from typing import Any, AsyncGenerator
 
 from config import settings
+from llm import get_client, get_semaphore
 from matrix_models import (
     AXIS_PRESETS, AxisPreset, ScoredPersona, KeywordEntry,
     KeywordSummary, Recommendation, MatrixReportData,
 )
-from matrix_scorer import score_persona
+from matrix_scorer import score_persona, _strip_fences
 from matrix_keywords import aggregate_keywords
 
+import json_repair  # type: ignore
+
 logger = logging.getLogger(__name__)
+
+RECOMMENDATIONS_PROMPT = """あなたはフィンテック戦略アドバイザーです。アンケート分析結果を基に、製品改善の提言を3つ生成してください。
+
+【弱点キーワード（上位）】
+{weakness_keywords}
+
+【象限分布】
+{quadrant_distribution}
+
+以下のJSON配列のみで回答してください（他のテキストは不要）:
+[
+  {{"title": "<提言タイトル>", "highlight_tag": "<キーワードタグ>", "body": "<具体的な提言内容>"}},
+  {{"title": "<提言タイトル>", "highlight_tag": "<キーワードタグ>", "body": "<具体的な提言内容>"}},
+  {{"title": "<提言タイトル>", "highlight_tag": "<キーワードタグ>", "body": "<具体的な提言内容>"}}
+]"""
+
+MOCK_ELABORATIONS: dict[str, str] = {
+    "手数料の安さ": "競合他社と比べた手数料の低さが強みとして認識されており、コスト意識の高いユーザー層を引き付けています。",
+    "セキュリティ不安": "個人情報や資産管理に対する不安感が障壁となっており、信頼性向上施策が求められます。",
+    "高金利・資産管理": "高い利回りや資産管理機能への期待が採用動機となっており、投資意欲の高い層に訴求しています。",
+    "24時間・場所不問": "いつでもどこでも利用できる利便性が支持されており、忙しいビジネスパーソンに特に響いています。",
+    "対面サポート欠如": "オンラインのみのサポートに不満を感じるユーザーが多く、対面や電話での相談窓口整備が課題です。",
+    "業務連携ツール": "既存の業務システムとの連携機能が評価されており、業務効率化を重視する企業ユーザーに支持されています。",
+    "学習コスト": "新しいシステムの習得に時間とコストがかかることへの懸念があり、直感的なUIの改善が求められます。",
+}
+
+DEFAULT_ELABORATION = "このキーワードは複数のペルソナに共通して言及されており、重要な意見として注目されます。"
+
+
+async def generate_recommendations(keywords: KeywordSummary, scored: list[ScoredPersona]) -> list[dict]:
+    """Call LLM to generate 3 strategic recommendations.
+
+    Uses the same get_client() + get_semaphore() pattern from llm.py.
+    Returns a list of recommendation dicts matching the Recommendation model.
+    """
+    weakness_kws = ", ".join(kw.text for kw in keywords.weaknesses[:5]) or "（なし）"
+
+    quadrant_counts: dict[str, int] = {}
+    for p in scored:
+        label = p.quadrant_label or "不明"
+        quadrant_counts[label] = quadrant_counts.get(label, 0) + 1
+    quadrant_dist = "、".join(f"{label}: {count}名" for label, count in quadrant_counts.items())
+
+    prompt = RECOMMENDATIONS_PROMPT.format(
+        weakness_keywords=weakness_kws,
+        quadrant_distribution=quadrant_dist or "（データなし）",
+    )
+
+    async with get_semaphore():
+        client = get_client()
+        response = await client.chat.completions.create(
+            model=settings.vllm_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=settings.report_temperature,
+            max_tokens=settings.report_max_tokens,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+
+    raw = response.choices[0].message.content or ""
+    text = _strip_fences(raw)
+
+    match = re.search(r"\[[\s\S]*\]", text)
+    if not match:
+        logger.warning("No JSON array found in recommendations response")
+        return []
+
+    try:
+        data = json_repair.loads(match.group())
+    except Exception:
+        logger.warning("Failed to parse recommendations JSON")
+        return []
+
+    if not isinstance(data, list):
+        return []
+
+    recs = []
+    for item in data[:3]:
+        if isinstance(item, dict) and "title" in item and "body" in item:
+            recs.append({
+                "title": str(item.get("title", "")),
+                "highlight_tag": str(item.get("highlight_tag", "")),
+                "body": str(item.get("body", "")),
+            })
+    return recs
 
 
 async def run_matrix_pipeline(
     survey_data: dict,
     preset_key: str = "interest_barrier",
-) -> AsyncGenerator[tuple[str, dict], None]:
+) -> AsyncGenerator[tuple[str, Any], None]:
     """
     Main orchestrator. Yields (event_type, event_data) tuples.
 
@@ -93,7 +181,14 @@ async def run_matrix_pipeline(
     keywords = aggregate_keywords(scored)
     yield ("keywords_ready", keywords.model_dump())
 
-    # Stage 4: Recommendations (mock only for now)
+    # Stage 3b: Keyword elaboration (mock mode uses static strings)
+    all_keywords = list(keywords.strengths) + list(keywords.weaknesses)
+    if settings.mock_llm:
+        for kw in all_keywords:
+            elaboration = MOCK_ELABORATIONS.get(kw.text, DEFAULT_ELABORATION)
+            yield ("keyword_elaborated", {"keyword_text": kw.text, "elaboration": elaboration})
+
+    # Stage 4: Recommendations
     if settings.mock_llm:
         mock_recs = [
             {"title": "段階的な移行支援", "highlight_tag": "併用モデル",
@@ -104,6 +199,13 @@ async def run_matrix_pipeline(
              "body": "専門家相談窓口の整備。初心者向け動画・チュートリアルを充実"},
         ]
         yield ("recommendations_ready", mock_recs)
+    else:
+        try:
+            recs = await generate_recommendations(keywords, scored)
+        except Exception as e:
+            logger.error("Recommendation generation failed: %s", e)
+            recs = []
+        yield ("recommendations_ready", recs)
 
     # Build score table
     table = [
