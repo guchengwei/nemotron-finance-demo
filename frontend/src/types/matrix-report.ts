@@ -27,6 +27,8 @@ export interface ScoredPersona {
   name: string
   x_score: number
   y_score: number
+  x_score_raw?: number
+  y_score_raw?: number
   keywords: KeywordEntry[]
   quadrant_label: string
   industry: string
@@ -57,6 +59,8 @@ export interface ScoreTableRow {
   name: string
   x_score: number
   y_score: number
+  x_score_raw?: number
+  y_score_raw?: number
   industry: string
   age: number
   quadrant_label: string
