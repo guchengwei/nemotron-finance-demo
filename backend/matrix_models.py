@@ -37,6 +37,8 @@ class ScoredPersona(BaseModel):
     name: str
     x_score: float = Field(ge=1, le=5)
     y_score: float = Field(ge=1, le=5)
+    x_score_raw: float = Field(default=3.0, ge=1, le=5)
+    y_score_raw: float = Field(default=3.0, ge=1, le=5)
     keywords: list[KeywordEntry] = []
     quadrant_label: str = ""
     industry: str = ""
@@ -81,8 +83,8 @@ AXIS_PRESETS: dict[str, AxisPreset] = {
             label_high="関心高い",
         ),
         y_axis=AxisDef(
-            name="利用障壁",
-            rubric="Q3等の懸念・不安に関する回答から障壁の高さを1-5で評価",
+            name="導入ハードル",
+            rubric="Q2の回答スコアおよび懸念・不安の強さから1-5で評価",
             label_low="低障壁",
             label_high="高障壁",
         ),
