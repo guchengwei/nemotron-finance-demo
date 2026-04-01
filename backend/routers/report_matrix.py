@@ -6,6 +6,7 @@ GET  /api/report/matrix/{survey_id} — returns persisted report JSON.
 
 import json
 import logging
+import aiosqlite
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
@@ -131,6 +132,7 @@ async def generate_matrix_report(request: MatrixReportRequest):
 async def get_matrix_report(survey_id: str):
     """Return persisted matrix report JSON for history reload."""
     db = await get_history_db()
+    db.row_factory = aiosqlite.Row
     row = await db.execute(
         "SELECT matrix_report_json FROM survey_runs WHERE id = ?", [survey_id]
     )
