@@ -288,6 +288,18 @@ export function startFollowupSSE(
   }
 }
 
+export async function getMatrixReport(surveyId: string): Promise<{
+  axes: unknown; personas: unknown[]; keywords: unknown; recommendations: unknown[]
+} | null> {
+  try {
+    const res = await fetch(`/api/report/matrix/${surveyId}`)
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
 export function startMatrixReportSSE(
   request: { survey_id: string; preset_key: string },
   onEvent: (event: string, data: unknown) => void,
