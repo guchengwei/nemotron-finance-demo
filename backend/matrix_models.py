@@ -115,4 +115,44 @@ AXIS_PRESETS: dict[str, AxisPreset] = {
             QuadrantDef(position="bottom-right", label="実利追求層", subtitle="リスク許容・保守的"),
         ],
     ),
+    "risk_time": AxisPreset(
+        x_axis=AxisDef(
+            name="リスク許容度",
+            rubric="投資リスクに対する態度やリスク許容の程度から1-5で評価",
+            label_low="リスク回避",
+            label_high="リスク許容",
+        ),
+        y_axis=AxisDef(
+            name="投資期間志向",
+            rubric="短期利益志向vs長期資産形成志向の度合いから1-5で評価",
+            label_low="短期志向",
+            label_high="長期志向",
+        ),
+        quadrants=[
+            QuadrantDef(position="top-left", label="堅実長期層", subtitle="リスク回避・長期志向"),
+            QuadrantDef(position="top-right", label="積極投資層", subtitle="リスク許容・長期志向"),
+            QuadrantDef(position="bottom-left", label="現金保守層", subtitle="リスク回避・短期志向"),
+            QuadrantDef(position="bottom-right", label="機動投機層", subtitle="リスク許容・短期志向"),
+        ],
+    ),
+    "regulation_innovation": AxisPreset(
+        x_axis=AxisDef(
+            name="規制保守度",
+            rubric="既存規制・制度への信頼度と遵守志向の強さから1-5で評価",
+            label_low="柔軟",
+            label_high="保守的",
+        ),
+        y_axis=AxisDef(
+            name="革新受容度",
+            rubric="新技術・新手法への受容性と積極性から1-5で評価",
+            label_low="慎重",
+            label_high="積極的",
+        ),
+        quadrants=[
+            QuadrantDef(position="top-left", label="段階導入層", subtitle="柔軟・革新積極"),
+            QuadrantDef(position="top-right", label="慎重革新層", subtitle="保守的・革新積極"),
+            QuadrantDef(position="bottom-left", label="現状満足層", subtitle="柔軟・革新慎重"),
+            QuadrantDef(position="bottom-right", label="制度依存層", subtitle="保守的・革新慎重"),
+        ],
+    ),
 }
