@@ -8,7 +8,7 @@ from matrix_models import (
 def test_axis_config_from_preset():
     preset = AXIS_PRESETS["interest_barrier"]
     assert preset.x_axis.name == "関心度"
-    assert preset.y_axis.name == "利用障壁"
+    assert preset.y_axis.name == "導入ハードル"
     assert len(preset.quadrants) == 4
     labels = {q.label for q in preset.quadrants}
     assert labels == {"様子見層", "潜在採用層", "慎重観察層", "即時採用層"}
