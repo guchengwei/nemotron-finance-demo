@@ -67,3 +67,49 @@ async def test_get_matrix_report_returns_persisted_json():
             resp = await client.get("/api/report/matrix/run-1")
             assert resp.status_code == 200
             assert resp.json()["axes"]["x_axis"]["name"] == "関心度"
+
+
+# -- New tests --
+
+def test_full_name_extraction_from_persona_full_json():
+    """Router should extract full name from persona_full_json.name."""
+    from routers.report_matrix import _extract_full_name
+
+    persona_json = json.dumps({"name": "太居 朔都", "age": 49})
+    assert _extract_full_name(persona_json, "太居 朔都, 49歳男性, 建設業", "abc123") == "太居 朔都"
+
+
+def test_full_name_fallback_to_summary():
+    """When persona_full_json is None, extract from summary before first comma."""
+    from routers.report_matrix import _extract_full_name
+
+    assert _extract_full_name(None, "福井隆助, 40歳男性, 小売業", "abc123") == "福井隆助"
+
+
+def test_full_name_fallback_to_uuid_prefix():
+    """When both json and summary are empty, use UUID prefix."""
+    from routers.report_matrix import _extract_full_name
+
+    assert _extract_full_name(None, None, "abc12345-xyz") == "abc12345"
+
+
+def test_projection_applied_to_scored_personas():
+    """After pipeline, scored personas should have spread scores and canonical quadrant labels."""
+    from matrix_projection import spread_scores, assign_quadrant
+
+    # Simulate clustered raw scores (all y=4)
+    raw_xs = [2.0, 3.0, 4.0, 4.0, 3.0]
+    raw_ys = [4.0, 4.0, 3.0, 4.0, 4.0]
+
+    spread_xs = spread_scores(raw_xs)
+    spread_ys = spread_scores(raw_ys)
+
+    # Verify spread happened
+    assert min(spread_xs) < 2.0
+    assert max(spread_xs) > 4.0
+
+    # Verify quadrant labels are from canonical set
+    canonical = {"様子見層", "潜在採用層", "慎重観察層", "即時採用層"}
+    for sx, sy in zip(spread_xs, spread_ys):
+        label = assign_quadrant(sx, sy)
+        assert label in canonical

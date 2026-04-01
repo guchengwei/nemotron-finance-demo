@@ -22,6 +22,21 @@ class MatrixReportRequest(BaseModel):
     preset_key: str = "interest_barrier"
 
 
+def _extract_full_name(persona_full_json: str | None, persona_summary: str | None, persona_uuid: str) -> str:
+    """Extract full name from persona data, with fallbacks."""
+    if persona_full_json:
+        try:
+            pj = json.loads(persona_full_json)
+            name = pj.get("name", "")
+            if name:
+                return name
+        except (json.JSONDecodeError, TypeError):
+            pass
+    if persona_summary:
+        return persona_summary.split(",")[0].strip().rstrip(",")
+    return persona_uuid[:8]
+
+
 async def _matrix_stream(request: MatrixReportRequest):
     """Generator that yields SSE-formatted events from the pipeline."""
     import aiosqlite
@@ -37,7 +52,7 @@ async def _matrix_stream(request: MatrixReportRequest):
         return
 
     answers_rows = await db.execute(
-        "SELECT persona_uuid, persona_summary, answer, question_index "
+        "SELECT persona_uuid, persona_summary, persona_full_json, answer, question_index "
         "FROM survey_answers WHERE run_id = ? ORDER BY persona_uuid, question_index",
         [request.survey_id],
     )
@@ -47,8 +62,10 @@ async def _matrix_stream(request: MatrixReportRequest):
     for a in answers:
         pid = a["persona_uuid"]
         if pid not in persona_map:
-            name = (a["persona_summary"] or pid[:8]).split()[0]
-            persona_map[pid] = {"persona_id": pid, "name": name, "industry": "", "age": 0, "qa_parts": []}
+            full_name = _extract_full_name(
+                a["persona_full_json"], a["persona_summary"], pid
+            )
+            persona_map[pid] = {"persona_id": pid, "name": full_name, "industry": "", "age": 0, "qa_parts": []}
         persona_map[pid]["qa_parts"].append(f"Q{a['question_index']+1}: {a['answer']}")
 
     if persona_map:
@@ -81,6 +98,13 @@ async def _matrix_stream(request: MatrixReportRequest):
             full_report.setdefault("personas", []).append(event_data)
         elif event_type == "keywords_ready":
             full_report["keywords"] = event_data
+        elif event_type == "keyword_elaborated":
+            kw_data = event_data  # {"keyword_text": "...", "elaboration": "..."}
+            if "keywords" in full_report:
+                for group in ("strengths", "weaknesses"):
+                    for kw in full_report["keywords"].get(group, []):
+                        if kw["text"] == kw_data["keyword_text"]:
+                            kw["elaboration"] = kw_data["elaboration"]
         elif event_type == "recommendations_ready":
             full_report["recommendations"] = event_data
         elif event_type == "report_complete":
