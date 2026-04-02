@@ -1,3 +1,4 @@
+import re
 import pytest
 from pydantic import ValidationError
 from matrix_models import (
@@ -123,9 +124,11 @@ def test_axis_preset_non_validating_instance_unexpected_position_with_buggy_str_
     )
     with pytest.raises(ValueError) as excinfo:
         preset._validate_quadrants()
-    assert "unexpected positions" in str(excinfo.value)
+    msg = str(excinfo.value)
+    assert "unexpected positions" in msg
     # Ensure the unexpected value is represented in a stable way (no address dependence).
-    assert "BuggyStr" in str(excinfo.value)
+    assert "BuggyStr" in msg
+    assert re.search(r"0x[0-9a-fA-F]+", msg) is None
 
 
 def test_axis_preset_non_validating_instance_unexpected_position_with_buggy_repr_does_not_crash_error_formatting():
@@ -146,9 +149,11 @@ def test_axis_preset_non_validating_instance_unexpected_position_with_buggy_repr
     )
     with pytest.raises(ValueError) as excinfo:
         preset._validate_quadrants()
-    assert "unexpected positions" in str(excinfo.value)
+    msg = str(excinfo.value)
+    assert "unexpected positions" in msg
     # Ensure we still get a useful representation even when __repr__ raises.
-    assert "BuggyRepr" in str(excinfo.value)
+    assert "BuggyRepr" in msg
+    assert re.search(r"0x[0-9a-fA-F]+", msg) is None
 
 
 def test_axis_preset_non_validating_instance_non_hashable_unexpected_position_is_validation_error():

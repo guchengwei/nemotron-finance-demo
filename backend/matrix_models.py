@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -30,6 +31,9 @@ class AxisPreset(BaseModel):
         allowed = ("top-left", "top-right", "bottom-left", "bottom-right")
         positions = [q.position for q in self.quadrants]
 
+        # Redact raw memory addresses from default CPython object reprs so error messages are stable.
+        _ADDR_RE = re.compile(r"0x[0-9a-fA-F]+")
+
         def safe_eq(a: object, b: object) -> bool:
             try:
                 return a == b
@@ -39,13 +43,14 @@ class AxisPreset(BaseModel):
         def safe_repr(value: object) -> str:
             # Never call `str(value)` here: callers may pass objects with buggy/expensive `__str__`.
             try:
-                return repr(value)
+                rendered = repr(value)
             except Exception:
                 try:
                     # Bypass any buggy custom __repr__.
-                    return object.__repr__(value)
+                    rendered = object.__repr__(value)
                 except Exception:
-                    return f"<unprintable {type(value).__name__}>"
+                    rendered = f"<unprintable {type(value).__name__}>"
+            return _ADDR_RE.sub("0xREDACTED", rendered)
 
         def format_positions(values: list[object]) -> str:
             rendered = sorted((safe_repr(v) for v in values))
