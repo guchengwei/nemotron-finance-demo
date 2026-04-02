@@ -1,6 +1,7 @@
 """Tests for rank-based score projection."""
 
 from matrix_projection import spread_scores, assign_quadrant
+from matrix_models import AXIS_PRESETS
 
 
 class TestSpreadScores:
@@ -58,17 +59,27 @@ class TestSpreadScores:
 
 class TestAssignQuadrant:
     def test_high_interest_low_barrier(self):
-        assert assign_quadrant(4.0, 2.0) == "即時採用層"
+        preset = AXIS_PRESETS["interest_barrier"]
+        assert assign_quadrant(4.0, 2.0, preset) == "即時採用層"
 
     def test_high_interest_high_barrier(self):
-        assert assign_quadrant(4.0, 4.0) == "潜在採用層"
+        preset = AXIS_PRESETS["interest_barrier"]
+        assert assign_quadrant(4.0, 4.0, preset) == "潜在採用層"
 
     def test_low_interest_high_barrier(self):
-        assert assign_quadrant(2.0, 4.0) == "様子見層"
+        preset = AXIS_PRESETS["interest_barrier"]
+        assert assign_quadrant(2.0, 4.0, preset) == "様子見層"
 
     def test_low_interest_low_barrier(self):
-        assert assign_quadrant(2.0, 2.0) == "慎重観察層"
+        preset = AXIS_PRESETS["interest_barrier"]
+        assert assign_quadrant(2.0, 2.0, preset) == "慎重観察層"
 
     def test_exact_midpoint_goes_bottom_left(self):
         """x=3.0, y=3.0 -> low side on both axes."""
-        assert assign_quadrant(3.0, 3.0) == "慎重観察層"
+        preset = AXIS_PRESETS["interest_barrier"]
+        assert assign_quadrant(3.0, 3.0, preset) == "慎重観察層"
+
+    def test_uses_preset_labels_for_risk_time(self):
+        """Quadrant label must come from the selected preset, not a global map."""
+        preset = AXIS_PRESETS["risk_time"]
+        assert assign_quadrant(4.0, 2.0, preset) == "機動投機層"

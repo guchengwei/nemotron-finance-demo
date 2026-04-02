@@ -7,13 +7,14 @@ ties with averaged ranks. No scipy dependency.
 
 from __future__ import annotations
 
-# Canonical quadrant labels keyed by (x_high, y_high) booleans.
-# x > 3.0 = right (high interest), y > 3.0 = top (high barrier).
-_QUADRANT_MAP = {
-    (False, True):  "様子見層",      # top-left:     low interest, high barrier
-    (True,  True):  "潜在採用層",    # top-right:    high interest, high barrier
-    (False, False): "慎重観察層",    # bottom-left:  low interest, low barrier
-    (True,  False): "即時採用層",    # bottom-right: high interest, low barrier
+from matrix_models import AxisPreset
+
+
+_POSITION_TO_FLAGS: dict[str, tuple[bool, bool]] = {
+    "top-left": (False, True),
+    "top-right": (True, True),
+    "bottom-left": (False, False),
+    "bottom-right": (True, False),
 }
 
 
@@ -49,10 +50,11 @@ def spread_scores(raw: list[float], lo: float = 1.0, hi: float = 5.0) -> list[fl
     return spread
 
 
-def assign_quadrant(x_score: float, y_score: float) -> str:
+def assign_quadrant(x_score: float, y_score: float, preset: AxisPreset) -> str:
     """Deterministically assign quadrant label from projected scores.
 
-    Threshold: x > 3.0 -> right (high interest), y > 3.0 -> top (high barrier).
+    Threshold: x > 3.0 -> right (high axis), y > 3.0 -> top (high axis).
     Exact 3.0 falls to the low side.
     """
-    return _QUADRANT_MAP[(x_score > 3.0, y_score > 3.0)]
+    quadrant_map = {_POSITION_TO_FLAGS[q.position]: q.label for q in preset.quadrants}
+    return quadrant_map[(x_score > 3.0, y_score > 3.0)]

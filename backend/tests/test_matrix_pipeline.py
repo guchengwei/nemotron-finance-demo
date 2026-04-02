@@ -219,3 +219,49 @@ async def test_pipeline_emits_keyword_elaborated_in_real_llm_mode(mock_survey_da
     assert len(elab_events) >= 1
     assert elab_events[0][1]["keyword_text"] == "手数料の安さ"
     assert elab_events[0][1]["elaboration"] == "コスト競争力の高さが評価されています。"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_emits_preset_specific_quadrant_labels_for_risk_time(mock_survey_data):
+    """Quadrant labels must come from the active preset (risk_time), not a global label map."""
+
+    async def _score_side_effect(persona_id, name, industry, age, qa_text, axes):
+        # Ensure projection results are deterministic: two values map to endpoints 1.0 and 5.0.
+        if persona_id == "p1":
+            return {
+                "persona_id": persona_id,
+                "name": name,
+                "x_score": 1.0,
+                "y_score": 1.0,
+                "keywords": [],
+                "quadrant_label": "",
+                "industry": industry,
+                "age": age,
+            }
+        return {
+            "persona_id": persona_id,
+            "name": name,
+            "x_score": 5.0,
+            "y_score": 5.0,
+            "keywords": [],
+            "quadrant_label": "",
+            "industry": industry,
+            "age": age,
+        }
+
+    mock_scorer = AsyncMock(side_effect=_score_side_effect)
+
+    with patch("matrix_pipeline.score_persona", mock_scorer), \
+         patch("matrix_pipeline.settings") as mock_settings:
+        mock_settings.mock_llm = True
+        mock_settings.llm_concurrency = 2
+
+        labels = []
+        async for event_type, event_data in run_matrix_pipeline(
+            survey_data=mock_survey_data,
+            preset_key="risk_time",
+        ):
+            if event_type == "persona_scored":
+                labels.append(event_data["quadrant_label"])
+
+    assert set(labels) == {"現金保守層", "積極投資層"}

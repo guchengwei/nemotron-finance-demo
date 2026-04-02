@@ -240,11 +240,11 @@ async def run_matrix_pipeline(
             p.y_score_raw = p.y_score
             p.x_score = sx
             p.y_score = sy
-            p.quadrant_label = assign_quadrant(sx, sy)
+            p.quadrant_label = assign_quadrant(sx, sy, axes)
     elif len(scored) == 1:
         scored[0].x_score_raw = scored[0].x_score
         scored[0].y_score_raw = scored[0].y_score
-        scored[0].quadrant_label = assign_quadrant(scored[0].x_score, scored[0].y_score)
+        scored[0].quadrant_label = assign_quadrant(scored[0].x_score, scored[0].y_score, axes)
 
     # Yield all scored personas (after projection applied)
     for p in scored:
