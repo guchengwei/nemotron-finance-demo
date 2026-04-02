@@ -131,10 +131,10 @@ def test_axis_preset_non_validating_instance_unexpected_position_with_buggy_str_
     assert re.search(r"0x[0-9a-fA-F]+", msg) is None
 
 
-def test_axis_preset_non_validating_instance_unexpected_position_with_buggy_repr_does_not_crash_error_formatting():
-    class BuggyRepr:
+def test_axis_preset_non_validating_instance_unexpected_position_with_address_like_repr_is_sanitized():
+    class AddressLikeRepr:
         def __repr__(self) -> str:
-            return "<BuggyRepr object at 0x12345678>"
+            return "<AddressLikeRepr object at 0x12345678>"
 
     base = AXIS_PRESETS["interest_barrier"]
     preset = AxisPreset.model_construct(
@@ -144,7 +144,7 @@ def test_axis_preset_non_validating_instance_unexpected_position_with_buggy_repr
             QuadrantDef(position="top-left", label="a", subtitle="a"),
             QuadrantDef(position="top-right", label="b", subtitle="b"),
             QuadrantDef(position="bottom-left", label="c", subtitle="c"),
-            QuadrantDef.model_construct(position=BuggyRepr(), label="d", subtitle="d"),
+            QuadrantDef.model_construct(position=AddressLikeRepr(), label="d", subtitle="d"),
         ],
     )
     with pytest.raises(ValueError) as excinfo:
@@ -152,7 +152,32 @@ def test_axis_preset_non_validating_instance_unexpected_position_with_buggy_repr
     msg = str(excinfo.value)
     assert "unexpected positions" in msg
     # Ensure we still get a useful representation even when repr text includes an address-like suffix.
-    assert "BuggyRepr" in msg
+    assert "AddressLikeRepr" in msg
+    assert re.search(r"0x[0-9a-fA-F]+", msg) is None
+
+
+def test_axis_preset_non_validating_instance_duplicate_position_with_address_like_repr_is_sanitized():
+    class AddressLikeRepr:
+        def __repr__(self) -> str:
+            return "<AddressLikeRepr object at 0x12345678>"
+
+    base = AXIS_PRESETS["interest_barrier"]
+    position = AddressLikeRepr()
+    preset = AxisPreset.model_construct(
+        x_axis=base.x_axis,
+        y_axis=base.y_axis,
+        quadrants=[
+            QuadrantDef.model_construct(position=position, label="a", subtitle="a"),
+            QuadrantDef.model_construct(position=position, label="b", subtitle="b"),
+            QuadrantDef(position="bottom-left", label="c", subtitle="c"),
+            QuadrantDef(position="bottom-right", label="d", subtitle="d"),
+        ],
+    )
+    with pytest.raises(ValueError) as excinfo:
+        preset._validate_quadrants()
+    msg = str(excinfo.value)
+    assert "duplicate positions" in msg
+    assert "AddressLikeRepr" in msg
     assert re.search(r"0x[0-9a-fA-F]+", msg) is None
 
 
