@@ -8,6 +8,9 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
+OBJECT_REPR_ADDRESS_RE = re.compile(r" at 0x[0-9a-fA-F]+>")
+
+
 class AxisDef(BaseModel):
     name: str
     rubric: str
@@ -31,9 +34,6 @@ class AxisPreset(BaseModel):
         allowed = ("top-left", "top-right", "bottom-left", "bottom-right")
         positions = [q.position for q in self.quadrants]
 
-        # Redact raw memory addresses from default CPython object reprs so error messages are stable.
-        _ADDR_RE = re.compile(r"0x[0-9a-fA-F]+")
-
         def safe_eq(a: object, b: object) -> bool:
             try:
                 return a == b
@@ -50,7 +50,8 @@ class AxisPreset(BaseModel):
                     rendered = object.__repr__(value)
                 except Exception:
                     rendered = f"<unprintable {type(value).__name__}>"
-            return _ADDR_RE.sub("0xREDACTED", rendered)
+            # Redact only the default object-repr memory-address suffix.
+            return OBJECT_REPR_ADDRESS_RE.sub(" at 0xREDACTED>", rendered)
 
         def format_positions(values: list[object]) -> str:
             rendered = sorted((safe_repr(v) for v in values))
