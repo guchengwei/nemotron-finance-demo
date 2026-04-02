@@ -94,11 +94,12 @@ def test_axis_preset_rejects_unexpected_quadrant_position_on_non_validating_inst
         quadrants=[
             QuadrantDef(position="top-left", label="a", subtitle="a"),
             QuadrantDef(position="top-right", label="b", subtitle="b"),
-            QuadrantDef(position="bottom-left", label="c", subtitle="c"),
+            QuadrantDef.model_construct(position=None, label="c", subtitle="c"),
             QuadrantDef.model_construct(position="top_lef", label="d", subtitle="d"),
         ],
     )
     with pytest.raises(ValueError) as excinfo:
         preset._validate_quadrants()
     assert "unexpected positions" in str(excinfo.value)
+    assert "None" in str(excinfo.value)
     assert "top_lef" in str(excinfo.value)

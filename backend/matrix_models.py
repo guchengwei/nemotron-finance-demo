@@ -41,7 +41,9 @@ class AxisPreset(BaseModel):
                 seen.add(p)
             raise ValueError(f"quadrants mapping has duplicate positions: {sorted(duplicates)}")
 
-        unexpected = sorted(set(positions) - allowed)
+        # `positions` can contain non-strings on non-validating instances (e.g. via model_construct).
+        # Use a safe sort key so we raise a clear validation error instead of TypeError.
+        unexpected = sorted(set(positions) - allowed, key=str)
         if unexpected:
             raise ValueError(f"quadrants mapping has unexpected positions: {unexpected}")
 
