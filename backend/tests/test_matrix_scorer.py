@@ -1,5 +1,6 @@
-import pytest
 from types import SimpleNamespace
+
+import pytest
 from matrix_scorer import parse_scoring_response, _clamp_float
 
 
