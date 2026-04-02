@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from matrix_scorer import parse_scoring_response, _clamp_float
 
 
@@ -119,3 +120,58 @@ class TestParseFloatScores:
         result = parse_scoring_response(raw)
         assert isinstance(result["x_score"], float)
         assert isinstance(result["y_score"], float)
+
+
+@pytest.mark.asyncio
+async def test_score_persona_uses_preset_specific_y_axis_guidance():
+    from matrix_models import AXIS_PRESETS
+    from matrix_scorer import score_persona
+
+    class _NoopAsyncContextManager:
+        async def __aenter__(self):
+            return None
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _FakeResponse:
+        def __init__(self, content: str):
+            self.choices = [SimpleNamespace(message=SimpleNamespace(content=content))]
+
+    class _FakeCompletions:
+        def __init__(self):
+            self.calls = []
+
+        async def create(self, **kwargs):
+            self.calls.append(kwargs)
+            return _FakeResponse(
+                '{"x_score": 3, "y_score": 2, "keywords": [], "quadrant_label": ""}'
+            )
+
+    class _FakeClient:
+        def __init__(self):
+            self.chat = SimpleNamespace(completions=_FakeCompletions())
+
+    fake_client = _FakeClient()
+    axes = AXIS_PRESETS["risk_time"]
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr("matrix_scorer.get_client", lambda: fake_client)
+        monkeypatch.setattr("matrix_scorer.get_semaphore", lambda: _NoopAsyncContextManager())
+        monkeypatch.setattr(
+            "matrix_scorer.settings",
+            SimpleNamespace(
+                mock_llm=False,
+                vllm_model="mock-model",
+                report_temperature=0,
+                report_max_tokens=64,
+            ),
+        )
+
+        await score_persona("p1", "田中", "小売業", 40, "Q1: テスト回答", axes)
+
+    prompt = fake_client.chat.completions.calls[0]["messages"][0]["content"]
+    assert "投資期間志向" in prompt
+    assert "短期志向に近い回答は低スコア" in prompt
+    assert "長期志向に近い回答は高スコア" in prompt
+    assert "前向きで障壁が少ない場合は低スコア" not in prompt
