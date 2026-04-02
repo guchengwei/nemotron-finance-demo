@@ -27,27 +27,40 @@ class AxisPreset(BaseModel):
 
     @model_validator(mode="after")
     def _validate_quadrants(self) -> AxisPreset:
-        allowed = {"top-left", "top-right", "bottom-left", "bottom-right"}
+        allowed = ("top-left", "top-right", "bottom-left", "bottom-right")
         positions = [q.position for q in self.quadrants]
+
+        def safe_eq(a: object, b: object) -> bool:
+            try:
+                return a == b
+            except Exception:
+                return False
 
         # `Field(min_length/max_length)` ensures len==4, but keep explicit checks so errors
         # stay clear if this model is constructed in a non-validating way.
-        if len(set(positions)) != len(positions):
-            seen: set[str] = set()
-            duplicates: list[str] = []
-            for p in positions:
-                if p in seen and p not in duplicates:
+        duplicates: list[object] = []
+        for idx, p in enumerate(positions):
+            if any(safe_eq(p, positions[j]) for j in range(idx)):
+                if not any(safe_eq(p, d) for d in duplicates):
                     duplicates.append(p)
-                seen.add(p)
-            raise ValueError(f"quadrants mapping has duplicate positions: {sorted(duplicates)}")
+        if duplicates:
+            raise ValueError(
+                "quadrants mapping has duplicate positions: "
+                f"{sorted(duplicates, key=str)}"
+            )
 
         # `positions` can contain non-strings on non-validating instances (e.g. via model_construct).
-        # Use a safe sort key so we raise a clear validation error instead of TypeError.
-        unexpected = sorted(set(positions) - allowed, key=str)
+        # Use equality-based membership checks so we raise a clear validation error instead of TypeError.
+        unexpected: list[object] = []
+        for p in positions:
+            if not any(safe_eq(p, a) for a in allowed):
+                if not any(safe_eq(p, u) for u in unexpected):
+                    unexpected.append(p)
+        unexpected = sorted(unexpected, key=str)
         if unexpected:
             raise ValueError(f"quadrants mapping has unexpected positions: {unexpected}")
 
-        missing = sorted(allowed - set(positions))
+        missing = sorted([a for a in allowed if not any(safe_eq(p, a) for p in positions)])
         if missing:
             raise ValueError(f"quadrants mapping is incomplete; missing positions: {missing}")
 

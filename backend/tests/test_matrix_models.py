@@ -103,3 +103,39 @@ def test_axis_preset_rejects_unexpected_quadrant_position_on_non_validating_inst
     assert "unexpected positions" in str(excinfo.value)
     assert "None" in str(excinfo.value)
     assert "top_lef" in str(excinfo.value)
+
+
+def test_axis_preset_non_validating_instance_non_hashable_unexpected_position_is_validation_error():
+    base = AXIS_PRESETS["interest_barrier"]
+    preset = AxisPreset.model_construct(
+        x_axis=base.x_axis,
+        y_axis=base.y_axis,
+        quadrants=[
+            QuadrantDef(position="top-left", label="a", subtitle="a"),
+            QuadrantDef(position="top-right", label="b", subtitle="b"),
+            QuadrantDef(position="bottom-left", label="c", subtitle="c"),
+            QuadrantDef.model_construct(position=[], label="d", subtitle="d"),
+        ],
+    )
+    with pytest.raises(ValueError) as excinfo:
+        preset._validate_quadrants()
+    assert "unexpected positions" in str(excinfo.value)
+    assert "[]" in str(excinfo.value)
+
+
+def test_axis_preset_non_validating_instance_non_hashable_duplicate_position_is_duplicate_error():
+    base = AXIS_PRESETS["interest_barrier"]
+    preset = AxisPreset.model_construct(
+        x_axis=base.x_axis,
+        y_axis=base.y_axis,
+        quadrants=[
+            QuadrantDef.model_construct(position=[], label="a", subtitle="a"),
+            QuadrantDef.model_construct(position=[], label="b", subtitle="b"),
+            QuadrantDef(position="bottom-left", label="c", subtitle="c"),
+            QuadrantDef(position="bottom-right", label="d", subtitle="d"),
+        ],
+    )
+    with pytest.raises(ValueError) as excinfo:
+        preset._validate_quadrants()
+    assert "duplicate positions" in str(excinfo.value)
+    assert "[]" in str(excinfo.value)
