@@ -32,10 +32,6 @@ class AxisPreset(BaseModel):
 
         # `Field(min_length/max_length)` ensures len==4, but keep explicit checks so errors
         # stay clear if this model is constructed in a non-validating way.
-        missing = sorted(allowed - set(positions))
-        if missing:
-            raise ValueError(f"quadrants mapping is incomplete; missing positions: {missing}")
-
         if len(set(positions)) != len(positions):
             seen: set[str] = set()
             duplicates: list[str] = []
@@ -44,6 +40,10 @@ class AxisPreset(BaseModel):
                     duplicates.append(p)
                 seen.add(p)
             raise ValueError(f"quadrants mapping has duplicate positions: {sorted(duplicates)}")
+
+        missing = sorted(allowed - set(positions))
+        if missing:
+            raise ValueError(f"quadrants mapping is incomplete; missing positions: {missing}")
 
         return self
 

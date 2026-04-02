@@ -65,7 +65,8 @@ def test_axis_preset_rejects_duplicate_quadrant_positions():
                 QuadrantDef(position="bottom-right", label="d", subtitle="d"),
             ],
         )
-    assert "quadrants" in str(excinfo.value)
+    # The most actionable error here is the duplicate itself (even though a duplicate implies a missing position).
+    assert "duplicate positions" in str(excinfo.value)
 
 
 def test_axis_preset_rejects_missing_quadrant_position():
@@ -76,8 +77,11 @@ def test_axis_preset_rejects_missing_quadrant_position():
             y_axis=base.y_axis,
             quadrants=[
                 QuadrantDef(position="top-left", label="a", subtitle="a"),
-                QuadrantDef(position="top-right", label="b", subtitle="b"),
+                # Use a non-validating construction so we can hit the missing-positions branch.
+                # (Otherwise Literal validation rejects the invalid position before AxisPreset validation runs.)
+                QuadrantDef.model_construct(position="top_lef", label="b", subtitle="b"),
                 QuadrantDef(position="bottom-left", label="c", subtitle="c"),
+                QuadrantDef(position="bottom-right", label="d", subtitle="d"),
             ],
         )
-    assert "quadrants" in str(excinfo.value)
+    assert "missing positions" in str(excinfo.value)
