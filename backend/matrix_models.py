@@ -41,6 +41,10 @@ class AxisPreset(BaseModel):
                 seen.add(p)
             raise ValueError(f"quadrants mapping has duplicate positions: {sorted(duplicates)}")
 
+        unexpected = sorted(set(positions) - allowed)
+        if unexpected:
+            raise ValueError(f"quadrants mapping has unexpected positions: {unexpected}")
+
         missing = sorted(allowed - set(positions))
         if missing:
             raise ValueError(f"quadrants mapping is incomplete; missing positions: {missing}")

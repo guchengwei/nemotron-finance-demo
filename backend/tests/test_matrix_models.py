@@ -71,17 +71,34 @@ def test_axis_preset_rejects_duplicate_quadrant_positions():
 
 def test_axis_preset_rejects_missing_quadrant_position():
     base = AXIS_PRESETS["interest_barrier"]
-    with pytest.raises(ValidationError) as excinfo:
-        AxisPreset(
-            x_axis=base.x_axis,
-            y_axis=base.y_axis,
-            quadrants=[
-                QuadrantDef(position="top-left", label="a", subtitle="a"),
-                # Use a non-validating construction so we can hit the missing-positions branch.
-                # (Otherwise Literal validation rejects the invalid position before AxisPreset validation runs.)
-                QuadrantDef.model_construct(position="top_lef", label="b", subtitle="b"),
-                QuadrantDef(position="bottom-left", label="c", subtitle="c"),
-                QuadrantDef(position="bottom-right", label="d", subtitle="d"),
-            ],
-        )
+    preset = AxisPreset.model_construct(
+        x_axis=base.x_axis,
+        y_axis=base.y_axis,
+        quadrants=[
+            QuadrantDef(position="top-left", label="a", subtitle="a"),
+            QuadrantDef(position="top-right", label="b", subtitle="b"),
+            QuadrantDef(position="bottom-left", label="c", subtitle="c"),
+        ],
+    )
+    with pytest.raises(ValueError) as excinfo:
+        preset._validate_quadrants()
     assert "missing positions" in str(excinfo.value)
+    assert "bottom-right" in str(excinfo.value)
+
+
+def test_axis_preset_rejects_unexpected_quadrant_position_on_non_validating_instance():
+    base = AXIS_PRESETS["interest_barrier"]
+    preset = AxisPreset.model_construct(
+        x_axis=base.x_axis,
+        y_axis=base.y_axis,
+        quadrants=[
+            QuadrantDef(position="top-left", label="a", subtitle="a"),
+            QuadrantDef(position="top-right", label="b", subtitle="b"),
+            QuadrantDef(position="bottom-left", label="c", subtitle="c"),
+            QuadrantDef.model_construct(position="top_lef", label="d", subtitle="d"),
+        ],
+    )
+    with pytest.raises(ValueError) as excinfo:
+        preset._validate_quadrants()
+    assert "unexpected positions" in str(excinfo.value)
+    assert "top_lef" in str(excinfo.value)
