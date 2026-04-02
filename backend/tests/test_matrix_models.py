@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 from matrix_models import (
     AxisConfig, QuadrantDef, AxisPreset, AXIS_PRESETS,
     ScoredPersona, KeywordEntry, MatrixReportData,
@@ -43,3 +44,40 @@ def test_matrix_report_data_roundtrip():
     d = report.model_dump()
     restored = MatrixReportData(**d)
     assert restored.axes.x_axis.name == "関心度"
+
+
+def test_quadrant_def_rejects_invalid_position():
+    with pytest.raises(ValidationError) as excinfo:
+        QuadrantDef(position="top_lef", label="x", subtitle="y")
+    assert "position" in str(excinfo.value)
+
+
+def test_axis_preset_rejects_duplicate_quadrant_positions():
+    base = AXIS_PRESETS["interest_barrier"]
+    with pytest.raises(ValidationError) as excinfo:
+        AxisPreset(
+            x_axis=base.x_axis,
+            y_axis=base.y_axis,
+            quadrants=[
+                QuadrantDef(position="top-left", label="a", subtitle="a"),
+                QuadrantDef(position="top-left", label="b", subtitle="b"),
+                QuadrantDef(position="bottom-left", label="c", subtitle="c"),
+                QuadrantDef(position="bottom-right", label="d", subtitle="d"),
+            ],
+        )
+    assert "quadrants" in str(excinfo.value)
+
+
+def test_axis_preset_rejects_missing_quadrant_position():
+    base = AXIS_PRESETS["interest_barrier"]
+    with pytest.raises(ValidationError) as excinfo:
+        AxisPreset(
+            x_axis=base.x_axis,
+            y_axis=base.y_axis,
+            quadrants=[
+                QuadrantDef(position="top-left", label="a", subtitle="a"),
+                QuadrantDef(position="top-right", label="b", subtitle="b"),
+                QuadrantDef(position="bottom-left", label="c", subtitle="c"),
+            ],
+        )
+    assert "quadrants" in str(excinfo.value)

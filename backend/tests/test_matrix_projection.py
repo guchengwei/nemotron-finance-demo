@@ -1,7 +1,9 @@
 """Tests for rank-based score projection."""
 
+import pytest
+
 from matrix_projection import spread_scores, assign_quadrant
-from matrix_models import AXIS_PRESETS
+from matrix_models import AXIS_PRESETS, AxisPreset, QuadrantDef
 
 
 class TestSpreadScores:
@@ -83,3 +85,34 @@ class TestAssignQuadrant:
         """Quadrant label must come from the selected preset, not a global map."""
         preset = AXIS_PRESETS["risk_time"]
         assert assign_quadrant(4.0, 2.0, preset) == "機動投機層"
+
+    def test_raises_clear_error_on_incomplete_quadrant_mapping(self):
+        """A preset with missing quadrant definitions should raise ValueError, not KeyError."""
+        base = AXIS_PRESETS["interest_barrier"]
+        # Intentionally bypass model validation; assign_quadrant should still guard against
+        # incomplete/invalid presets because presets may arrive from external JSON.
+        bad = AxisPreset.model_construct(
+            x_axis=base.x_axis,
+            y_axis=base.y_axis,
+            quadrants=[
+                QuadrantDef(position="top-left", label="tl", subtitle="tl"),
+                QuadrantDef(position="top-right", label="tr", subtitle="tr"),
+                QuadrantDef(position="bottom-left", label="bl", subtitle="bl"),
+            ],
+        )
+        with pytest.raises(ValueError) as excinfo:
+            assign_quadrant(4.0, 2.0, bad)
+        assert "missing" in str(excinfo.value).lower()
+
+    @pytest.mark.parametrize(
+        ("x_score", "y_score", "expected"),
+        [
+            (2.0, 4.0, "堅実長期層"),  # top-left
+            (4.0, 4.0, "積極投資層"),  # top-right
+            (2.0, 2.0, "現金保守層"),  # bottom-left
+            (4.0, 2.0, "機動投機層"),  # bottom-right
+        ],
+    )
+    def test_risk_time_reaches_all_quadrants(self, x_score, y_score, expected):
+        preset = AXIS_PRESETS["risk_time"]
+        assert assign_quadrant(x_score, y_score, preset) == expected

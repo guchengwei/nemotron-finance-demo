@@ -56,5 +56,28 @@ def assign_quadrant(x_score: float, y_score: float, preset: AxisPreset) -> str:
     Threshold: x > 3.0 -> right (high axis), y > 3.0 -> top (high axis).
     Exact 3.0 falls to the low side.
     """
-    quadrant_map = {_POSITION_TO_FLAGS[q.position]: q.label for q in preset.quadrants}
-    return quadrant_map[(x_score > 3.0, y_score > 3.0)]
+    allowed_positions = set(_POSITION_TO_FLAGS.keys())
+    seen_positions: set[str] = set()
+    quadrant_map: dict[tuple[bool, bool], str] = {}
+
+    for q in preset.quadrants:
+        pos = q.position
+        if pos not in allowed_positions:
+            raise ValueError(
+                f"Invalid quadrant position '{pos}'. "
+                f"Allowed positions: {sorted(allowed_positions)}"
+            )
+        if pos in seen_positions:
+            raise ValueError(f"Duplicate quadrant position '{pos}' in preset.quadrants")
+        seen_positions.add(pos)
+        quadrant_map[_POSITION_TO_FLAGS[pos]] = q.label
+
+    missing = sorted(allowed_positions - seen_positions)
+    if missing:
+        raise ValueError(f"Preset quadrants mapping is incomplete; missing: {missing}")
+
+    try:
+        return quadrant_map[(x_score > 3.0, y_score > 3.0)]
+    except KeyError:
+        # Should be unreachable if we validated the preset properly.
+        raise ValueError("Preset quadrants mapping is incomplete") from None

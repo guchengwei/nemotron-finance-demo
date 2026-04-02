@@ -1,7 +1,10 @@
 """Pydantic models for matrix report pipeline."""
 
 from __future__ import annotations
-from pydantic import BaseModel, Field
+
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
 
 
 class AxisDef(BaseModel):
@@ -12,7 +15,7 @@ class AxisDef(BaseModel):
 
 
 class QuadrantDef(BaseModel):
-    position: str  # "top-left" | "top-right" | "bottom-left" | "bottom-right"
+    position: Literal["top-left", "top-right", "bottom-left", "bottom-right"]
     label: str
     subtitle: str
 
@@ -20,7 +23,29 @@ class QuadrantDef(BaseModel):
 class AxisPreset(BaseModel):
     x_axis: AxisDef
     y_axis: AxisDef
-    quadrants: list[QuadrantDef]
+    quadrants: list[QuadrantDef] = Field(min_length=4, max_length=4)
+
+    @model_validator(mode="after")
+    def _validate_quadrants(self) -> AxisPreset:
+        allowed = {"top-left", "top-right", "bottom-left", "bottom-right"}
+        positions = [q.position for q in self.quadrants]
+
+        # `Field(min_length/max_length)` ensures len==4, but keep explicit checks so errors
+        # stay clear if this model is constructed in a non-validating way.
+        missing = sorted(allowed - set(positions))
+        if missing:
+            raise ValueError(f"quadrants mapping is incomplete; missing positions: {missing}")
+
+        if len(set(positions)) != len(positions):
+            seen: set[str] = set()
+            duplicates: list[str] = []
+            for p in positions:
+                if p in seen and p not in duplicates:
+                    duplicates.append(p)
+                seen.add(p)
+            raise ValueError(f"quadrants mapping has duplicate positions: {sorted(duplicates)}")
+
+        return self
 
 
 # Alias for frontend compatibility
