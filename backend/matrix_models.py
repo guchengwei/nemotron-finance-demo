@@ -36,6 +36,21 @@ class AxisPreset(BaseModel):
             except Exception:
                 return False
 
+        def safe_repr(value: object) -> str:
+            # Never call `str(value)` here: callers may pass objects with buggy/expensive `__str__`.
+            try:
+                return repr(value)
+            except Exception:
+                try:
+                    # Bypass any buggy custom __repr__.
+                    return object.__repr__(value)
+                except Exception:
+                    return f"<unprintable {type(value).__name__}>"
+
+        def format_positions(values: list[object]) -> str:
+            rendered = sorted((safe_repr(v) for v in values))
+            return "[" + ", ".join(rendered) + "]"
+
         # `Field(min_length/max_length)` ensures len==4, but keep explicit checks so errors
         # stay clear if this model is constructed in a non-validating way.
         duplicates: list[object] = []
@@ -46,7 +61,7 @@ class AxisPreset(BaseModel):
         if duplicates:
             raise ValueError(
                 "quadrants mapping has duplicate positions: "
-                f"{sorted(duplicates, key=str)}"
+                f"{format_positions(duplicates)}"
             )
 
         # `positions` can contain non-strings on non-validating instances (e.g. via model_construct).
@@ -56,9 +71,11 @@ class AxisPreset(BaseModel):
             if not any(safe_eq(p, a) for a in allowed):
                 if not any(safe_eq(p, u) for u in unexpected):
                     unexpected.append(p)
-        unexpected = sorted(unexpected, key=str)
         if unexpected:
-            raise ValueError(f"quadrants mapping has unexpected positions: {unexpected}")
+            raise ValueError(
+                "quadrants mapping has unexpected positions: "
+                f"{format_positions(unexpected)}"
+            )
 
         missing = sorted([a for a in allowed if not any(safe_eq(p, a) for p in positions)])
         if missing:
