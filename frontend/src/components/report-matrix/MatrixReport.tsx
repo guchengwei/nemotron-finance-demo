@@ -47,11 +47,13 @@ export default function MatrixReport({ surveyId }: MatrixReportProps) {
     let cancelled = false
 
     async function loadReport() {
+      setMatrixReport({ status: 'streaming', axes: null, personas: [], keywords: null, recommendations: [], scoreTable: [], errorMessage: '' })
+
       // Try cached report first
       const cached = await getMatrixReport(surveyId)
       if (cancelled) return
 
-      if (cached && cached.personas && cached.personas.length > 0) {
+      if (cached && Array.isArray(cached.personas)) {
         setMatrixReport({
           status: 'complete',
           axes: cached.axes as AxisConfig,
@@ -73,8 +75,6 @@ export default function MatrixReport({ surveyId }: MatrixReportProps) {
       }
 
       // No cache — start SSE pipeline
-      setMatrixReport({ status: 'streaming', axes: null, personas: [], keywords: null, recommendations: [], scoreTable: [], errorMessage: '' })
-
       const abort = startMatrixReportSSE(
         { survey_id: surveyId, preset_key: 'interest_barrier' },
         (event, data) => {

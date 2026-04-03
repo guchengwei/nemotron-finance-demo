@@ -93,6 +93,14 @@ def test_full_name_fallback_to_uuid_prefix():
     assert _extract_full_name(None, None, "abc12345-xyz") == "abc12345"
 
 
+@pytest.mark.parametrize("persona_json", ['[]', '"text"', '123'])
+def test_full_name_ignores_non_object_json(persona_json):
+    """Non-object JSON should fall back instead of raising AttributeError."""
+    from routers.report_matrix import _extract_full_name
+
+    assert _extract_full_name(persona_json, "福井隆助, 40歳男性, 小売業", "abc12345-xyz") == "福井隆助"
+
+
 def test_projection_applied_to_scored_personas():
     """After projection, labels should come from the selected preset's quadrants."""
     from matrix_projection import spread_scores, assign_quadrant

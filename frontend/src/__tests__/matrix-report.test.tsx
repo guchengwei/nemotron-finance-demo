@@ -1,7 +1,19 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, fireEvent, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, fireEvent, screen, waitFor } from '@testing-library/react'
 import MatrixReport from '../components/report-matrix/MatrixReport'
 import type { Persona } from '../types'
+
+const {
+  setMatrixReportMock,
+  openPersonaDetailMock,
+  getMatrixReportMock,
+  startMatrixReportSSEMock,
+} = vi.hoisted(() => ({
+  setMatrixReportMock: vi.fn(),
+  openPersonaDetailMock: vi.fn(),
+  getMatrixReportMock: vi.fn(() => Promise.resolve(null)),
+  startMatrixReportSSEMock: vi.fn(() => () => {}),
+}))
 
 // Mock components to avoid complex dependencies
 vi.mock('../components/report-matrix/QuadrantMatrix', () => ({
@@ -45,25 +57,66 @@ vi.mock('../store', () => ({
         scoreTable: [],
         errorMessage: '',
       },
-      setMatrixReport: vi.fn(),
+      setMatrixReport: setMatrixReportMock,
       selectedPersonas: [] as Persona[],
       currentHistoryRun: {
         answers: [
           { persona_uuid: 'p1', persona_full_json: '{ not valid json !!!' },
         ],
       },
-      openPersonaDetail: vi.fn(),
+      openPersonaDetail: openPersonaDetailMock,
     }
     return selector(state)
   }),
 }))
 
 vi.mock('../api', () => ({
-  startMatrixReportSSE: vi.fn(() => () => {}),
-  getMatrixReport: vi.fn(() => Promise.resolve(null)),
+  startMatrixReportSSE: startMatrixReportSSEMock,
+  getMatrixReport: getMatrixReportMock,
 }))
 
 describe('MatrixReport', () => {
+  it('clears stale matrix state before cache fetch resolves', async () => {
+    getMatrixReportMock.mockImplementationOnce(() => new Promise(() => {}))
+
+    render(<MatrixReport surveyId="test-run-2" />)
+
+    await waitFor(() => {
+      expect(setMatrixReportMock).toHaveBeenCalledWith({
+        status: 'streaming',
+        axes: null,
+        personas: [],
+        keywords: null,
+        recommendations: [],
+        scoreTable: [],
+        errorMessage: '',
+      })
+    })
+  })
+
+  it('uses cached reports even when personas is empty', async () => {
+    getMatrixReportMock.mockResolvedValueOnce({
+      axes: {
+        x_axis: { name: '関心度', rubric: '', label_low: '', label_high: '' },
+        y_axis: { name: '導入障壁', rubric: '', label_low: '', label_high: '' },
+        quadrants: [],
+      },
+      personas: [],
+      keywords: null,
+      recommendations: [],
+    })
+
+    render(<MatrixReport surveyId="test-run-1" />)
+
+    await waitFor(() => {
+      expect(setMatrixReportMock).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'complete',
+        personas: [],
+      }))
+    })
+    expect(startMatrixReportSSEMock).not.toHaveBeenCalled()
+  })
+
   it('does not throw when persona_full_json is invalid JSON', () => {
     expect(() => {
       render(<MatrixReport surveyId="test-run-1" />)
@@ -76,5 +129,11 @@ describe('MatrixReport', () => {
       const dot = screen.getByTestId('persona-dot')
       fireEvent.click(dot)
     }).not.toThrow()
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getMatrixReportMock.mockResolvedValue(null)
+    startMatrixReportSSEMock.mockReturnValue(() => {})
   })
 })
