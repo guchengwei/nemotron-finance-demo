@@ -42,10 +42,10 @@ export default function ReportDashboard() {
   }, [currentRunId, setCurrentReport])
 
   useEffect(() => {
-    if (reportTab === 'text' && !currentReport && currentRunId) {
+    if (!currentReport && currentRunId) {
       triggerGenerate()
     }
-  }, [reportTab, currentReport, currentRunId, triggerGenerate])
+  }, [currentReport, currentRunId, triggerGenerate])
 
   const report = currentReport
   const resolvePersona = useCallback((uuid: string) => {
