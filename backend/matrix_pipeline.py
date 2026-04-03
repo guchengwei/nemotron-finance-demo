@@ -17,6 +17,7 @@ from matrix_models import (
 )
 from matrix_scorer import score_persona, _strip_fences
 from matrix_keywords import aggregate_keywords
+from matrix_projection import spread_scores, assign_quadrant
 
 import json_repair  # type: ignore
 
@@ -210,7 +211,8 @@ async def run_matrix_pipeline(
     while pending or not event_queue.empty():
         try:
             event_type, event_data = event_queue.get_nowait()
-            yield (event_type, event_data)
+            if event_type != "persona_scored":
+                yield (event_type, event_data)
             if event_type == "persona_scored":
                 scored.append(ScoredPersona(**event_data))
         except asyncio.QueueEmpty:
@@ -221,10 +223,32 @@ async def run_matrix_pipeline(
             else:
                 while not event_queue.empty():
                     event_type, event_data = event_queue.get_nowait()
-                    yield (event_type, event_data)
+                    if event_type != "persona_scored":
+                        yield (event_type, event_data)
                     if event_type == "persona_scored":
                         scored.append(ScoredPersona(**event_data))
                 break
+
+    # Stage 2b: Project scores for better distribution
+    if len(scored) >= 2:
+        raw_xs = [p.x_score for p in scored]
+        raw_ys = [p.y_score for p in scored]
+        spread_xs = spread_scores(raw_xs)
+        spread_ys = spread_scores(raw_ys)
+        for p, sx, sy in zip(scored, spread_xs, spread_ys):
+            p.x_score_raw = p.x_score
+            p.y_score_raw = p.y_score
+            p.x_score = sx
+            p.y_score = sy
+            p.quadrant_label = assign_quadrant(sx, sy, axes)
+    elif len(scored) == 1:
+        scored[0].x_score_raw = scored[0].x_score
+        scored[0].y_score_raw = scored[0].y_score
+        scored[0].quadrant_label = assign_quadrant(scored[0].x_score, scored[0].y_score, axes)
+
+    # Yield all scored personas (after projection applied)
+    for p in scored:
+        yield ("persona_scored", p.model_dump())
 
     # Stage 3: Keyword aggregation (deterministic, no LLM)
     keywords = aggregate_keywords(scored)
@@ -265,6 +289,7 @@ async def run_matrix_pipeline(
     table = [
         {"persona_id": p.persona_id, "name": p.name,
          "x_score": p.x_score, "y_score": p.y_score,
+         "x_score_raw": p.x_score_raw, "y_score_raw": p.y_score_raw,
          "industry": p.industry, "age": p.age,
          "quadrant_label": p.quadrant_label}
         for p in scored

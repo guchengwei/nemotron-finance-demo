@@ -1,7 +1,14 @@
 """Pydantic models for matrix report pipeline."""
 
 from __future__ import annotations
-from pydantic import BaseModel, Field
+
+import re
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+
+OBJECT_REPR_ADDRESS_RE = re.compile(r" at 0x[0-9a-fA-F]+>")
 
 
 class AxisDef(BaseModel):
@@ -12,7 +19,7 @@ class AxisDef(BaseModel):
 
 
 class QuadrantDef(BaseModel):
-    position: str  # "top-left" | "top-right" | "bottom-left" | "bottom-right"
+    position: Literal["top-left", "top-right", "bottom-left", "bottom-right"]
     label: str
     subtitle: str
 
@@ -20,7 +27,67 @@ class QuadrantDef(BaseModel):
 class AxisPreset(BaseModel):
     x_axis: AxisDef
     y_axis: AxisDef
-    quadrants: list[QuadrantDef]
+    quadrants: list[QuadrantDef] = Field(min_length=4, max_length=4)
+
+    @model_validator(mode="after")
+    def _validate_quadrants(self) -> AxisPreset:
+        allowed = ("top-left", "top-right", "bottom-left", "bottom-right")
+        positions = [q.position for q in self.quadrants]
+
+        def safe_eq(a: object, b: object) -> bool:
+            try:
+                return a == b
+            except Exception:
+                return False
+
+        def safe_repr(value: object) -> str:
+            # Never call `str(value)` here: callers may pass objects with buggy/expensive `__str__`.
+            try:
+                rendered = repr(value)
+            except Exception:
+                try:
+                    # Bypass any buggy custom __repr__.
+                    rendered = object.__repr__(value)
+                except Exception:
+                    rendered = f"<unprintable {type(value).__name__}>"
+            # Redact only the default object-repr memory-address suffix.
+            return OBJECT_REPR_ADDRESS_RE.sub(" at 0xREDACTED>", rendered)
+
+        def format_positions(values: list[object]) -> str:
+            rendered = sorted((safe_repr(v) for v in values))
+            return "[" + ", ".join(rendered) + "]"
+
+        # `Field(min_length/max_length)` ensures len==4, but keep explicit checks so errors
+        # stay clear if this model is constructed in a non-validating way.
+        duplicates: list[object] = []
+        for idx, p in enumerate(positions):
+            if any(safe_eq(p, positions[j]) for j in range(idx)):
+                if not any(safe_eq(p, d) for d in duplicates):
+                    duplicates.append(p)
+        if duplicates:
+            raise ValueError(
+                "quadrants mapping has duplicate positions: "
+                f"{format_positions(duplicates)}"
+            )
+
+        # `positions` can contain non-strings on non-validating instances (e.g. via model_construct).
+        # Use equality-based membership checks so we raise a clear validation error instead of TypeError.
+        unexpected: list[object] = []
+        for p in positions:
+            if not any(safe_eq(p, a) for a in allowed):
+                if not any(safe_eq(p, u) for u in unexpected):
+                    unexpected.append(p)
+        if unexpected:
+            raise ValueError(
+                "quadrants mapping has unexpected positions: "
+                f"{format_positions(unexpected)}"
+            )
+
+        missing = sorted([a for a in allowed if not any(safe_eq(p, a) for p in positions)])
+        if missing:
+            raise ValueError(f"quadrants mapping is incomplete; missing positions: {missing}")
+
+        return self
 
 
 # Alias for frontend compatibility
@@ -37,6 +104,8 @@ class ScoredPersona(BaseModel):
     name: str
     x_score: float = Field(ge=1, le=5)
     y_score: float = Field(ge=1, le=5)
+    x_score_raw: float = Field(default=3.0, ge=1, le=5)
+    y_score_raw: float = Field(default=3.0, ge=1, le=5)
     keywords: list[KeywordEntry] = []
     quadrant_label: str = ""
     industry: str = ""
@@ -81,8 +150,8 @@ AXIS_PRESETS: dict[str, AxisPreset] = {
             label_high="関心高い",
         ),
         y_axis=AxisDef(
-            name="利用障壁",
-            rubric="Q3等の懸念・不安に関する回答から障壁の高さを1-5で評価",
+            name="導入ハードル",
+            rubric="Q2の回答スコアおよび懸念・不安の強さから1-5で評価",
             label_low="低障壁",
             label_high="高障壁",
         ),
@@ -111,6 +180,46 @@ AXIS_PRESETS: dict[str, AxisPreset] = {
             QuadrantDef(position="top-right", label="積極採用層", subtitle="リスク許容・革新的"),
             QuadrantDef(position="bottom-left", label="現状維持層", subtitle="リスク回避・保守的"),
             QuadrantDef(position="bottom-right", label="実利追求層", subtitle="リスク許容・保守的"),
+        ],
+    ),
+    "risk_time": AxisPreset(
+        x_axis=AxisDef(
+            name="リスク許容度",
+            rubric="投資リスクに対する態度やリスク許容の程度から1-5で評価",
+            label_low="リスク回避",
+            label_high="リスク許容",
+        ),
+        y_axis=AxisDef(
+            name="投資期間志向",
+            rubric="短期利益志向vs長期資産形成志向の度合いから1-5で評価",
+            label_low="短期志向",
+            label_high="長期志向",
+        ),
+        quadrants=[
+            QuadrantDef(position="top-left", label="堅実長期層", subtitle="リスク回避・長期志向"),
+            QuadrantDef(position="top-right", label="積極投資層", subtitle="リスク許容・長期志向"),
+            QuadrantDef(position="bottom-left", label="現金保守層", subtitle="リスク回避・短期志向"),
+            QuadrantDef(position="bottom-right", label="機動投機層", subtitle="リスク許容・短期志向"),
+        ],
+    ),
+    "regulation_innovation": AxisPreset(
+        x_axis=AxisDef(
+            name="規制保守度",
+            rubric="既存規制・制度への信頼度と遵守志向の強さから1-5で評価",
+            label_low="柔軟",
+            label_high="保守的",
+        ),
+        y_axis=AxisDef(
+            name="革新受容度",
+            rubric="新技術・新手法への受容性と積極性から1-5で評価",
+            label_low="慎重",
+            label_high="積極的",
+        ),
+        quadrants=[
+            QuadrantDef(position="top-left", label="段階導入層", subtitle="柔軟・革新積極"),
+            QuadrantDef(position="top-right", label="慎重革新層", subtitle="保守的・革新積極"),
+            QuadrantDef(position="bottom-left", label="現状満足層", subtitle="柔軟・革新慎重"),
+            QuadrantDef(position="bottom-right", label="制度依存層", subtitle="保守的・革新慎重"),
         ],
     ),
 }

@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ReportDashboard from '../ReportDashboard'
+import { api } from '../../api'
 import { useStore } from '../../store'
 
 vi.mock('../../api', () => ({
@@ -11,6 +12,10 @@ vi.mock('../../api', () => ({
 
 vi.mock('../DemographicCharts', () => ({
   default: () => <div data-testid="demographic-charts" />,
+}))
+
+vi.mock('../report-matrix/MatrixReport', () => ({
+  default: () => <div data-testid="matrix-report" />,
 }))
 
 const selectedPersona = {
@@ -176,5 +181,50 @@ describe('ReportDashboard.handleChatWithPersona', () => {
 
     expect(screen.getByText('旧形式の結論テキストです')).toBeInTheDocument()
     expect(screen.queryByText('料金を明確にする')).not.toBeInTheDocument()
+  })
+})
+
+describe('ReportDashboard missing-report recovery', () => {
+  afterEach(() => {
+    useStore.getState().resetSurvey()
+    vi.clearAllMocks()
+  })
+
+  it('auto-generates a missing report on mount when a run id exists', async () => {
+    vi.mocked(api.generateReport).mockResolvedValue(
+      makeReport(selectedPersona.uuid, selectedPersona.name, '田中太郎、35歳、男性、会社員、東京都'),
+    )
+
+    await act(async () => {
+      useStore.setState({
+        currentReport: null,
+        currentRunId: 'run-1',
+        selectedPersonas: [selectedPersona],
+        currentHistoryRun: {
+          id: 'run-1',
+          created_at: '2026-04-02T00:00:00',
+          survey_theme: 'テスト調査',
+          questions: ['質問1'],
+          persona_count: 1,
+          status: 'completed',
+          answers: [],
+          followup_chats: {},
+        },
+      })
+    })
+
+    render(<ReportDashboard />)
+
+    await waitFor(() => {
+      expect(api.generateReport).toHaveBeenCalledWith('run-1')
+    })
+    expect(await screen.findByRole('button', { name: 'テキストレポート' })).toBeInTheDocument()
+    expect(screen.queryByText('レポートがありません')).not.toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'テキストレポート' }))
+    })
+
+    expect(await screen.findByText('前向きです')).toBeInTheDocument()
   })
 })

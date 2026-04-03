@@ -60,6 +60,7 @@ vi.mock('../store', () => ({
 
 vi.mock('../api', () => ({
   startMatrixReportSSE: vi.fn(() => () => {}),
+  getMatrixReport: vi.fn(() => Promise.resolve(null)),
 }))
 
 describe('MatrixReport', () => {

@@ -219,3 +219,57 @@ async def test_pipeline_emits_keyword_elaborated_in_real_llm_mode(mock_survey_da
     assert len(elab_events) >= 1
     assert elab_events[0][1]["keyword_text"] == "手数料の安さ"
     assert elab_events[0][1]["elaboration"] == "コスト競争力の高さが評価されています。"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_emits_preset_specific_quadrant_labels_for_risk_time():
+    """All four quadrant positions should be reachable for a non-default preset (risk_time)."""
+
+    survey_data = {
+        "survey_id": "test-run-risk-time-4q",
+        "personas": [
+            {"persona_id": "p1", "name": "田中", "industry": "小売業", "age": 40, "qa_text": "Q1: テスト回答1"},
+            {"persona_id": "p2", "name": "佐藤", "industry": "建設業", "age": 35, "qa_text": "Q1: テスト回答2"},
+            {"persona_id": "p3", "name": "鈴木", "industry": "製造業", "age": 50, "qa_text": "Q1: テスト回答3"},
+            {"persona_id": "p4", "name": "高橋", "industry": "金融業", "age": 45, "qa_text": "Q1: テスト回答4"},
+        ],
+    }
+
+    async def _score_side_effect(persona_id, name, industry, age, qa_text, axes):
+        # With 4 distinct values, projection maps to ~[1.0, 2.3, 3.7, 5.0] per axis.
+        # We pick raw ranks so that after independent x/y projection we hit all 4 quadrants.
+        raw_by_id = {
+            "p1": (1.0, 1.0),  # low x, low y -> bottom-left
+            "p2": (2.0, 5.0),  # low x, high y -> top-left
+            "p3": (4.0, 2.0),  # high x, low y -> bottom-right
+            "p4": (5.0, 4.0),  # high x, high y -> top-right
+        }
+        x_score, y_score = raw_by_id[persona_id]
+        return {
+            "persona_id": persona_id,
+            "name": name,
+            "x_score": x_score,
+            "y_score": y_score,
+            "keywords": [],
+            "quadrant_label": "",
+            "industry": industry,
+            "age": age,
+        }
+
+    mock_scorer = AsyncMock(side_effect=_score_side_effect)
+
+    with patch("matrix_pipeline.score_persona", mock_scorer), patch(
+        "matrix_pipeline.settings"
+    ) as mock_settings:
+        mock_settings.mock_llm = True
+        mock_settings.llm_concurrency = 4
+
+        labels = []
+        async for event_type, event_data in run_matrix_pipeline(
+            survey_data=survey_data,
+            preset_key="risk_time",
+        ):
+            if event_type == "persona_scored":
+                labels.append(event_data["quadrant_label"])
+
+    assert set(labels) == {"堅実長期層", "積極投資層", "現金保守層", "機動投機層"}

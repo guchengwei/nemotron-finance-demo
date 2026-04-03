@@ -2,6 +2,13 @@ import { useState } from 'react'
 import type { ScoreTableRow, AxisConfig } from '../../types/matrix-report'
 import { scoreColor } from '../../utils/scoreParser'
 
+const QUADRANT_COLOR: Record<string, string> = {
+  '即時採用層': 'bg-fin-accent text-white',
+  '潜在採用層': 'bg-fin-success text-white',
+  '慎重観察層': 'bg-fin-bronze text-white',
+  '様子見層': 'bg-fin-warning text-white',
+}
+
 interface ScoreTableProps {
   rows: ScoreTableRow[]
   axes: AxisConfig
@@ -12,7 +19,7 @@ type SortKey = 'name' | 'x_score' | 'y_score' | 'quadrant_label'
 
 function barrierLabel(score: number): string {
   if (score >= 4) return '高'
-  if (score === 3) return '中'
+  if (score >= 2.5) return '中'
   return '低'
 }
 
@@ -99,8 +106,10 @@ export default function ScoreTable({ rows, axes, onRowClick }: ScoreTableProps) 
                 <td className="px-4 py-2.5 text-fin-muted text-xs">
                   {row.industry}・{row.age}歳
                 </td>
-                <td className="px-4 py-2.5 text-fin-muted">
-                  {row.quadrant_label}
+                <td className="px-4 py-2.5">
+                  <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${QUADRANT_COLOR[row.quadrant_label] || 'bg-fin-border text-fin-ink'}`}>
+                    {row.quadrant_label}
+                  </span>
                   {isImmediate && <span className="ml-1 text-fin-accent font-bold">★</span>}
                 </td>
               </tr>

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useStore } from '../../store'
-import { startMatrixReportSSE } from '../../api'
+import { startMatrixReportSSE, getMatrixReport } from '../../api'
 import type { AxisConfig, ScoredPersona, KeywordSummary, Recommendation, ScoreTableRow, AggregatedKeyword } from '../../types/matrix-report'
 import QuadrantMatrix from './QuadrantMatrix'
 import KeywordPanel from './KeywordPanel'
@@ -44,53 +44,86 @@ export default function MatrixReport({ surveyId }: MatrixReportProps) {
 
   useEffect(() => {
     if (!surveyId) return
-    // Reset state
-    setMatrixReport({ status: 'streaming', axes: null, personas: [], keywords: null, recommendations: [], scoreTable: [], errorMessage: '' })
+    let cancelled = false
 
-    const abort = startMatrixReportSSE(
-      { survey_id: surveyId, preset_key: 'interest_barrier' },
-      (event, data) => {
-        if (event === 'axis_ready') {
-          setMatrixReport({ axes: data as AxisConfig })
-        } else if (event === 'persona_scored') {
-          // Append to personas using functional update pattern
-          const p = data as ScoredPersona
-          useStore.setState((s) => ({
-            matrixReport: { ...s.matrixReport, personas: [...s.matrixReport.personas, p] }
-          }))
-        } else if (event === 'keywords_ready') {
-          setMatrixReport({ keywords: data as KeywordSummary })
-        } else if (event === 'recommendations_ready') {
-          setMatrixReport({ recommendations: data as Recommendation[] })
-        } else if (event === 'score_table_ready') {
-          setMatrixReport({ scoreTable: data as ScoreTableRow[] })
-        } else if (event === 'keyword_elaborated') {
-          const { keyword_text, elaboration } = data as { keyword_text: string; elaboration: string }
-          useStore.setState((s) => {
-            const kw = s.matrixReport.keywords
-            if (!kw) return s
-            const update = (list: AggregatedKeyword[]) =>
-              list.map((k) => k.text === keyword_text ? { ...k, elaboration } : k)
-            return {
-              matrixReport: {
-                ...s.matrixReport,
-                keywords: { strengths: update(kw.strengths), weaknesses: update(kw.weaknesses) },
-              },
-            }
-          })
-        } else if (event === 'report_complete') {
-          setMatrixReport({ status: 'complete' })
-        } else if (event === 'report_error') {
-          setMatrixReport({ status: 'error', errorMessage: (data as { error: string }).error })
-        }
-      },
-      (err) => {
-        setMatrixReport({ status: 'error', errorMessage: err.message })
-      },
-    )
+    async function loadReport() {
+      // Try cached report first
+      const cached = await getMatrixReport(surveyId)
+      if (cancelled) return
 
-    abortRef.current = abort
-    return () => { abortRef.current?.() }
+      if (cached && cached.personas && cached.personas.length > 0) {
+        setMatrixReport({
+          status: 'complete',
+          axes: cached.axes as AxisConfig,
+          personas: cached.personas as ScoredPersona[],
+          keywords: cached.keywords as KeywordSummary,
+          recommendations: (cached.recommendations || []) as Recommendation[],
+          scoreTable: (cached.personas || []).map((p: any) => ({
+            persona_id: p.persona_id,
+            name: p.name,
+            x_score: p.x_score,
+            y_score: p.y_score,
+            industry: p.industry,
+            age: p.age,
+            quadrant_label: p.quadrant_label,
+          })) as ScoreTableRow[],
+          errorMessage: '',
+        })
+        return
+      }
+
+      // No cache — start SSE pipeline
+      setMatrixReport({ status: 'streaming', axes: null, personas: [], keywords: null, recommendations: [], scoreTable: [], errorMessage: '' })
+
+      const abort = startMatrixReportSSE(
+        { survey_id: surveyId, preset_key: 'interest_barrier' },
+        (event, data) => {
+          if (event === 'axis_ready') {
+            setMatrixReport({ axes: data as AxisConfig })
+          } else if (event === 'persona_scored') {
+            const p = data as ScoredPersona
+            useStore.setState((s) => ({
+              matrixReport: { ...s.matrixReport, personas: [...s.matrixReport.personas, p] }
+            }))
+          } else if (event === 'keywords_ready') {
+            setMatrixReport({ keywords: data as KeywordSummary })
+          } else if (event === 'recommendations_ready') {
+            setMatrixReport({ recommendations: data as Recommendation[] })
+          } else if (event === 'score_table_ready') {
+            setMatrixReport({ scoreTable: data as ScoreTableRow[] })
+          } else if (event === 'keyword_elaborated') {
+            const { keyword_text, elaboration } = data as { keyword_text: string; elaboration: string }
+            useStore.setState((s) => {
+              const kw = s.matrixReport.keywords
+              if (!kw) return s
+              const update = (list: AggregatedKeyword[]) =>
+                list.map((k) => k.text === keyword_text ? { ...k, elaboration } : k)
+              return {
+                matrixReport: {
+                  ...s.matrixReport,
+                  keywords: { strengths: update(kw.strengths), weaknesses: update(kw.weaknesses) },
+                },
+              }
+            })
+          } else if (event === 'report_complete') {
+            setMatrixReport({ status: 'complete' })
+          } else if (event === 'report_error') {
+            setMatrixReport({ status: 'error', errorMessage: (data as { error: string }).error })
+          }
+        },
+        (err) => {
+          setMatrixReport({ status: 'error', errorMessage: err.message })
+        },
+      )
+
+      abortRef.current = abort
+    }
+
+    loadReport()
+    return () => {
+      cancelled = true
+      abortRef.current?.()
+    }
   }, [surveyId])
 
   const { axes, personas, keywords, recommendations, scoreTable, status, errorMessage } = matrixReport
