@@ -28,9 +28,10 @@ def _extract_full_name(persona_full_json: str | None, persona_summary: str | Non
     if persona_full_json:
         try:
             pj = json.loads(persona_full_json)
-            name = pj.get("name", "")
-            if name:
-                return name
+            if isinstance(pj, dict):
+                name = pj.get("name", "")
+                if name:
+                    return name
         except (json.JSONDecodeError, TypeError):
             pass
     if persona_summary:
