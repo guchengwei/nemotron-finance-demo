@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, fireEvent, screen, waitFor } from '@testing-library/react'
 import MatrixReport from '../components/report-matrix/MatrixReport'
 import type { Persona } from '../types'
+import type { getMatrixReport } from '../api'
+
+type MatrixReportResponse = Awaited<ReturnType<typeof getMatrixReport>>
 
 const {
   setMatrixReportMock,
@@ -11,7 +14,7 @@ const {
 } = vi.hoisted(() => ({
   setMatrixReportMock: vi.fn(),
   openPersonaDetailMock: vi.fn(),
-  getMatrixReportMock: vi.fn(() => Promise.resolve(null)),
+  getMatrixReportMock: vi.fn<[string], Promise<MatrixReportResponse>>(() => Promise.resolve(null)),
   startMatrixReportSSEMock: vi.fn(() => () => {}),
 }))
 
