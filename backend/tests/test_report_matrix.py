@@ -102,8 +102,11 @@ def test_full_name_ignores_non_object_json(persona_json):
 
 
 def test_projection_applied_to_scored_personas():
-    """After pipeline, scored personas should have spread scores and canonical quadrant labels."""
+    """After projection, labels should come from the selected preset's quadrants."""
     from matrix_projection import spread_scores, assign_quadrant
+    from matrix_models import AXIS_PRESETS
+
+    preset = AXIS_PRESETS["interest_barrier"]
 
     # Simulate clustered raw scores (all y=4)
     raw_xs = [2.0, 3.0, 4.0, 4.0, 3.0]
@@ -116,8 +119,8 @@ def test_projection_applied_to_scored_personas():
     assert min(spread_xs) < 2.0
     assert max(spread_xs) > 4.0
 
-    # Verify quadrant labels are from canonical set
-    canonical = {"様子見層", "潜在採用層", "慎重観察層", "即時採用層"}
+    # Verify quadrant labels are from the selected preset's canonical set
+    canonical = {q.label for q in preset.quadrants}
     for sx, sy in zip(spread_xs, spread_ys):
-        label = assign_quadrant(sx, sy)
+        label = assign_quadrant(sx, sy, preset)
         assert label in canonical
