@@ -41,9 +41,12 @@ def spread_scores(raw: list[float], lo: float = 1.0, hi: float = 5.0) -> list[fl
         j = i + 1
         while j < n and raw[indexed[j]] == raw[indexed[i]]:
             j += 1
+        tie_count = j - i
         avg_rank = (i + j - 1) / 2.0 + 1  # 1-based average
         for k in range(i, j):
-            ranks[indexed[k]] = avg_rank
+            # Spread ties symmetrically around avg_rank with 0.3-rank spacing
+            tie_offset = (k - i - (tie_count - 1) / 2) * 0.3
+            ranks[indexed[k]] = avg_rank + tie_offset
         i = j
 
     spread = [round(lo + (r - 1) / (n - 1) * (hi - lo), 1) for r in ranks]
