@@ -48,8 +48,6 @@ MOCK_ELABORATIONS: dict[str, str] = {
     "学習コスト": "新しいシステムの習得に時間とコストがかかることへの懸念があり、直感的なUIの改善が求められます。",
 }
 
-DEFAULT_ELABORATION = "このキーワードは複数のペルソナに共通して言及されており、重要な意見として注目されます。"
-
 ELABORATION_PROMPT = """あなたはフィンテック調査の分析専門家です。アンケートで複数のペルソナから言及されたキーワードについて、それぞれ1〜2文の日本語で説明してください。
 
 【キーワード一覧】
@@ -258,12 +256,12 @@ async def run_matrix_pipeline(
     all_keywords = list(keywords.strengths) + list(keywords.weaknesses)
     if settings.mock_llm:
         for kw in all_keywords:
-            elaboration = MOCK_ELABORATIONS.get(kw.text, DEFAULT_ELABORATION)
+            elaboration = MOCK_ELABORATIONS.get(kw.text, "")
             yield ("keyword_elaborated", {"keyword_text": kw.text, "elaboration": elaboration})
     else:
         elaboration_map = await elaborate_keywords(keywords)
         for kw in all_keywords:
-            elaboration = elaboration_map.get(kw.text, DEFAULT_ELABORATION)
+            elaboration = elaboration_map.get(kw.text, "")
             yield ("keyword_elaborated", {"keyword_text": kw.text, "elaboration": elaboration})
 
     # Stage 4: Recommendations

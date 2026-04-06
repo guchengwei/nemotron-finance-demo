@@ -164,4 +164,26 @@ describe('ScoreTable', () => {
     await user.click(screen.getByText(MOCK_ROWS[0].name))
     expect(handleClick).toHaveBeenCalledWith(expect.objectContaining({ persona_id: MOCK_ROWS[0].persona_id }))
   })
+
+  it('defaults to 分類 sort with 即時採用層 first', () => {
+    const rows: ScoreTableRow[] = [
+      { persona_id: 'p1', name: '佐藤', x_score: 4, y_score: 4, industry: '建設業', age: 35, quadrant_label: '様子見層' },
+      { persona_id: 'p2', name: '田中', x_score: 2, y_score: 2, industry: '小売業', age: 40, quadrant_label: '即時採用層' },
+      { persona_id: 'p3', name: '鈴木', x_score: 3, y_score: 3, industry: '製造業', age: 50, quadrant_label: '潜在採用層' },
+    ]
+    const axes: AxisConfig = {
+      x_axis: { name: '関心度', rubric: '', label_low: '', label_high: '' },
+      y_axis: { name: '利用障壁', rubric: '', label_low: '', label_high: '' },
+      quadrants: [
+        { position: 'top-left', label: '様子見層', subtitle: '' },
+        { position: 'top-right', label: '潜在採用層', subtitle: '' },
+        { position: 'bottom-left', label: '慎重観察層', subtitle: '' },
+        { position: 'bottom-right', label: '即時採用層', subtitle: '' },
+      ],
+    }
+    render(<ScoreTable rows={rows} axes={axes} />)
+    const names = screen.getAllByRole('row').slice(1) // skip header
+    // First data row should be 即時採用層 (田中)
+    expect(names[0]).toHaveTextContent('田中')
+  })
 })

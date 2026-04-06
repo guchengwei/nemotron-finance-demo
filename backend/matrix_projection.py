@@ -30,9 +30,6 @@ def spread_scores(raw: list[float], lo: float = 1.0, hi: float = 5.0) -> list[fl
         return []
     if n == 1:
         return [round((lo + hi) / 2, 1)]
-    if len(set(raw)) == 1:
-        return [round((lo + hi) / 2, 1)] * n
-
     # Compute 1-based averaged ranks (pure Python, no scipy)
     indexed = sorted(range(n), key=lambda i: raw[i])
     ranks = [0.0] * n
@@ -49,7 +46,7 @@ def spread_scores(raw: list[float], lo: float = 1.0, hi: float = 5.0) -> list[fl
             ranks[indexed[k]] = avg_rank + tie_offset
         i = j
 
-    spread = [round(lo + (r - 1) / (n - 1) * (hi - lo), 1) for r in ranks]
+    spread = [round(max(lo, min(hi, lo + (r - 1) / (n - 1) * (hi - lo))), 1) for r in ranks]
     return spread
 
 
