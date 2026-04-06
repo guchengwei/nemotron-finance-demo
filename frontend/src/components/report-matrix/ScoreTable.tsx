@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { ScoreTableRow, AxisConfig } from '../../types/matrix-report'
 import { scoreColor } from '../../utils/scoreParser'
+
+const POSITION_PRIORITY = ['bottom-right', 'top-right', 'bottom-left', 'top-left']
 
 const QUADRANT_COLOR: Record<string, string> = {
   '即時採用層': 'bg-fin-accent text-white',
@@ -30,13 +32,29 @@ function barrierColor(label: string): string {
 }
 
 export default function ScoreTable({ rows, axes, onRowClick }: ScoreTableProps) {
-  const [sortKey, setSortKey] = useState<SortKey>('x_score')
-  const [sortDesc, setSortDesc] = useState(true)
+  const [sortKey, setSortKey] = useState<SortKey>('quadrant_label')
+  const [sortDesc, setSortDesc] = useState(false)
+
+  const quadrantOrder = useMemo(() => {
+    const order = new Map<string, number>()
+    for (const q of axes.quadrants) {
+      const priority = POSITION_PRIORITY.indexOf(q.position)
+      if (priority !== -1) order.set(q.label, priority)
+    }
+    return order
+  }, [axes.quadrants])
 
   const sorted = [...rows].sort((a, b) => {
-    const av = a[sortKey]
-    const bv = b[sortKey]
-    const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv))
+    let cmp: number
+    if (sortKey === 'quadrant_label') {
+      const ap = quadrantOrder.get(a.quadrant_label) ?? 999
+      const bp = quadrantOrder.get(b.quadrant_label) ?? 999
+      cmp = ap - bp
+    } else {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv))
+    }
     return sortDesc ? -cmp : cmp
   })
 

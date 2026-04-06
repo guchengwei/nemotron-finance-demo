@@ -45,17 +45,6 @@ describe('QuadrantMatrix', () => {
     expect(container.querySelectorAll('[class*="text-\\[9px\\]"][class*="font-bold"]')).toHaveLength(0)
   })
 
-  it('renders legend entries for each unique industry', () => {
-    const personas: ScoredPersona[] = [
-      { ...MOCK_PERSONA, persona_id: 'p1', industry: '小売業' },
-      { ...MOCK_PERSONA, persona_id: 'p2', industry: '建設業' },
-      { ...MOCK_PERSONA, persona_id: 'p3', industry: '小売業' },
-    ]
-    render(<QuadrantMatrix axes={MOCK_AXES} personas={personas} />)
-    expect(screen.getByText('小売業')).toBeDefined()
-    expect(screen.getByText('建設業')).toBeDefined()
-  })
-
   it('renders dedicated Y-axis endpoint labels with arrows', () => {
     render(<QuadrantMatrix axes={MOCK_AXES} personas={[]} onPersonaClick={() => {}} />)
     expect(screen.getByText(/↑/)).toBeDefined()

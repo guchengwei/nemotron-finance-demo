@@ -273,3 +273,29 @@ async def test_pipeline_emits_preset_specific_quadrant_labels_for_risk_time():
                 labels.append(event_data["quadrant_label"])
 
     assert set(labels) == {"堅実長期層", "積極投資層", "現金保守層", "機動投機層"}
+
+
+@pytest.mark.asyncio
+async def test_pipeline_unknown_keyword_gets_empty_elaboration(mock_survey_data):
+    """Keywords not in MOCK_ELABORATIONS should get empty elaboration, not placeholder."""
+    mock_scorer = AsyncMock(side_effect=lambda pid, name, ind, age, qa, axes:
+        {**_mock_score_result(pid, name, ind, age),
+         "keywords": [{"text": "未知キーワード", "polarity": "strength"}]})
+
+    with patch("matrix_pipeline.score_persona", mock_scorer), \
+         patch("matrix_pipeline.settings") as mock_settings:
+        mock_settings.mock_llm = True
+        mock_settings.llm_concurrency = 2
+
+        events = []
+        async for event_type, event_data in run_matrix_pipeline(
+            survey_data=mock_survey_data,
+            preset_key="interest_barrier",
+        ):
+            events.append((event_type, event_data))
+
+        elab_events = [(t, d) for t, d in events if t == "keyword_elaborated"]
+        unknown_elab = [e for e in elab_events if e[1]["keyword_text"] == "未知キーワード"]
+        assert len(unknown_elab) == 1
+        assert unknown_elab[0][1]["elaboration"] == "", \
+            "Unknown keywords should get empty elaboration, not default placeholder"

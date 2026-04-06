@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import type { AxisConfig, ScoredPersona } from '../../types/matrix-report'
 import { CHART_COLORS } from '../../utils/chartHelpers'
 import PersonaDot from './PersonaDot'
-import MatrixLegend from './MatrixLegend'
 
 const QUADRANT_BG: Record<string, string> = {
   'top-left':     'bg-slate-50',
@@ -51,17 +50,14 @@ interface QuadrantMatrixProps {
 }
 
 export default function QuadrantMatrix({ axes, personas, onPersonaClick }: QuadrantMatrixProps) {
-  const { industries, getColor } = useMemo(() => {
+  const getColor = useMemo(() => {
     const counts = new Map<string, number>()
     for (const p of personas) {
       counts.set(p.industry, (counts.get(p.industry) || 0) + 1)
     }
     const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name)
     const colorMap = new Map(sorted.map((name, i) => [name, CHART_COLORS[i % CHART_COLORS.length]]))
-    return {
-      industries: sorted.map((name) => ({ name, color: colorMap.get(name)! })),
-      getColor: (industry: string) => colorMap.get(industry) || CHART_COLORS[0],
-    }
+    return (industry: string) => colorMap.get(industry) || CHART_COLORS[0]
   }, [personas])
 
   const offsets = useMemo(() => computeSunflowerOffsets(personas), [personas])
@@ -131,7 +127,6 @@ export default function QuadrantMatrix({ axes, personas, onPersonaClick }: Quadr
         </div>
       </div>
 
-      <MatrixLegend industries={industries} />
     </div>
   )
 }

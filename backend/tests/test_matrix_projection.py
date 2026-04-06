@@ -37,6 +37,12 @@ class TestSpreadScores:
         spread = spread_scores(raw)
         assert all(s == 3.0 for s in spread)
 
+    def test_spread_values_stay_in_range(self):
+        """Spread scores must always be within [1.0, 5.0]."""
+        raw = [3.0] * 10
+        spread = spread_scores(raw)
+        assert all(1.0 <= s <= 5.0 for s in spread)
+
     def test_empty_returns_empty(self):
         assert spread_scores([]) == []
 
