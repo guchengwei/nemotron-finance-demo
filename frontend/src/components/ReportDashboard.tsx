@@ -24,7 +24,8 @@ function ScoreCircle({ score }: { score: number }) {
 export default function ReportDashboard() {
   const {
     currentReport, currentRunId, setCurrentReport, setFollowupPersona,
-    setStep, currentHistoryRun, selectedPersonas, surveyTheme, openPersonaDetail
+    setStep, currentHistoryRun, selectedPersonas, surveyTheme, openPersonaDetail,
+    matrixReport
   } = useStore()
 
   const [generating, setGenerating] = useState(false)
@@ -75,14 +76,26 @@ export default function ReportDashboard() {
   }, [resolvePersona, openPersonaDetail])
 
   const handleDownload = () => {
-    if (!report) return
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `survey-report-${report.run_id?.slice(0, 8) || 'data'}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    if (reportTab === 'matrix') {
+      const { axes, personas, keywords, recommendations, scoreTable } = matrixReport
+      const data = { axes, personas, keywords, recommendations, scoreTable }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `matrix-report-${currentRunId?.slice(0, 8) || 'data'}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } else {
+      if (!report) return
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `survey-report-${report.run_id?.slice(0, 8) || 'data'}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
   }
 
   if (generating) {
@@ -142,7 +155,7 @@ export default function ReportDashboard() {
           onClick={handleDownload}
           className="rounded-full border border-fin-border px-3 py-2 text-xs text-fin-muted transition-all duration-200 hover:-translate-y-0.5 hover:border-fin-accent hover:text-fin-accent"
         >
-          JSON ダウンロード
+          {reportTab === 'matrix' ? 'マトリクス JSON' : 'レポート JSON'}
         </button>
       </div>
 
