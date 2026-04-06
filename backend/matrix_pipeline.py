@@ -228,7 +228,9 @@ async def run_matrix_pipeline(
                 break
 
     # Stage 2b: Project scores for better distribution
+    # Sort by persona_id for deterministic tie-breaking in spread_scores()
     if len(scored) >= 2:
+        scored.sort(key=lambda p: p.persona_id or p.name or "")
         raw_xs = [p.x_score for p in scored]
         raw_ys = [p.y_score for p in scored]
         spread_xs = spread_scores(raw_xs)
