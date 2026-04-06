@@ -58,7 +58,7 @@ function WelcomeScreen() {
           Nemotron Financial Survey Demo
         </div>
         <div className="mx-auto max-w-lg text-sm leading-6 text-fin-muted">
-          NVIDIA Nemotron-Personas-Japan × Nemotron-Nano-9B-v2-Japanese を使用した<br />
+          NVIDIA Nemotron-Personas-Japan × Nemotron-Nano-9B-v2-Japanese<br />
           金融サービスAIリサーチデモ
         </div>
       </div>
