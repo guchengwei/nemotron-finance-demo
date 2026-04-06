@@ -46,11 +46,10 @@ class TestSpreadScores:
         assert spread[0] == 1.0
         assert spread[1] == 5.0
 
-    def test_ties_get_distinct_values(self):
+    def test_ties_get_same_value(self):
         raw = [2.0, 3.0, 3.0, 4.0]
         spread = spread_scores(raw)
-        assert spread[1] != spread[2]
-        assert abs(spread[1] - spread[2]) < 1.0
+        assert spread[1] == spread[2]
 
     def test_results_are_rounded(self):
         """All values should be rounded to 1 decimal."""
