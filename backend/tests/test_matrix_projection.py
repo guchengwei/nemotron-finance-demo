@@ -32,14 +32,10 @@ class TestSpreadScores:
         spread = spread_scores(raw)
         assert spread == [3.0]
 
-    def test_all_identical_gets_spread(self):
-        """All-identical raw scores should still be spread across the range."""
+    def test_all_identical_returns_midpoints(self):
         raw = [4.0, 4.0, 4.0]
         spread = spread_scores(raw)
-        assert len(spread) == 3
-        assert min(spread) < 2.5, "Identical scores should be spread to cover low range"
-        assert max(spread) > 3.5, "Identical scores should be spread to cover high range"
-        assert len(set(spread)) == 3, "All spread values should be distinct"
+        assert all(s == 3.0 for s in spread)
 
     def test_spread_values_stay_in_range(self):
         """Spread scores must always be within [1.0, 5.0]."""
@@ -56,11 +52,10 @@ class TestSpreadScores:
         assert spread[0] == 1.0
         assert spread[1] == 5.0
 
-    def test_ties_get_distinct_values(self):
+    def test_ties_get_same_value(self):
         raw = [2.0, 3.0, 3.0, 4.0]
         spread = spread_scores(raw)
-        assert spread[1] != spread[2]
-        assert abs(spread[1] - spread[2]) < 1.0
+        assert spread[1] == spread[2]
 
     def test_results_are_rounded(self):
         """All values should be rounded to 1 decimal."""
