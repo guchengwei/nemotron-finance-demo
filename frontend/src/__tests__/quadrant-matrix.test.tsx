@@ -99,7 +99,7 @@ describe('PersonaDot', () => {
   it('does not render full name text outside the dot circle', () => {
     render(
       <PersonaDot persona={MOCK_PERSONA} color="#1F6A5A" index={0}
-        offset={{ dx: 0, dy: 0 }} />
+        offset={{ dx: 0, dy: 0 }} containerSize={600} />
     )
     const fullName = MOCK_PERSONA.name
     expect(screen.queryByText(fullName)).toBeNull()

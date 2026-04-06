@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import type { AxisConfig, ScoredPersona } from '../../types/matrix-report'
 import { CHART_COLORS } from '../../utils/chartHelpers'
 import PersonaDot from './PersonaDot'
@@ -62,6 +62,19 @@ export default function QuadrantMatrix({ axes, personas, onPersonaClick }: Quadr
 
   const offsets = useMemo(() => computeSunflowerOffsets(personas), [personas])
 
+  const matrixRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState(600)
+
+  useEffect(() => {
+    if (!matrixRef.current) return
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry) setContainerSize(entry.contentRect.width)
+    })
+    observer.observe(matrixRef.current)
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div className="space-y-3">
       <div className="rounded-[1.75rem] border border-fin-border bg-fin-surface p-6 shadow-card">
@@ -81,7 +94,7 @@ export default function QuadrantMatrix({ axes, personas, onPersonaClick }: Quadr
           </div>
 
           {/* Matrix plot */}
-          <div className="relative w-full" style={{ paddingBottom: '100%' }}>
+          <div ref={matrixRef} className="relative w-full" style={{ paddingBottom: '100%' }}>
             <div className="absolute inset-0">
               {/* Quadrant backgrounds */}
               {axes.quadrants.map((q) => {
@@ -113,6 +126,7 @@ export default function QuadrantMatrix({ axes, personas, onPersonaClick }: Quadr
                   color={getColor(p.industry)}
                   index={i}
                   offset={offsets.get(p.persona_id) || { dx: 0, dy: 0 }}
+                  containerSize={containerSize}
                   onClick={onPersonaClick}
                 />
               ))}

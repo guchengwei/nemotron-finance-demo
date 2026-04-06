@@ -1,15 +1,39 @@
 import { useState } from 'react'
 import type { ScoredPersona } from '../../types/matrix-report'
 
+const DOT_RADIUS = 16 // half of h-8 w-8 (32px)
+
+/**
+ * Clamp a sunflower offset so the dot stays within the matrix container.
+ * offsetPx: raw pixel offset (positive = right/down, negative = left/up)
+ * score: axis score 1–5, maps to 5%–95% position
+ * containerPx: container width or height in pixels
+ */
+export function clampOffset(offsetPx: number, score: number, containerPx: number): number {
+  if (offsetPx === 0 || containerPx === 0) return 0
+  const positionPx = (((score - 1) / 4) * 90 + 5) / 100 * containerPx
+  const margin = DOT_RADIUS + 4 // 4px padding from container edge
+  const roomLeft = positionPx - margin
+  const roomRight = containerPx - positionPx - margin
+  const room = offsetPx > 0 ? roomRight : roomLeft
+  if (room <= 0) return 0
+  const absOffset = Math.abs(offsetPx)
+  if (absOffset <= room) return offsetPx
+  return Math.sign(offsetPx) * room
+}
+
 interface PersonaDotProps {
   persona: ScoredPersona
   color: string
   index: number
   offset: { dx: number; dy: number }
+  containerSize: number
   onClick?: (persona: ScoredPersona) => void
 }
 
-export default function PersonaDot({ persona, color, index, offset, onClick }: PersonaDotProps) {
+export default function PersonaDot({ persona, color, index, offset, containerSize, onClick }: PersonaDotProps) {
+  const clampedDx = clampOffset(offset.dx, persona.x_score, containerSize)
+  const clampedDy = clampOffset(offset.dy, persona.y_score, containerSize)
   const [showTooltip, setShowTooltip] = useState(false)
 
   // Map 1-5 score to 5%-95% position (inverted Y: high score = top = low CSS top)
@@ -23,7 +47,7 @@ export default function PersonaDot({ persona, color, index, offset, onClick }: P
         left,
         top,
         animationDelay: `${index * 80}ms`,
-        transform: `translate(calc(-50% + ${offset.dx}px), calc(-50% + ${offset.dy}px))`,
+        transform: `translate(calc(-50% + ${clampedDx}px), calc(-50% + ${clampedDy}px))`,
       }}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
