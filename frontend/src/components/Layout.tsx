@@ -22,7 +22,15 @@ export default function Layout({ children }: Props) {
           {children}
         </main>
       </div>
-      <PersonaDetailModal persona={activeDetailPersona} onClose={closePersonaDetail} />
+      <PersonaDetailModal
+        persona={activeDetailPersona}
+        onClose={closePersonaDetail}
+        onFollowup={(persona) => {
+          useStore.getState().setFollowupPersona(persona)
+          useStore.getState().closePersonaDetail()
+          useStore.getState().setStep(5)
+        }}
+      />
     </div>
   )
 }

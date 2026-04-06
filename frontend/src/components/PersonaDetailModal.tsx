@@ -4,6 +4,7 @@ import PersonaAvatar from './PersonaAvatar'
 interface Props {
   persona: Persona | null
   onClose: () => void
+  onFollowup?: (persona: Persona) => void
 }
 
 function Section({ title, content }: { title: string; content?: string }) {
@@ -16,7 +17,7 @@ function Section({ title, content }: { title: string; content?: string }) {
   )
 }
 
-export default function PersonaDetailModal({ persona, onClose }: Props) {
+export default function PersonaDetailModal({ persona, onClose, onFollowup }: Props) {
   if (!persona) return null
 
   const sexDisplay = persona.sex === '男' ? '男性' : persona.sex === '女' ? '女性' : persona.sex
@@ -39,6 +40,14 @@ export default function PersonaDetailModal({ persona, onClose }: Props) {
             </div>
             <div className="text-sm text-fin-accent">{persona.occupation}</div>
           </div>
+          {onFollowup && (
+            <button
+              onClick={() => onFollowup(persona)}
+              className="rounded-full border border-fin-accent px-3 py-2 text-xs text-fin-accent transition-all duration-200 hover:-translate-y-0.5 hover:bg-fin-accent hover:text-fin-surface"
+            >
+              深掘り質問 →
+            </button>
+          )}
           <button
             onClick={onClose}
             className="text-2xl leading-none text-fin-muted transition-colors hover:text-fin-accent"
