@@ -11,7 +11,7 @@ const QUADRANT_BG: Record<string, string> = {
   'bottom-right': 'bg-green-50',
 }
 
-const SUNFLOWER_SPREAD = 8
+const SUNFLOWER_SPREAD = 20
 const GOLDEN_ANGLE = 2.399963 // radians
 
 export function computeSunflowerOffsets(personas: ScoredPersona[]): Map<string, { dx: number; dy: number }> {
