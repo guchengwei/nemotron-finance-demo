@@ -2,17 +2,17 @@
 
 English README: [README.md](README.md)
 
-このリポジトリは、`NVIDIA-Nemotron-Nano-9B-v2-Japanese` と Nemotron Personas Japan を使った金融リサーチ向けデモです。市場調査やイベント展示での利用を想定し、属性でペルソナを絞り込み、複数設問の回答をストリーミングで観察し、レポートを生成し、履歴を引き継いだフォローアップ会話まで確認できます。
+`NVIDIA-Nemotron-Nano-9B-v2-Japanese` と Nemotron Personas Japan を使った金融リサーチ向けデモです。属性でペルソナを絞り込み、複数設問の回答をストリーミングで観察し、レポートを生成、履歴を引き継いだフォローアップ会話まで一連の流れを体験できます。市場調査やイベント展示での利用を想定しています。
 
 ## 主な機能
 
-- **ペルソナの絞り込みとサンプリング**: Nemotron Personas データセットを属性条件で絞り込み、調査対象を抽出できます
+- **ペルソナの絞り込みとサンプリング**: Nemotron Personas データセットを属性条件で絞り込み、調査対象を抽出します
 - **リアルタイム調査ストリーミング**: 複数設問の回答をペルソナごとに順次ストリーミング表示します
-- **Thinking Mode**: vLLM の reasoning parser 経由で取得した思考出力を必要に応じて表示できます
-- **レポート生成**: 定性的サマリー、極性分析を含む示唆、注目ペルソナの抽出をまとめて生成します
+- **Thinking Mode**: vLLM の reasoning parser 経由で取得した思考出力を表示します
+- **レポート生成**: 定性的サマリー・極性分析・注目ペルソナをまとめて生成します
 - **フォローアップ会話**: レポート後に個別ペルソナへ追加質問を続けられます
 - **履歴の再利用**: 過去の調査実行とフォローアップ状態を履歴ストアから再表示できます
-- **モック / 実 vLLM モード**: オフライン開発用のモックと、リポジトリ同梱 parser を使う実 vLLM モードの両方をサポートします
+- **vLLM 連携**: リポジトリ同梱の reasoning parser を使ったローカル vLLM 接続をサポートします
 
 ## アーキテクチャ
 
@@ -36,23 +36,14 @@ English README: [README.md](README.md)
 
 ## 主要ドキュメント
 
-- エージェント向けセットアップ: [`docs/agents/agent-setup.md`](docs/agents/agent-setup.md)
+- **エージェント向けセットアップ**: [`docs/agents/agent-setup.md`](docs/agents/agent-setup.md)
 - 構成マップ: [`docs/architecture/code-map.md`](docs/architecture/code-map.md)
 - E2E 実行計画: [`docs/testing/e2e-test-plan.md`](docs/testing/e2e-test-plan.md)
 - テスト一覧: [`docs/testing/test-matrix.md`](docs/testing/test-matrix.md)
 
 ## クイックスタート
 
-### モックモード
-
-```bash
-./setup-env.sh --preset local-mock
-./start.sh
-```
-
-### 実 LLM モード
-
-リポジトリ同梱の reasoning parser を使って vLLM を起動します。
+リポジトリ同梱の reasoning parser を使って vLLM サーバーを起動します。
 
 ```bash
 vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese \
@@ -64,12 +55,19 @@ vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese \
   --reasoning-parser-plugin backend/vllm_plugins/nemotron_nano_v2_reasoning_parser.py \
   --reasoning-parser nemotron_nano_v2 \
   --mamba-ssm-cache-dtype float32
+```
 
+アプリを起動します。
+
+```bash
 ./setup-env.sh --preset local-vllm
 ./start.sh
 ```
 
+`http://localhost:8080` を開きます。
+
 ## 補足
 
-- 実運用向けの詳細手順は README ではなく `docs/` 配下の agent-first 文書を参照してください。
-- 過去の調査メモや古い計画書は `docs/archive/` に移動しています。
+- `start.sh` はフロントエンドをビルドし、FastAPI backend から配信します。
+- 実 LLM を使う場合は、vLLM サーバーへの接続と有効な `.env` が必要です。
+- 詳細な手順は `docs/agents/agent-setup.md` を参照してください。
