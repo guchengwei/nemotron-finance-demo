@@ -12,7 +12,7 @@ Demo application for financial-product survey simulations powered by the `nvidia
 - **Report Generation**: produce qualitative summaries, polarity-aware insights, and top-pick personas after the survey
 - **Follow-up Chat**: continue the conversation with individual personas after the report
 - **Persisted Survey History**: reload prior runs and follow-up state from the history store
-- **Mock and Real vLLM Modes**: develop offline or run against a local vLLM deployment with the repo-owned reasoning parser plugin
+- **Real vLLM Integration**: run against a local vLLM deployment with the repo-owned reasoning parser plugin
 
 ## Architecture
 
@@ -36,26 +36,14 @@ Demo application for financial-product survey simulations powered by the `nvidia
 
 ## Start Here
 
-- Agent setup and local workflow: [`docs/agents/agent-setup.md`](docs/agents/agent-setup.md)
+- **Agent setup and local workflow**: [`docs/agents/agent-setup.md`](docs/agents/agent-setup.md)
 - Architecture and code map: [`docs/architecture/code-map.md`](docs/architecture/code-map.md)
 - E2E execution plan: [`docs/testing/e2e-test-plan.md`](docs/testing/e2e-test-plan.md)
 - Test matrix and commands: [`docs/testing/test-matrix.md`](docs/testing/test-matrix.md)
-- Archived investigation notes and legacy plans: [`docs/archive/`](docs/archive/)
 
 ## Quick Start
 
-### Mock Mode
-
-```bash
-./setup-env.sh --preset local-mock
-./start.sh
-```
-
-Open `http://localhost:8080`.
-
-### Real vLLM Mode
-
-Use the tracked reasoning parser plugin that now lives in this repo:
+Start a local vLLM server with the repo-owned reasoning parser plugin:
 
 ```bash
 vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese \
@@ -67,10 +55,16 @@ vllm serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese \
   --reasoning-parser-plugin backend/vllm_plugins/nemotron_nano_v2_reasoning_parser.py \
   --reasoning-parser nemotron_nano_v2 \
   --mamba-ssm-cache-dtype float32
+```
 
+Then start the app:
+
+```bash
 ./setup-env.sh --preset local-vllm
 ./start.sh
 ```
+
+Open `http://localhost:8080`.
 
 ## Development Commands
 
@@ -110,4 +104,3 @@ frontend/
 
 - `start.sh` builds the frontend and serves it from the FastAPI backend.
 - Real-LLM flows require a reachable local vLLM server and a valid `.env`.
-- Historical notes were moved under `docs/archive/` so active docs stay operational.
