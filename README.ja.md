@@ -4,6 +4,16 @@ English README: [README.md](README.md)
 
 `NVIDIA-Nemotron-Nano-9B-v2-Japanese` と Nemotron Personas Japan を使った金融リサーチ向けデモです。属性でペルソナを絞り込み、複数設問の回答をストリーミングで観察し、レポートを生成、履歴を引き継いだフォローアップ会話まで一連の流れを体験できます。市場調査やイベント展示での利用を想定しています。
 
+## スクリーンショット
+
+| ペルソナ絞り込みパネル | 調査設定 |
+|---|---|
+| ![属性フィルターとマッチ件数を表示するペルソナ絞り込みパネル](docs/screenshots/01-filter-panel.png) | ![テーマ入力と自動生成設問が表示される調査設定画面](docs/screenshots/02-survey-config.png) |
+
+| 調査実行結果 | マトリクス分析レポート |
+|---|---|
+| ![各ペルソナの回答が表示された調査完了画面](docs/screenshots/03-survey-runner.png) | ![関心度と導入障壁でペルソナをプロットしたクォドラントマトリクス](docs/screenshots/04-report-matrix.png) |
+
 ## 主な機能
 
 - **ペルソナの絞り込みとサンプリング**: Nemotron Personas データセットを属性条件で絞り込み、調査対象を抽出します
