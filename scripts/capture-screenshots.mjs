@@ -2,22 +2,26 @@
 /**
  * Standalone screenshot capture script.
  *
- * Uses the system-installed Playwright + Chromium headless shell to capture
- * demo screenshots of the app in mock mode (no real backend required).
- *
- * All API calls are intercepted in-process, so only the Vite preview server
- * needs to be running on port 3000.
+ * Captures demo screenshots of the app in mock mode (no real backend required).
+ * All API calls are intercepted in-process; only the Vite preview server needs
+ * to be running on port 3000.
  *
  * Usage (from repo root):
  *   node scripts/capture-screenshots.mjs
  *
  * Or via npm (from frontend/):
  *   npm run screenshots
+ *
+ * Environment variable overrides (for non-standard setups):
+ *   PLAYWRIGHT_LIB          Path to playwright's index.mjs
+ *                           Default: <repo>/frontend/node_modules/playwright/index.mjs
+ *   PLAYWRIGHT_EXECUTABLE   Path to the Chromium/headless-shell binary
+ *                           Default: auto-discovered by Playwright
  */
 
 import { connect } from 'net'
 import { spawn } from 'child_process'
-import { mkdirSync } from 'fs'
+import { mkdirSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -27,8 +31,14 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const FRONTEND_DIR = join(REPO_ROOT, 'frontend')
 const SCREENSHOTS_DIR = join(REPO_ROOT, 'docs', 'screenshots')
 
-const PLAYWRIGHT_LIB = '/opt/node22/lib/node_modules/playwright/index.mjs'
-const HEADLESS_SHELL = '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell'
+// Resolve playwright from local project deps; allow override via env var.
+const LOCAL_PW = join(FRONTEND_DIR, 'node_modules', 'playwright', 'index.mjs')
+const PLAYWRIGHT_LIB = process.env.PLAYWRIGHT_LIB ?? LOCAL_PW
+
+// Browser executable: use env var override, else let Playwright auto-discover.
+// Set PLAYWRIGHT_EXECUTABLE to a specific binary when the project's installed
+// browser version doesn't match the available system binary.
+const PLAYWRIGHT_EXECUTABLE = process.env.PLAYWRIGHT_EXECUTABLE ?? null
 
 // ── Mock data ──────────────────────────────────────────────────────────────
 
@@ -179,13 +189,24 @@ async function main() {
     console.log('Using existing server on :3000')
   }
 
+  if (!existsSync(PLAYWRIGHT_LIB)) {
+    throw new Error(
+      `Playwright library not found at ${PLAYWRIGHT_LIB}.\n` +
+      'Run "npm install" inside frontend/ or set PLAYWRIGHT_LIB to the correct path.'
+    )
+  }
+
   const { chromium } = await import(PLAYWRIGHT_LIB)
 
-  const browser = await chromium.launch({
-    executablePath: HEADLESS_SHELL,
+  const launchOptions = {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-  })
+  }
+  if (PLAYWRIGHT_EXECUTABLE) {
+    launchOptions.executablePath = PLAYWRIGHT_EXECUTABLE
+  }
+
+  const browser = await chromium.launch(launchOptions)
 
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
   const page = await context.newPage()

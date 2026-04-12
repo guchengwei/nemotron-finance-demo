@@ -9,7 +9,7 @@
  * Run:  npm run screenshots   (from the frontend/ directory)
  */
 import { expect, test } from '@playwright/test'
-import type { FiltersResponse, Persona } from '../../src/types'
+import type { FiltersResponse, Persona } from '../src/types'
 
 const RUN_ID = 'demo-screenshots-run-001'
 
