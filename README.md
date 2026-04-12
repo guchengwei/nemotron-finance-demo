@@ -4,6 +4,16 @@ Japanese overview: [README.ja.md](README.ja.md)
 
 Demo application for financial-product survey simulations powered by the `nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese` model and the Nemotron Personas Japan dataset. It is designed for market-research and event-demo workflows: select personas by demographic profile, run multi-question surveys with live streaming answers, generate a report, and continue with follow-up chat backed by persisted survey history.
 
+## Screenshots
+
+| Persona Filter Panel | Survey Configuration |
+|---|---|
+| ![Persona filter panel showing demographic selectors and match count](docs/screenshots/01-filter-panel.png) | ![Survey configuration with theme input and auto-generated questions](docs/screenshots/02-survey-config.png) |
+
+| Live Survey Results | Matrix Analysis Report |
+|---|---|
+| ![Survey runner showing completed persona responses](docs/screenshots/03-survey-runner.png) | ![Quadrant matrix report with personas plotted by interest and adoption barrier](docs/screenshots/04-report-matrix.png) |
+
 ## Features
 
 - **Persona Filtering and Sampling**: narrow the Nemotron Personas dataset by demographic and profile fields, then sample respondents for a run
