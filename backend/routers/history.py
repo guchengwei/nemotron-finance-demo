@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 import aiosqlite
 
-from config import settings
+from db import history_db
 from llm import sanitize_answer_text
 from models import HistoryListResponse, SurveyRunSummary, SurveyRunDetail, ReportResponse
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 @router.get("", response_model=HistoryListResponse)
 async def list_history():
     """List all saved survey runs, sorted by date desc."""
-    async with aiosqlite.connect(settings.history_db_path) as db:
+    async with history_db() as db:
         db.row_factory = aiosqlite.Row
         rows = await db.execute_fetchall(
             "SELECT id, created_at, label, survey_theme, persona_count, status, report_json "
@@ -50,7 +50,7 @@ async def list_history():
 @router.get("/{run_id}", response_model=SurveyRunDetail)
 async def get_history_run(run_id: str):
     """Get full run data including answers, report, and follow-up chats."""
-    async with aiosqlite.connect(settings.history_db_path) as db:
+    async with history_db() as db:
         db.row_factory = aiosqlite.Row
 
         run_rows = await db.execute_fetchall(
@@ -124,7 +124,7 @@ async def get_history_run(run_id: str):
 @router.delete("/{run_id}")
 async def delete_history_run(run_id: str):
     """Delete a run and all associated data."""
-    async with aiosqlite.connect(settings.history_db_path) as db:
+    async with history_db() as db:
         row = await db.execute_fetchall("SELECT id FROM survey_runs WHERE id = ?", [run_id])
         if not row:
             raise HTTPException(status_code=404, detail="Run not found")

@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 import aiosqlite
 
 from config import settings
+from db import history_db
 from e2e_support import get_e2e_scenario
 from models import QuestionGenerationRequest, QuestionGenerationResponse, SurveyRunRequest
 from llm import generate_questions, sanitize_answer_text, stream_survey_answer
@@ -184,7 +185,7 @@ async def _survey_stream(
     persona_ids = request.persona_ids
     total = len(persona_ids)
 
-    async with aiosqlite.connect(settings.history_db_path) as history_db:
+    async with history_db() as history_connection:
         # Resolve questions
         questions = request.questions or []
         enable_thinking = request.enable_thinking if request.enable_thinking is not None else True
@@ -193,13 +194,13 @@ async def _survey_stream(
             yield f"event: questions_generated\ndata: {json.dumps({'questions': questions}, ensure_ascii=False)}\n\n"
 
         # Create run record
-        await history_db.execute(
+        await history_connection.execute(
             "INSERT INTO survey_runs (id, survey_theme, questions_json, persona_count, status, label, enable_thinking) "
             "VALUES (?, ?, ?, ?, 'running', ?, ?)",
             [run_id, request.survey_theme, json.dumps(questions, ensure_ascii=False),
              total, request.label, enable_thinking]
         )
-        await history_db.commit()
+        await history_connection.commit()
 
         yield f"event: run_created\ndata: {json.dumps({'run_id': run_id, 'total_personas': total}, ensure_ascii=False)}\n\n"
 
@@ -217,7 +218,7 @@ async def _survey_stream(
             async with semaphore:
                 await _run_persona_survey(
                     pid, idx, total, questions, run_id,
-                    request.survey_theme, event_queue, history_db, e2e_scenario,
+                    request.survey_theme, event_queue, history_connection, e2e_scenario,
                     enable_thinking=enable_thinking,
                 )
 
@@ -266,11 +267,11 @@ async def _survey_stream(
             # Always mark run as completed (or failed) so it doesn't stay "running" forever
             try:
                 final_status = 'completed' if completed > 0 else 'failed'
-                await history_db.execute(
+                await history_connection.execute(
                     "UPDATE survey_runs SET status = ? WHERE id = ?",
                     [final_status, run_id]
                 )
-                await history_db.commit()
+                await history_connection.commit()
             except Exception as e:
                 logger.error("Failed to update run status for %s: %s", run_id, e)
 

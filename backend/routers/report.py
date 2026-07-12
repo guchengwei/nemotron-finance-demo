@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 import aiosqlite
 
 from config import settings
+from db import history_db
 from models import ReportRequest, ReportResponse, TopPick
 import llm
 import text_analysis
@@ -676,7 +677,7 @@ def _merge_top_picks(llm_picks: list[dict], persona_records: dict[str, dict], to
 @router.post("/generate", response_model=ReportResponse)
 async def generate_report_endpoint(request: ReportRequest):
     """Generate a report from a completed survey run."""
-    async with aiosqlite.connect(settings.history_db_path) as db:
+    async with history_db() as db:
         db.row_factory = aiosqlite.Row
 
         # Load run

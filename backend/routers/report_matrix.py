@@ -6,6 +6,7 @@ GET  /api/report/matrix/{survey_id} — returns persisted report JSON.
 
 import json
 import logging
+from contextlib import asynccontextmanager
 import aiosqlite
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -16,6 +17,15 @@ from matrix_pipeline import run_matrix_pipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/report/matrix", tags=["matrix-report"])
+
+
+@asynccontextmanager
+async def _history_db():
+    db = await get_history_db()
+    try:
+        yield db
+    finally:
+        await db.close()
 
 
 class MatrixReportRequest(BaseModel):
@@ -42,23 +52,23 @@ def _extract_full_name(persona_full_json: str | None, persona_summary: str | Non
 async def _matrix_stream(request: MatrixReportRequest):
     """Generator that yields SSE-formatted events from the pipeline."""
     import aiosqlite
-    db = await get_history_db()
-    db.row_factory = aiosqlite.Row
-    row = await db.execute(
-        "SELECT id, survey_theme, questions_json FROM survey_runs WHERE id = ?",
-        [request.survey_id],
-    )
-    run = await row.fetchone()
-    if not run:
-        yield f"event: report_error\ndata: {json.dumps({'error': 'Survey run not found'})}\n\n"
-        return
+    async with _history_db() as db:
+        db.row_factory = aiosqlite.Row
+        row = await db.execute(
+            "SELECT id, survey_theme, questions_json FROM survey_runs WHERE id = ?",
+            [request.survey_id],
+        )
+        run = await row.fetchone()
+        if not run:
+            yield f"event: report_error\ndata: {json.dumps({'error': 'Survey run not found'})}\n\n"
+            return
 
-    answers_rows = await db.execute(
-        "SELECT persona_uuid, persona_summary, persona_full_json, answer, question_index "
-        "FROM survey_answers WHERE run_id = ? ORDER BY persona_uuid, question_index",
-        [request.survey_id],
-    )
-    answers = await answers_rows.fetchall()
+        answers_rows = await db.execute(
+            "SELECT persona_uuid, persona_summary, persona_full_json, answer, question_index "
+            "FROM survey_answers WHERE run_id = ? ORDER BY persona_uuid, question_index",
+            [request.survey_id],
+        )
+        answers = await answers_rows.fetchall()
 
     persona_map: dict[str, dict] = {}
     for a in answers:
@@ -88,36 +98,37 @@ async def _matrix_stream(request: MatrixReportRequest):
 
     full_report: dict = {}
 
-    async for event_type, event_data in run_matrix_pipeline(
-        survey_data=survey_data,
-        preset_key=request.preset_key,
-    ):
-        yield f"event: {event_type}\ndata: {json.dumps(event_data, ensure_ascii=False)}\n\n"
+    async with _history_db() as db:
+        async for event_type, event_data in run_matrix_pipeline(
+            survey_data=survey_data,
+            preset_key=request.preset_key,
+        ):
+            yield f"event: {event_type}\ndata: {json.dumps(event_data, ensure_ascii=False)}\n\n"
 
-        if event_type == "axis_ready":
-            full_report["axes"] = event_data
-        elif event_type == "persona_scored":
-            full_report.setdefault("personas", []).append(event_data)
-        elif event_type == "keywords_ready":
-            full_report["keywords"] = event_data
-        elif event_type == "keyword_elaborated":
-            kw_data = event_data  # {"keyword_text": "...", "elaboration": "..."}
-            if "keywords" in full_report:
-                for group in ("strengths", "weaknesses"):
-                    for kw in full_report["keywords"].get(group, []):
-                        if kw["text"] == kw_data["keyword_text"]:
-                            kw["elaboration"] = kw_data["elaboration"]
-        elif event_type == "recommendations_ready":
-            full_report["recommendations"] = event_data
-        elif event_type == "report_complete":
-            try:
-                await db.execute(
-                    "UPDATE survey_runs SET matrix_report_json = ? WHERE id = ?",
-                    [json.dumps(full_report, ensure_ascii=False), request.survey_id],
-                )
-                await db.commit()
-            except Exception as e:
-                logger.error("Failed to persist matrix report: %s", e)
+            if event_type == "axis_ready":
+                full_report["axes"] = event_data
+            elif event_type == "persona_scored":
+                full_report.setdefault("personas", []).append(event_data)
+            elif event_type == "keywords_ready":
+                full_report["keywords"] = event_data
+            elif event_type == "keyword_elaborated":
+                kw_data = event_data
+                if "keywords" in full_report:
+                    for group in ("strengths", "weaknesses"):
+                        for kw in full_report["keywords"].get(group, []):
+                            if kw["text"] == kw_data["keyword_text"]:
+                                kw["elaboration"] = kw_data["elaboration"]
+            elif event_type == "recommendations_ready":
+                full_report["recommendations"] = event_data
+            elif event_type == "report_complete":
+                try:
+                    await db.execute(
+                        "UPDATE survey_runs SET matrix_report_json = ? WHERE id = ?",
+                        [json.dumps(full_report, ensure_ascii=False), request.survey_id],
+                    )
+                    await db.commit()
+                except Exception as e:
+                    logger.error("Failed to persist matrix report: %s", e)
 
 
 @router.post("")
@@ -132,12 +143,12 @@ async def generate_matrix_report(request: MatrixReportRequest):
 @router.get("/{survey_id}")
 async def get_matrix_report(survey_id: str):
     """Return persisted matrix report JSON for history reload."""
-    db = await get_history_db()
-    db.row_factory = aiosqlite.Row
-    row = await db.execute(
-        "SELECT matrix_report_json FROM survey_runs WHERE id = ?", [survey_id]
-    )
-    result = await row.fetchone()
+    async with _history_db() as db:
+        db.row_factory = aiosqlite.Row
+        row = await db.execute(
+            "SELECT matrix_report_json FROM survey_runs WHERE id = ?", [survey_id]
+        )
+        result = await row.fetchone()
     if not result or not result["matrix_report_json"]:
         return JSONResponse(status_code=404, content={"error": "No matrix report found"})
     return JSONResponse(content=json.loads(result["matrix_report_json"]))

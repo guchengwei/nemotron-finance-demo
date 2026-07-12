@@ -1,5 +1,4 @@
 import logging
-import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -200,9 +199,10 @@ def save_polarities(
         logger.warning("Polarity saving skipped: tokenizer is in degraded mode.")
         return
 
-    conn = sqlite3.connect(db_path)
+    from db import get_history_db_sync
+
+    conn = get_history_db_sync(db_path)
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS token_polarities (
@@ -252,7 +252,9 @@ def save_polarities(
 
 
 def load_polarities(db_path: str) -> dict[str, float]:
-    conn = sqlite3.connect(db_path)
+    from db import get_history_db_sync
+
+    conn = get_history_db_sync(db_path)
     try:
         table_exists = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='token_polarities'"

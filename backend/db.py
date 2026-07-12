@@ -9,6 +9,7 @@ import re
 import os
 import sqlite3
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
@@ -49,7 +50,9 @@ CREATE TABLE IF NOT EXISTS survey_runs (
     status TEXT DEFAULT 'running',
     report_json TEXT,
     label TEXT,
-    enable_thinking BOOLEAN DEFAULT 1
+    enable_thinking BOOLEAN DEFAULT 1,
+    idempotency_key TEXT,
+    request_fingerprint TEXT
 );
 
 CREATE TABLE IF NOT EXISTS survey_answers (
@@ -62,7 +65,30 @@ CREATE TABLE IF NOT EXISTS survey_answers (
     question_text TEXT,
     answer TEXT,
     score INTEGER,
+    outcome TEXT NOT NULL DEFAULT 'answered',
+    error_code TEXT,
+    error_message TEXT,
+    correlation_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS run_personas (
+    run_id TEXT NOT NULL REFERENCES survey_runs(id) ON DELETE CASCADE,
+    persona_uuid TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    persona_summary TEXT NOT NULL,
+    persona_full_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, persona_uuid),
+    UNIQUE (run_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS run_events (
+    run_id TEXT NOT NULL REFERENCES survey_runs(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    data_json TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (run_id, seq)
 );
 
 CREATE TABLE IF NOT EXISTS followup_chats (
@@ -76,36 +102,68 @@ CREATE TABLE IF NOT EXISTS followup_chats (
 
 CREATE INDEX IF NOT EXISTS idx_answers_run ON survey_answers(run_id);
 CREATE INDEX IF NOT EXISTS idx_followup_run ON followup_chats(run_id, persona_uuid);
+CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, seq);
 """
+
+
+_ADDITIVE_COLUMNS = {
+    "survey_runs": (
+        ("enable_thinking", "BOOLEAN DEFAULT 1"),
+        ("matrix_report_json", "TEXT"),
+        ("idempotency_key", "TEXT"),
+        ("request_fingerprint", "TEXT"),
+    ),
+    "survey_answers": (
+        ("outcome", "TEXT NOT NULL DEFAULT 'answered'"),
+        ("error_code", "TEXT"),
+        ("error_message", "TEXT"),
+        ("correlation_id", "TEXT"),
+    ),
+}
+
+_HISTORY_PRAGMAS = (
+    "PRAGMA foreign_keys=ON",
+    f"PRAGMA busy_timeout={settings.history_db_busy_timeout_ms}",
+    "PRAGMA journal_mode=WAL",
+    "PRAGMA synchronous=NORMAL",
+)
+
+
+def _configure_sync_connection(connection: sqlite3.Connection) -> None:
+    for pragma in _HISTORY_PRAGMAS:
+        connection.execute(pragma)
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """Apply additive upgrades while leaving every existing row intact."""
+    for table, columns in _ADDITIVE_COLUMNS.items():
+        existing = {
+            row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        for name, declaration in columns:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
+                logger.info("Migrated %s: added %s column", table, name)
+
+    # SQLite cannot add a UNIQUE column with ALTER TABLE. A partial index gives
+    # upgraded databases the same idempotency guarantee while allowing legacy
+    # NULL values.
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_survey_runs_idempotency_key "
+        "ON survey_runs(idempotency_key) WHERE idempotency_key IS NOT NULL"
+    )
 
 
 def _create_history_db():
     os.makedirs(os.path.dirname(settings.history_db_path) or ".", exist_ok=True)
-    conn = sqlite3.connect(settings.history_db_path, timeout=30)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    conn = sqlite3.connect(
+        settings.history_db_path,
+        timeout=settings.history_db_busy_timeout_ms / 1000,
+    )
+    _configure_sync_connection(conn)
     conn.executescript(HISTORY_DDL)
-    # Migrate: add enable_thinking if missing
-    try:
-        conn.execute("ALTER TABLE survey_runs ADD COLUMN enable_thinking BOOLEAN DEFAULT 1")
-        conn.commit()
-        logger.info("Migrated survey_runs: added enable_thinking column")
-    except Exception:
-        pass  # Column already exists
-    # Migrate: add matrix_report_json if missing
-    try:
-        conn.execute("ALTER TABLE survey_runs ADD COLUMN matrix_report_json TEXT")
-        conn.commit()
-        logger.info("Migrated survey_runs: added matrix_report_json column")
-    except Exception:
-        pass  # Column already exists
-    # Fix any surveys stuck in 'running' status from previous crashes
-    stuck = conn.execute(
-        "UPDATE survey_runs SET status = 'failed' WHERE status = 'running'"
-    ).rowcount
+    _add_missing_columns(conn)
     conn.commit()
-    if stuck:
-        logger.info("Cleaned up %d stuck 'running' survey(s)", stuck)
     conn.close()
     logger.info("History DB ready: %s", settings.history_db_path)
 
@@ -121,5 +179,36 @@ def _download_dataset(parquet_path: Path):
     logger.info("Saved to %s", parquet_path)
 
 
+def get_history_db_sync(db_path: str | None = None) -> sqlite3.Connection:
+    """Open one consistently configured synchronous history connection."""
+    connection = sqlite3.connect(
+        db_path or settings.history_db_path,
+        timeout=settings.history_db_busy_timeout_ms / 1000,
+    )
+    _configure_sync_connection(connection)
+    return connection
+
+
 async def get_history_db() -> aiosqlite.Connection:
-    return await aiosqlite.connect(settings.history_db_path)
+    """Open one consistently configured async history connection."""
+    connection = await aiosqlite.connect(
+        settings.history_db_path,
+        timeout=settings.history_db_busy_timeout_ms / 1000,
+    )
+    try:
+        for pragma in _HISTORY_PRAGMAS:
+            await connection.execute(pragma)
+    except BaseException:
+        await connection.close()
+        raise
+    return connection
+
+
+@asynccontextmanager
+async def history_db():
+    """Context-managed access to the configured history database."""
+    connection = await get_history_db()
+    try:
+        yield connection
+    finally:
+        await connection.close()
