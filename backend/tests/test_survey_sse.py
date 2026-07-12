@@ -48,7 +48,7 @@ def survey_client(tmp_path):
 
     app = FastAPI()
     app.include_router(survey.router)
-    with patch("routers.survey._get_persona", side_effect=lambda pid: store.get_persona(pid)):
+    with patch("persona_store.get_store", return_value=store):
         with TestClient(app) as c:
             yield c
 
@@ -70,8 +70,10 @@ def test_survey_emits_error_event_on_per_question_llm_failure(survey_client):
                 "survey_theme": "テスト",
                 "questions": ["テスト質問"],
             },
-            headers={"Accept": "text/event-stream"},
+            headers={"Idempotency-Key": "question-failure"},
         )
+        assert resp.status_code == 202
+        resp = survey_client.get(f"/api/survey/stream/{resp.json()['run_id']}")
 
     # Parse SSE events
     events = []

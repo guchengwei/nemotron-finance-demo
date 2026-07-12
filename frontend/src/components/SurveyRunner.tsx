@@ -80,6 +80,7 @@ export default function SurveyRunner() {
     personaStates, surveyComplete, surveyCompleted, surveyFailed,
     questions, currentRunId, setCurrentReport, setStep, selectedPersonas, currentHistoryRun,
     currentReport, openPersonaDetail, enableThinking,
+    connectionState,
   } = useStore()
 
   const feedRef = useRef<HTMLDivElement>(null)
@@ -153,6 +154,9 @@ export default function SurveyRunner() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold tracking-[-0.03em] text-fin-ink">{headerLabel}</h2>
         <div className="flex gap-2">
+          <span data-testid="survey-connection-state" className="rounded-full border border-fin-border px-3 py-1 text-xs text-fin-muted">
+            {connectionState === 'live' ? '接続中' : connectionState === 'reconnecting' ? '再接続中' : '切断'}
+          </span>
           {(surveyComplete || restoredInterruptedRun || restoredFailedRun) && (surveyCompleted > 0 || allStates.some((s) => s.answers.length > 0)) && (
             <button
               onClick={async () => {

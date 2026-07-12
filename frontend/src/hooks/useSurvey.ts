@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { useStore } from '../store'
-import { startSurveySSE } from '../api'
+import { api, startSurveySSE } from '../api'
 import type {
   SSERunCreated,
   SSEQuestionsGenerated,
@@ -17,6 +17,7 @@ export function useSurvey() {
   const chunkBuffer = useRef<Record<string, string>>({})
   const flushRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startingRef = useRef(false)
+  const highestEventIdRef = useRef(0)
 
   const stopFlushLoop = () => {
     if (flushRef.current) {
@@ -44,6 +45,7 @@ export function useSurvey() {
     cancelRef.current = null
     stopFlushLoop()
     chunkBuffer.current = {}
+    highestEventIdRef.current = 0
 
     const { selectedPersonas, surveyTheme, questions, surveyLabel, enableThinking, setPersonaStates, setSurveyComplete, setSurveyCounts, setCurrentHistoryRun, setCurrentReport } = useStore.getState()
 
@@ -80,7 +82,11 @@ export function useSurvey() {
         label: surveyLabel || undefined,
         enable_thinking: enableThinking,
       },
-      (event, data) => {
+      (event, data, eventId?: number) => {
+        if (eventId !== undefined) {
+          if (eventId <= highestEventIdRef.current) return
+          highestEventIdRef.current = eventId
+        }
         const s = useStore.getState()
         switch (event) {
           case 'run_created': {
@@ -146,7 +152,20 @@ export function useSurvey() {
             break
           }
           case 'persona_error': {
-            const d = data as { persona_uuid: string }
+            const d = data as { persona_uuid: string; question_index?: number; scope?: string; message?: string }
+            if (d.scope === 'question' && d.question_index !== undefined) {
+              const ps = s.personaStates[d.persona_uuid]
+              if (ps) {
+                const newAnswers = [...ps.answers]
+                newAnswers[d.question_index] = {
+                  question: s.questions[d.question_index] || `Q${d.question_index + 1}`,
+                  answer: d.message || '回答を取得できませんでした。',
+                  failed: true,
+                }
+                s.updatePersonaState(d.persona_uuid, { answers: newAnswers, activeAnswer: undefined })
+              }
+              break
+            }
             s.updatePersonaState(d.persona_uuid, { status: 'error', activeAnswer: '', activeThinking: undefined })
             const updated = useStore.getState().personaStates
             const completedCount = Object.values(updated).filter((ps) => ps.status === 'complete').length
@@ -165,26 +184,47 @@ export function useSurvey() {
             break
           }
           case 'survey_error': {
+            for (const [personaId, state] of Object.entries(s.personaStates)) {
+              if (state.status === 'waiting' || state.status === 'active') {
+                s.updatePersonaState(personaId, { status: 'not_completed', activeAnswer: undefined })
+              }
+            }
             finishWithError()
+            break
+          }
+          case 'survey_cancelled': {
+            stopFlushLoop()
+            for (const [personaId, state] of Object.entries(s.personaStates)) {
+              if (state.status === 'waiting' || state.status === 'active') {
+                s.updatePersonaState(personaId, { status: 'not_completed', activeAnswer: undefined })
+              }
+            }
+            const d = data as SSESurveyComplete
+            s.setSurveyComplete(true)
+            s.setSurveyCounts(d.completed, d.failed)
+            cancelRef.current = null
+            startingRef.current = false
             break
           }
         }
       },
       (err) => {
         console.error('Survey SSE error:', err)
+        if (err.message === 'Survey observer disconnected') return
         finishWithError()
       },
+      (state) => useStore.getState().setConnectionState(state),
     )
 
     cancelRef.current = cancel
   }, [])
 
   const cancelSurvey = useCallback(() => {
-    cancelRef.current?.()
-    cancelRef.current = null
-    stopFlushLoop()
-    chunkBuffer.current = {}
-    startingRef.current = false
+    const runId = useStore.getState().currentRunId
+    if (!runId) return
+    api.cancelSurvey(runId).catch((error) => {
+      console.error('Survey cancellation failed:', error)
+    })
   }, [])
 
   return { startSurvey, cancelSurvey }

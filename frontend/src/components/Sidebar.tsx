@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
-import { api } from '../api'
+import { api, observeSurvey } from '../api'
 import type { Persona, PersonaRunState, SurveyRunDetail } from '../types'
 
 function scoreColor(score?: number): string {
@@ -14,6 +14,16 @@ function scoreColor(score?: number): string {
 function buildPersonaStates(detail: SurveyRunDetail) {
   const personas = new Map<string, Persona>()
   const personaStates: Record<string, PersonaRunState> = {}
+
+  for (const snapshot of detail.personas || []) {
+    try {
+      const persona = JSON.parse(snapshot.persona_full_json) as Persona
+      personas.set(snapshot.persona_uuid, persona)
+      personaStates[snapshot.persona_uuid] = { persona, status: 'waiting', answers: [] }
+    } catch {
+      // Malformed legacy data may still be recoverable from answer snapshots.
+    }
+  }
 
   for (const answer of detail.answers) {
     if (!personas.has(answer.persona_uuid)) {
@@ -37,8 +47,9 @@ function buildPersonaStates(detail: SurveyRunDetail) {
 
     personaStates[answer.persona_uuid].answers[answer.question_index] = {
       question: answer.question_text,
-      answer: answer.answer,
+      answer: answer.answer || answer.error_message || '回答を取得できませんでした。',
       score: answer.score,
+      failed: answer.outcome === 'failed',
     }
   }
 
@@ -46,8 +57,12 @@ function buildPersonaStates(detail: SurveyRunDetail) {
     const answeredCount = state.answers.filter(Boolean).length
     if (detail.status === 'completed' && answeredCount === detail.questions.length) {
       state.status = 'complete'
+    } else if (detail.status === 'running') {
+      state.status = answeredCount > 0 ? 'active' : 'waiting'
+    } else if (detail.status === 'failed' || detail.status === 'cancelled') {
+      state.status = answeredCount === detail.questions.length ? 'complete' : 'not_completed'
     } else if (answeredCount > 0) {
-      state.status = detail.status === 'running' ? 'error' : detail.status === 'failed' ? 'error' : 'complete'
+      state.status = 'complete'
     }
   }
 
@@ -68,6 +83,74 @@ export default function Sidebar() {
   }, [setHistory])
 
   const [deleting, setDeleting] = useState<string | null>(null)
+  const closeObserverRef = useRef<(() => void) | null>(null)
+  const highestEventIdRef = useRef(0)
+
+  useEffect(() => () => closeObserverRef.current?.(), [])
+
+  const attachRunningRun = (runId: string) => {
+    closeObserverRef.current?.()
+    highestEventIdRef.current = 0
+    closeObserverRef.current = observeSurvey(runId, (event, rawData, eventId) => {
+      if (eventId !== undefined) {
+        if (eventId <= highestEventIdRef.current) return
+        highestEventIdRef.current = eventId
+      }
+      const data = rawData as Record<string, any>
+      const state = useStore.getState()
+      const personaId = data.persona_uuid as string | undefined
+      if (event === 'questions_generated') state.setQuestions(data.questions as string[])
+      if (event === 'persona_start' && personaId) {
+        state.updatePersonaState(personaId, { status: 'active', activeAnswer: '', activeQuestion: 0 })
+      }
+      if (event === 'persona_answer_chunk' && personaId) {
+        const personaState = state.personaStates[personaId]
+        state.updatePersonaState(personaId, {
+          activeQuestion: data.question_index,
+          activeAnswer: `${personaState?.activeAnswer || ''}${data.chunk || ''}`,
+        })
+      }
+      if (event === 'persona_answer' && personaId) {
+        const personaState = state.personaStates[personaId]
+        if (personaState) {
+          const answers = [...personaState.answers]
+          answers[data.question_index] = {
+            question: state.questions[data.question_index] || `Q${Number(data.question_index) + 1}`,
+            answer: data.answer || '', score: data.score, thinking: data.thinking,
+          }
+          state.updatePersonaState(personaId, { answers, activeAnswer: undefined, activeQuestion: undefined })
+        }
+      }
+      if (event === 'persona_error' && personaId && data.scope === 'question') {
+        const personaState = state.personaStates[personaId]
+        if (personaState) {
+          const answers = [...personaState.answers]
+          answers[data.question_index] = {
+            question: state.questions[data.question_index] || `Q${Number(data.question_index) + 1}`,
+            answer: data.message || '回答を取得できませんでした。', failed: true,
+          }
+          state.updatePersonaState(personaId, { answers })
+        }
+      } else if (event === 'persona_error' && personaId) {
+        state.updatePersonaState(personaId, { status: 'error', activeAnswer: undefined })
+      }
+      if (event === 'persona_complete' && personaId) state.updatePersonaState(personaId, { status: 'complete' })
+      if (event === 'survey_complete' || event === 'survey_error' || event === 'survey_cancelled') {
+        if (event !== 'survey_complete') {
+          for (const [id, personaState] of Object.entries(state.personaStates)) {
+            if (personaState.status === 'waiting' || personaState.status === 'active') {
+              state.updatePersonaState(id, { status: 'not_completed', activeAnswer: undefined })
+            }
+          }
+        }
+        state.setSurveyCounts(Number(data.completed || 0), Number(data.failed || 0))
+        state.setSurveyComplete(true)
+        closeObserverRef.current?.()
+        closeObserverRef.current = null
+      }
+    }, (error) => console.error('Survey reattachment failed:', error),
+    (connectionState) => useStore.getState().setConnectionState(connectionState))
+  }
 
   const deleteRun = async (e: React.MouseEvent, run_id: string) => {
     e.stopPropagation()
@@ -97,13 +180,14 @@ export default function Sidebar() {
         setCurrentReport(null)
       }
 
-      if (detail.status === 'running' || detail.status === 'failed') {
+      if (detail.status === 'running' || detail.status === 'failed' || detail.status === 'cancelled') {
         const reconstructed = buildPersonaStates(detail)
         setSelectedPersonas(reconstructed.personas)
         setPersonaStates(reconstructed.personaStates)
         setSurveyCounts(reconstructed.completed, reconstructed.failed)
         setSurveyComplete(detail.status !== 'running')
         setStep(3)
+        if (detail.status === 'running' && detail.replay_available) attachRunningRun(detail.id)
         return
       }
 
@@ -134,6 +218,13 @@ export default function Sidebar() {
       console.error('Failed to load run:', e)
     }
   }
+
+  useEffect(() => {
+    const activeRunId = sessionStorage.getItem('active-survey-run-id')
+    if (activeRunId) void loadRun(activeRunId)
+    // Reattach once when the application shell is restored.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <aside className="flex h-full w-64 flex-shrink-0 flex-col border-r border-fin-border/90 bg-fin-surface/95 backdrop-blur">

@@ -688,6 +688,8 @@ async def generate_report_endpoint(request: ReportRequest):
         if not run_rows:
             raise HTTPException(status_code=404, detail="Run not found")
         run = dict(run_rows[0])
+        if run.get("status") != "completed":
+            raise HTTPException(status_code=409, detail="Reports require a completed Survey Run")
 
         # Return cached report if available
         if run.get("report_json"):
@@ -703,7 +705,11 @@ async def generate_report_endpoint(request: ReportRequest):
             "SELECT * FROM survey_answers WHERE run_id = ? ORDER BY persona_uuid, question_index",
             [request.run_id]
         )
-        answers = [dict(r) for r in answer_rows]
+        all_answers = [dict(r) for r in answer_rows]
+        failed_answer_count = sum(answer.get("outcome") == "failed" for answer in all_answers)
+        answers = [answer for answer in all_answers if answer.get("outcome", "answered") == "answered"]
+        answered_personas = {answer["persona_uuid"] for answer in answers}
+        failed_persona_count = max(0, int(run.get("persona_count") or 0) - len(answered_personas))
 
         if not answers:
             raise HTTPException(status_code=400, detail="No answers found for this run")
@@ -795,6 +801,8 @@ async def generate_report_endpoint(request: ReportRequest):
             "conclusion": conclusion,
             "top_picks": [TopPick(**pick) for pick in merged_top_picks],
             "demographic_breakdown": aggregated["demographic_breakdown"],
+            "failed_answer_count": failed_answer_count,
+            "failed_persona_count": failed_persona_count,
         }
 
         # Save to DB

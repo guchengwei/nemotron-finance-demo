@@ -166,6 +166,25 @@ export const api = {
 
   deleteHistoryRun: (run_id: string): Promise<void> => del(`/history/${run_id}`),
 
+  startSurvey: async (request: SurveyRunRequest): Promise<{ run_id: string; status: string }> => {
+    const storageKey = 'survey-start-idempotency-key'
+    const idempotencyKey = sessionStorage.getItem(storageKey) || crypto.randomUUID()
+    sessionStorage.setItem(storageKey, idempotencyKey)
+    const res = await fetch('/api/survey/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify(request),
+    })
+    if (!res.ok) throw new Error(`POST /survey/run failed: ${res.status}`)
+    const result = await res.json() as { run_id: string; status: string }
+    sessionStorage.removeItem(storageKey)
+    sessionStorage.setItem('active-survey-run-id', result.run_id)
+    return result
+  },
+
+  cancelSurvey: (run_id: string): Promise<{ run_id: string; status: string }> =>
+    post(`/survey/${run_id}/cancel`, {}),
+
   async checkReady(): Promise<{ ready: boolean; error?: string }> {
     try {
       const res = await fetch('/ready')
@@ -213,38 +232,51 @@ export const api = {
   },
 }
 
+const SURVEY_EVENTS = [
+  'run_created', 'questions_generated', 'persona_start', 'persona_answer_chunk',
+  'persona_answer', 'persona_complete', 'persona_error', 'survey_complete',
+  'survey_error', 'survey_cancelled',
+]
+
+export function observeSurvey(
+  runId: string,
+  onEvent: (event: string, data: unknown, id?: number) => void,
+  onError: (err: Error) => void,
+  onConnectionState?: (state: 'live' | 'reconnecting' | 'disconnected') => void,
+): () => void {
+  const source = new EventSource(`/api/survey/stream/${encodeURIComponent(runId)}`)
+  onConnectionState?.('reconnecting')
+  source.onopen = () => onConnectionState?.('live')
+  for (const eventName of SURVEY_EVENTS) {
+    source.addEventListener(eventName, (rawEvent) => {
+      const event = rawEvent as MessageEvent<string>
+      try {
+        onEvent(eventName, JSON.parse(event.data), event.lastEventId ? Number(event.lastEventId) : undefined)
+      } catch {
+        onError(new Error('Malformed survey event'))
+      }
+    })
+  }
+  source.onerror = () => {
+    onConnectionState?.('reconnecting')
+    onError(new Error('Survey observer disconnected'))
+  }
+  return () => { source.close(); onConnectionState?.('disconnected') }
+}
+
 export function startSurveySSE(
   request: SurveyRunRequest,
-  onEvent: (event: string, data: unknown) => void,
+  onEvent: (event: string, data: unknown, id?: number) => void,
   onError: (err: Error) => void,
+  onConnectionState?: (state: 'live' | 'reconnecting' | 'disconnected') => void,
 ): () => void {
-  let aborted = false
-  const controller = new AbortController()
-
-  streamSSE(
-    '/api/survey/run',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
-      signal: controller.signal,
-    },
-    {
-      onEvent: (event, data) => {
-        if (!aborted) onEvent(event, data)
-      },
-      onError: (err) => {
-        if (!aborted) onError(err)
-      },
-    },
-  ).catch((err) => {
-    if (!aborted) onError(err instanceof Error ? err : new Error(String(err)))
-  })
-
-  return () => {
-    aborted = true
-    controller.abort()
-  }
+  let stopped = false
+  let closeObserver: (() => void) | undefined
+  api.startSurvey(request).then(({ run_id }) => {
+    if (stopped) return
+    closeObserver = observeSurvey(run_id, onEvent, onError, onConnectionState)
+  }).catch((error) => onError(error instanceof Error ? error : new Error(String(error))))
+  return () => { stopped = true; closeObserver?.() }
 }
 
 export function startFollowupSSE(

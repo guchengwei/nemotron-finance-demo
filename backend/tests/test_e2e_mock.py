@@ -67,7 +67,7 @@ def test_full_survey_flow_mock_mode(e2e_client):
     assert len(personas) >= 1
     pid = personas[0]["uuid"]
 
-    # 3. Run survey (SSE)
+    # 3. Create the durable run, then observe it independently.
     resp = e2e_client.post(
         "/api/survey/run",
         json={
@@ -75,20 +75,13 @@ def test_full_survey_flow_mock_mode(e2e_client):
             "survey_theme": "テスト調査",
             "questions": ["この商品をどう思いますか？"],
         },
+        headers={"Idempotency-Key": "e2e-happy-path"},
     )
-    assert resp.status_code == 200
-    text = resp.text
+    assert resp.status_code == 202
+    run_id = resp.json()["run_id"]
+    stream = e2e_client.get(f"/api/survey/stream/{run_id}")
+    text = stream.text
     assert "survey_complete" in text
-
-    # Extract run_id from events
-    run_id = None
-    for line in text.split("\n"):
-        if line.startswith("data: ") and "run_id" in line:
-            data = json.loads(line[6:])
-            if "run_id" in data:
-                run_id = data["run_id"]
-                break
-    assert run_id is not None
 
     # 4. Generate report
     resp = e2e_client.post("/api/report/generate", json={"run_id": run_id})

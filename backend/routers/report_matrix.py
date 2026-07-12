@@ -6,26 +6,16 @@ GET  /api/report/matrix/{survey_id} — returns persisted report JSON.
 
 import json
 import logging
-from contextlib import asynccontextmanager
 import aiosqlite
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
-from db import get_history_db
+from db import history_db
 from matrix_pipeline import run_matrix_pipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/report/matrix", tags=["matrix-report"])
-
-
-@asynccontextmanager
-async def _history_db():
-    db = await get_history_db()
-    try:
-        yield db
-    finally:
-        await db.close()
 
 
 class MatrixReportRequest(BaseModel):
@@ -52,7 +42,7 @@ def _extract_full_name(persona_full_json: str | None, persona_summary: str | Non
 async def _matrix_stream(request: MatrixReportRequest):
     """Generator that yields SSE-formatted events from the pipeline."""
     import aiosqlite
-    async with _history_db() as db:
+    async with history_db() as db:
         db.row_factory = aiosqlite.Row
         row = await db.execute(
             "SELECT id, survey_theme, questions_json FROM survey_runs WHERE id = ?",
@@ -98,7 +88,7 @@ async def _matrix_stream(request: MatrixReportRequest):
 
     full_report: dict = {}
 
-    async with _history_db() as db:
+    async with history_db() as db:
         async for event_type, event_data in run_matrix_pipeline(
             survey_data=survey_data,
             preset_key=request.preset_key,
@@ -143,7 +133,7 @@ async def generate_matrix_report(request: MatrixReportRequest):
 @router.get("/{survey_id}")
 async def get_matrix_report(survey_id: str):
     """Return persisted matrix report JSON for history reload."""
-    async with _history_db() as db:
+    async with history_db() as db:
         db.row_factory = aiosqlite.Row
         row = await db.execute(
             "SELECT matrix_report_json FROM survey_runs WHERE id = ?", [survey_id]

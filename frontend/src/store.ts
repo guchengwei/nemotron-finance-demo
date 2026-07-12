@@ -39,6 +39,8 @@ interface AppState {
   surveyCompleted: number
   surveyFailed: number
   setSurveyCounts: (completed: number, failed: number) => void
+  connectionState: 'live' | 'reconnecting' | 'disconnected'
+  setConnectionState: (state: 'live' | 'reconnecting' | 'disconnected') => void
 
   currentReport: ReportResponse | null
   setCurrentReport: (r: ReportResponse | null) => void
@@ -106,6 +108,8 @@ export const useStore = create<AppState>((set) => ({
   surveyCompleted: 0,
   surveyFailed: 0,
   setSurveyCounts: (surveyCompleted, surveyFailed) => set({ surveyCompleted, surveyFailed }),
+  connectionState: 'disconnected',
+  setConnectionState: (connectionState) => set({ connectionState }),
 
   currentReport: null,
   setCurrentReport: (currentReport) => set({ currentReport }),
@@ -183,6 +187,7 @@ export const useStore = create<AppState>((set) => ({
       surveyComplete: false,
       surveyCompleted: 0,
       surveyFailed: 0,
+      connectionState: 'disconnected',
       currentReport: null,
       followupPersona: null,
       currentHistoryRun: null,

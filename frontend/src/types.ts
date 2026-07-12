@@ -83,6 +83,8 @@ export interface ReportResponse {
     by_sex?: Record<string, number>
     by_financial_literacy?: Record<string, number>
   }
+  failed_answer_count?: number
+  failed_persona_count?: number
 }
 
 export interface SurveyRunSummary {
@@ -105,8 +107,10 @@ export interface SurveyAnswer {
   persona_full_json: string
   question_index: number
   question_text: string
-  answer: string
+  answer: string | null
   score?: number
+  outcome?: 'answered' | 'failed'
+  error_message?: string
 }
 
 export interface SurveyRunDetail {
@@ -122,6 +126,13 @@ export interface SurveyRunDetail {
   answers: SurveyAnswer[]
   followup_chats: Record<string, Array<{ role: string; content: string }>>
   enable_thinking?: boolean
+  personas?: Array<{
+    persona_uuid: string
+    position: number
+    persona_summary: string
+    persona_full_json: string
+  }>
+  replay_available?: boolean
 }
 
 export interface FollowUpSuggestionResponse {
@@ -179,12 +190,12 @@ export interface SSESurveyComplete {
   failed: number
 }
 
-export type PersonaStatus = 'waiting' | 'active' | 'complete' | 'error'
+export type PersonaStatus = 'waiting' | 'active' | 'complete' | 'error' | 'not_completed'
 
 export interface PersonaRunState {
   persona: Persona
   status: PersonaStatus
-  answers: Array<{ question: string; answer: string; score?: number; thinking?: string }>
+  answers: Array<{ question: string; answer: string; score?: number; thinking?: string; failed?: boolean }>
   activeQuestion?: number
   activeAnswer?: string
   activeThinking?: string
