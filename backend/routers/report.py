@@ -727,7 +727,7 @@ async def generate_report_endpoint(request: ReportRequest):
                     all_persona_lemmas[lemma] += 1
 
         # Polarity learning: load historical, learn fresh, merge
-        historical_polarities = text_analysis.load_polarities(settings.history_db_path)
+        historical_polarities = await text_analysis.load_polarities_async(db)
         all_texts_by_persona = [
             [_strip_score_prefix(a.get("answer", "")) for a in record.get("answers", [])]
             for record in persona_records.values()
@@ -769,7 +769,7 @@ async def generate_report_endpoint(request: ReportRequest):
 
         # Persist fresh polarities for future surveys
         if fresh_polarities:
-            text_analysis.save_polarities(settings.history_db_path, fresh_polarities, fresh_counts)
+            await text_analysis.save_polarities_async(db, fresh_polarities, fresh_counts)
 
         if not group_tendency_raw:
             logger.warning("report fallback used for group_tendency")

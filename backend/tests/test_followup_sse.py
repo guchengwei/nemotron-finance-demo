@@ -580,7 +580,7 @@ def test_followup_suggestions_orders_user_history_deterministically(followup_cli
 
     fake_conn = _FakeConn()
     with (
-        patch("routers.followup.aiosqlite.connect", return_value=_FakeConnect(fake_conn)),
+        patch("routers.followup.history_db", return_value=_FakeConnect(fake_conn)),
         patch("routers.followup.generate_followup_suggestions", side_effect=mock_generate_followup_suggestions),
     ):
         resp = followup_client.post(
