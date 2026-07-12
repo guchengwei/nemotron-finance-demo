@@ -77,3 +77,19 @@ docs/
 - Use `docs/agents/agent-setup.md` as the primary operational reference.
 - Keep README files concise; put deep operational detail in `docs/`.
 - Prefer git worktrees for implementation work when the main workspace is dirty.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues; pull requests are not a triage request
+surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the canonical triage roles. See `docs/agents/triage-labels.md` for the sole
+mapping from those roles to GitHub labels.
+
+### Domain docs
+
+This is a single-context repository. See `docs/agents/domain.md`.
