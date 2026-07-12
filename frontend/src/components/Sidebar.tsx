@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
+import type { SurveyLifecycle } from '../store'
 import { api, observeSurvey } from '../api'
 import type { Persona, PersonaRunState, SurveyRunDetail } from '../types'
 import { applySurveyEvent } from '../hooks/surveyEvents'
@@ -10,6 +11,14 @@ function scoreColor(score?: number): string {
   if (score >= 3.5) return 'bg-fin-success text-fin-surface'
   if (score >= 2.5) return 'bg-fin-warning text-fin-surface'
   return 'bg-fin-danger text-fin-surface'
+}
+
+function lifecycleFromRunStatus(status: string): SurveyLifecycle {
+  if (status === 'running') return 'active'
+  if (status === 'completed') return 'completed'
+  if (status === 'failed') return 'failed'
+  if (status === 'cancelled') return 'cancelled'
+  return 'idle'
 }
 
 function buildPersonaStates(detail: SurveyRunDetail) {
@@ -76,7 +85,7 @@ function buildPersonaStates(detail: SurveyRunDetail) {
 }
 
 export default function Sidebar() {
-  const { history, setHistory, setStep, setCurrentReport, setCurrentHistoryRun, resetSurvey, setSelectedPersonas, setQuestions, setSurveyTheme, setSurveyLabel, setCurrentRunId, setPersonaStates, setSurveyComplete, setSurveyCounts, setEnableThinking } = useStore()
+  const { history, setHistory, setStep, setCurrentReport, setCurrentHistoryRun, resetSurvey, setSelectedPersonas, setQuestions, setSurveyTheme, setSurveyLabel, setCurrentRunId, setPersonaStates, setSurveyLifecycle, setSurveyCounts, setEnableThinking } = useStore()
   const dbReady = useStore((s) => s.dbReady)
 
   useEffect(() => {
@@ -133,6 +142,7 @@ export default function Sidebar() {
       setSurveyTheme(detail.survey_theme)
       setQuestions(detail.questions)
       setSurveyLabel(detail.label || '')
+      setSurveyLifecycle(lifecycleFromRunStatus(detail.status))
 
       if (detail.report) {
         setCurrentReport(detail.report)
@@ -145,7 +155,6 @@ export default function Sidebar() {
         setSelectedPersonas(reconstructed.personas)
         setPersonaStates(reconstructed.personaStates)
         setSurveyCounts(reconstructed.completed, reconstructed.failed)
-        setSurveyComplete(detail.status !== 'running')
         setStep(3)
         if (detail.status === 'running' && detail.replay_available) attachRunningRun(detail.id)
         return
@@ -156,7 +165,6 @@ export default function Sidebar() {
         setSelectedPersonas(reconstructed.personas)
         setPersonaStates(reconstructed.personaStates)
         setSurveyCounts(reconstructed.completed, reconstructed.failed)
-        setSurveyComplete(true)
         setEnableThinking(detail.enable_thinking ?? true)
         setStep(4)
         return

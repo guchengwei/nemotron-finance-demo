@@ -38,7 +38,7 @@ export function useSurvey() {
     chunkBuffer.current = {}
     highestEventIdRef.current = 0
 
-    const { selectedPersonas, surveyTheme, questions, surveyLabel, enableThinking, setPersonaStates, setSurveyComplete, setSurveyCounts, setCurrentHistoryRun, setCurrentReport } = useStore.getState()
+    const { selectedPersonas, surveyTheme, questions, surveyLabel, enableThinking, setPersonaStates, setSurveyLifecycle, setSurveyCounts, setCurrentHistoryRun, setCurrentReport } = useStore.getState()
 
     const initialStates = Object.fromEntries(
       selectedPersonas.map((p) => [p.uuid, { persona: p, status: 'waiting' as const, answers: [] }]),
@@ -46,7 +46,7 @@ export function useSurvey() {
     setPersonaStates(initialStates)
     setCurrentHistoryRun(null)
     setCurrentReport(null)
-    setSurveyComplete(false)
+    setSurveyLifecycle('active')
     setSurveyCounts(0, 0)
 
     flushRef.current = setInterval(() => {
@@ -59,13 +59,25 @@ export function useSurvey() {
       flushBufferedChunks()
       const completedCount = Object.values(s.personaStates).filter((ps) => ps.status === 'complete').length
       const failedCount = Math.max(1, Object.values(s.personaStates).filter((ps) => ps.status === 'error').length)
-      s.setSurveyComplete(true)
+      for (const [id, state] of Object.entries(s.personaStates)) {
+        if (state.status === 'waiting' || state.status === 'active') {
+          s.updatePersonaState(id, { status: 'not_completed', activeAnswer: undefined, activeThinking: undefined })
+        }
+      }
+      s.setSurveyLifecycle('failed')
       s.setSurveyCounts(completedCount, failedCount)
-      cancelRef.current = null
       startingRef.current = false
     }
 
-    const cancel = startSurveySSE(
+    let observerCancel: (() => void) | null = null
+    let terminalReceived = false
+    const closeTerminalObserver = () => {
+      terminalReceived = true
+      observerCancel?.()
+      if (cancelRef.current === observerCancel) cancelRef.current = null
+    }
+
+    observerCancel = startSurveySSE(
       {
         persona_ids: selectedPersonas.map((p) => p.uuid),
         survey_theme: surveyTheme,
@@ -83,7 +95,7 @@ export function useSurvey() {
         if (result !== 'none') {
           stopFlushLoop()
           flushBufferedChunks()
-          cancelRef.current = null
+          closeTerminalObserver()
           startingRef.current = false
           sessionStorage.removeItem('active-survey-run-id')
         }
@@ -92,11 +104,16 @@ export function useSurvey() {
         console.error('Survey SSE error:', err)
         if (err.message === 'Survey observer disconnected') return
         finishWithError()
+        closeTerminalObserver()
       },
       (state) => useStore.getState().setConnectionState(state),
     )
 
-    cancelRef.current = cancel
+    if (terminalReceived) {
+      observerCancel()
+    } else {
+      cancelRef.current = observerCancel
+    }
   }, [])
 
   const cancelSurvey = useCallback(() => {

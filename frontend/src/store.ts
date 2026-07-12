@@ -11,6 +11,7 @@ import type { MatrixReportState } from './types/matrix-report'
 import { DEFAULT_SURVEY_QUESTIONS } from './config/surveyPresets'
 
 export type Step = 1 | 2 | 3 | 4 | 5
+export type SurveyLifecycle = 'idle' | 'active' | 'completed' | 'failed' | 'cancelled'
 
 interface AppState {
   currentStep: Step
@@ -34,8 +35,8 @@ interface AppState {
   setPersonaStates: (states: Record<string, PersonaRunState>) => void
   setPersonaState: (uuid: string, state: PersonaRunState) => void
   updatePersonaState: (uuid: string, update: Partial<PersonaRunState>) => void
-  surveyComplete: boolean
-  setSurveyComplete: (v: boolean) => void
+  surveyLifecycle: SurveyLifecycle
+  setSurveyLifecycle: (lifecycle: SurveyLifecycle) => void
   surveyCompleted: number
   surveyFailed: number
   setSurveyCounts: (completed: number, failed: number) => void
@@ -103,8 +104,8 @@ export const useStore = create<AppState>((set) => ({
         [uuid]: { ...s.personaStates[uuid], ...update },
       },
     })),
-  surveyComplete: false,
-  setSurveyComplete: (surveyComplete) => set({ surveyComplete }),
+  surveyLifecycle: 'idle',
+  setSurveyLifecycle: (surveyLifecycle) => set({ surveyLifecycle }),
   surveyCompleted: 0,
   surveyFailed: 0,
   setSurveyCounts: (surveyCompleted, surveyFailed) => set({ surveyCompleted, surveyFailed }),
@@ -184,7 +185,7 @@ export const useStore = create<AppState>((set) => ({
       surveyLabel: '',
       currentRunId: null,
       personaStates: {},
-      surveyComplete: false,
+      surveyLifecycle: 'idle',
       surveyCompleted: 0,
       surveyFailed: 0,
       connectionState: 'disconnected',

@@ -79,7 +79,7 @@ const PersonaListItem = React.memo(function PersonaListItem({
 export default function SurveyRunner() {
   const { cancelSurvey } = useSurvey()
   const {
-    personaStates, surveyComplete, surveyCompleted, surveyFailed,
+    personaStates, surveyLifecycle, surveyCompleted, surveyFailed,
     questions, currentRunId, setCurrentReport, setStep, selectedPersonas, currentHistoryRun,
     currentReport, openPersonaDetail, enableThinking,
     connectionState,
@@ -91,7 +91,8 @@ export default function SurveyRunner() {
   const total = selectedPersonas.length
   const isLarge = total > LARGE_SURVEY_THRESHOLD
   const restoredInterruptedRun = currentHistoryRun?.status === 'running'
-  const restoredFailedRun = currentHistoryRun?.status === 'failed'
+  const hasEnded = surveyLifecycle === 'completed' || surveyLifecycle === 'failed' || surveyLifecycle === 'cancelled'
+  const isReportable = surveyLifecycle === 'completed'
 
   const allStates = Object.values(personaStates)
   const activePersona = allStates.find((s) => s.status === 'active')
@@ -116,7 +117,7 @@ export default function SurveyRunner() {
   const avgScore = averageScore(personaAverageScores.filter((score): score is number => score !== undefined))
 
   useEffect(() => {
-    if (!surveyComplete || !currentRunId || surveyCompleted === 0) return
+    if (!isReportable || !currentRunId || surveyCompleted === 0) return
     if (currentReport) return
     const hasAnswers = Object.values(personaStates).some((s) => s.answers.length > 0)
     if (!hasAnswers) return
@@ -131,7 +132,7 @@ export default function SurveyRunner() {
       }
     }, 1500)
     return () => clearTimeout(timer)
-  }, [surveyComplete, currentRunId, personaStates, setCurrentReport, setStep, surveyFailed, currentReport])
+  }, [isReportable, currentRunId, surveyCompleted, personaStates, setCurrentReport, setStep, currentReport])
 
   const completed = allStates.filter((s) => s.status === 'complete')
   const errored = allStates.filter((s) => s.status === 'error')
@@ -139,17 +140,19 @@ export default function SurveyRunner() {
   const displayUuid = manualDisplayUuid || autoDisplayUuid
   const displayState = displayUuid ? personaStates[displayUuid] : null
 
-  const headerLabel = surveyComplete
+  const headerLabel = surveyLifecycle === 'completed'
     ? surveyFailed > 0 && surveyCompleted === 0
       ? '調査エラー'
       : surveyFailed > 0
         ? '一部失敗して完了'
         : '✓ 調査完了'
-    : restoredInterruptedRun
-      ? '調査が中断されました'
-      : restoredFailedRun
-        ? '調査エラー'
-        : '調査実行中...'
+    : surveyLifecycle === 'failed'
+      ? '調査エラー'
+      : surveyLifecycle === 'cancelled'
+        ? '調査がキャンセルされました'
+        : restoredInterruptedRun
+          ? '調査が中断されました'
+          : '調査実行中...'
 
   return (
     <div data-testid="survey-runner-screen" className="h-full flex flex-col gap-4">
@@ -159,7 +162,7 @@ export default function SurveyRunner() {
           <span data-testid="survey-connection-state" className="rounded-full border border-fin-border px-3 py-1 text-xs text-fin-muted">
             {connectionState === 'live' ? '接続中' : connectionState === 'reconnecting' ? '再接続中' : '切断'}
           </span>
-          {!surveyComplete && currentRunId && (
+          {!hasEnded && currentRunId && (
             <button
               data-testid="cancel-survey-button"
               onClick={cancelSurvey}
@@ -168,7 +171,7 @@ export default function SurveyRunner() {
               調査をキャンセル
             </button>
           )}
-          {(surveyComplete || restoredInterruptedRun || restoredFailedRun) && (surveyCompleted > 0 || allStates.some((s) => s.answers.length > 0)) && (
+          {isReportable && (surveyCompleted > 0 || allStates.some((s) => s.answers.length > 0)) && (
             <button
               onClick={async () => {
                 if (currentRunId) {
@@ -189,14 +192,16 @@ export default function SurveyRunner() {
         </div>
       </div>
 
-      {(restoredInterruptedRun || restoredFailedRun || (surveyComplete && surveyFailed > 0)) && (
+      {(restoredInterruptedRun || surveyLifecycle === 'failed' || surveyLifecycle === 'cancelled' || (isReportable && surveyFailed > 0)) && (
         <div
           data-testid="survey-interruption-banner"
           className="rounded-[1.5rem] border border-fin-warning/30 bg-fin-warning/10 px-4 py-3 text-sm text-fin-warning"
         >
           {restoredInterruptedRun
             ? 'この調査は途中で停止しました。ここでは途中経過を確認できます。'
-            : '一部の回答でエラーが発生しました。途中までの結果を確認できます。'}
+            : surveyLifecycle === 'cancelled'
+              ? 'この調査はキャンセルされました。ここでは途中経過を確認できます。'
+              : '一部の回答でエラーが発生しました。途中までの結果を確認できます。'}
         </div>
       )}
 

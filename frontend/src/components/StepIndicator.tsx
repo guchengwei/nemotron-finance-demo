@@ -9,13 +9,13 @@ const STEPS: { id: Step; label: string }[] = [
 ]
 
 export default function StepIndicator() {
-  const { currentStep, setStep, surveyComplete } = useStore()
+  const { currentStep, setStep, surveyLifecycle } = useStore()
 
   const canNavigateTo = (step: Step): boolean => {
     if (step === 1) return true
     if (step === 2) return useStore.getState().selectedPersonas.length > 0
     if (step === 3) return Object.keys(useStore.getState().personaStates).length > 0
-    if (step === 4) return surveyComplete || useStore.getState().currentReport !== null
+    if (step === 4) return surveyLifecycle === 'completed' || useStore.getState().currentReport !== null
     if (step === 5) return useStore.getState().followupPersona !== null
     return false
   }

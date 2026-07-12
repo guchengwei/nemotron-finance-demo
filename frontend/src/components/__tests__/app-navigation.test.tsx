@@ -79,7 +79,7 @@ describe('App navigation', () => {
       surveyLabel: '',
       currentRunId: null,
       personaStates: {},
-      surveyComplete: false,
+      surveyLifecycle: 'idle',
       surveyCompleted: 0,
       surveyFailed: 0,
       currentReport: null,

@@ -1,7 +1,8 @@
 import { useStore } from '../store'
+import type { SurveyLifecycle } from '../store'
 import type { SurveyEventName } from '../api'
 
-export type SurveyEventResult = 'none' | 'complete' | 'error' | 'cancelled'
+export type SurveyEventResult = 'none' | Exclude<SurveyLifecycle, 'idle' | 'active'>
 
 export function applySurveyEvent(
   event: SurveyEventName,
@@ -76,9 +77,9 @@ export function applySurveyEvent(
     )
   }
   if (event === 'survey_complete') {
-    store.setSurveyComplete(true)
+    store.setSurveyLifecycle('completed')
     store.setSurveyCounts(Number(data.completed || 0), Number(data.failed || 0))
-    return 'complete'
+    return 'completed'
   }
   if (event === 'survey_error' || event === 'survey_cancelled') {
     for (const [id, state] of Object.entries(store.personaStates)) {
@@ -86,9 +87,10 @@ export function applySurveyEvent(
         store.updatePersonaState(id, { status: 'not_completed', activeAnswer: undefined })
       }
     }
-    store.setSurveyComplete(true)
+    const lifecycle = event === 'survey_error' ? 'failed' : 'cancelled'
+    store.setSurveyLifecycle(lifecycle)
     store.setSurveyCounts(Number(data.completed || 0), Number(data.failed || 0))
-    return event === 'survey_error' ? 'error' : 'cancelled'
+    return lifecycle
   }
   return 'none'
 }
