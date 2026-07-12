@@ -392,10 +392,10 @@ After the task, both required suites must pass:
 
 ```bash
 cd backend
-rtk pytest -q
+pytest -q
 
 cd ../frontend
-rtk npm test
+npm test
 ```
 
 ## 10. Out of scope

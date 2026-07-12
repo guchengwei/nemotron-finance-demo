@@ -1,17 +1,17 @@
 # Issue tracker: GitHub
 
 Issues and PRDs for this repository live in GitHub Issues at
-`guchengwei/nemotron-finance-demo`. Agents use `rtk gh` for operations.
+`guchengwei/nemotron-finance-demo`. Use `gh` for operations.
 
 ## Conventions
 
-- Create: `rtk gh issue create --title "..." --body "..."`
-- Read: `rtk gh issue view <number> --comments`
-- List: `rtk gh issue list` with appropriate state and label filters
-- Comment: `rtk gh issue comment <number> --body "..."`
-- Apply or remove labels: `rtk gh issue edit <number> --add-label "..."` or
-  `rtk gh issue edit <number> --remove-label "..."`
-- Close: `rtk gh issue close <number> --comment "..."`
+- Create: `gh issue create --title "..." --body "..."`
+- Read: `gh issue view <number> --comments`
+- List: `gh issue list` with appropriate state and label filters
+- Comment: `gh issue comment <number> --body "..."`
+- Apply or remove labels: `gh issue edit <number> --add-label "..."` or
+  `gh issue edit <number> --remove-label "..."`
+- Close: `gh issue close <number> --comment "..."`
 
 The repository is inferred from the current clone's Git remote.
 
@@ -26,7 +26,7 @@ process GitHub Issues only.
 
 When a skill says to publish something to the issue tracker, create a GitHub
 issue. When it says to fetch a ticket, use
-`rtk gh issue view <number> --comments`.
+`gh issue view <number> --comments`.
 
 ## Wayfinding operations
 

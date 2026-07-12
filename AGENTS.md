@@ -1,12 +1,5 @@
 # Repository agent instructions
 
-## Shell commands
-
-Agents must prefix every external shell command they execute with `rtk`.
-Human-facing command examples may omit the wrapper; when an agent executes an
-example, it inserts `rtk` before each external command. Shell syntax and
-built-ins such as `cd` are not external commands and do not take the prefix.
-
 ## Pull request review feedback
 
 When asked to address pull request review feedback and push, treat the task as
