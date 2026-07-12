@@ -1,7 +1,8 @@
 import logging
-import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
+
+import aiosqlite
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,51 @@ _SEED_POLARITIES: dict[str, float] = {
 }
 # Sample count of 1 per seed entry — diluted quickly as real data accumulates
 SEED_COUNTS: dict[str, int] = {lemma: 1 for lemma in _SEED_POLARITIES}
+
+_POLARITY_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS token_polarities (
+    lemma TEXT PRIMARY KEY,
+    polarity REAL NOT NULL,
+    sample_count INTEGER NOT NULL DEFAULT 0,
+    tokenizer_version TEXT NOT NULL DEFAULT 'fugashi-unidic-lite',
+    updated_at TEXT NOT NULL
+)
+"""
+_POLARITY_TABLE_EXISTS_SQL = (
+    "SELECT name FROM sqlite_master "
+    "WHERE type='table' AND name='token_polarities'"
+)
+_LOAD_POLARITIES_SQL = (
+    "SELECT lemma, polarity FROM token_polarities WHERE tokenizer_version = ?"
+)
+_LOAD_POLARITY_SQL = (
+    "SELECT polarity, sample_count FROM token_polarities WHERE lemma = ?"
+)
+_UPSERT_POLARITY_SQL = """
+INSERT INTO token_polarities (lemma, polarity, sample_count, tokenizer_version, updated_at)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(lemma) DO UPDATE SET
+    polarity = excluded.polarity,
+    sample_count = excluded.sample_count,
+    tokenizer_version = excluded.tokenizer_version,
+    updated_at = excluded.updated_at
+"""
+
+
+def _updated_polarity(
+    existing: tuple[float, int] | None,
+    fresh_polarity: float,
+    fresh_count: int,
+) -> tuple[float, int]:
+    if existing is None:
+        return fresh_polarity, fresh_count
+    existing_polarity, existing_count = existing
+    new_count = existing_count + fresh_count
+    return (
+        (existing_count * existing_polarity + fresh_count * fresh_polarity)
+        / new_count,
+        new_count,
+    )
 
 
 def _fallback_tokenize(text: str) -> list[str]:
@@ -200,49 +246,21 @@ def save_polarities(
         logger.warning("Polarity saving skipped: tokenizer is in degraded mode.")
         return
 
-    conn = sqlite3.connect(db_path)
+    from db import get_history_db_sync
+
+    conn = get_history_db_sync(db_path)
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS token_polarities (
-                lemma TEXT PRIMARY KEY,
-                polarity REAL NOT NULL,
-                sample_count INTEGER NOT NULL DEFAULT 0,
-                tokenizer_version TEXT NOT NULL DEFAULT 'fugashi-unidic-lite',
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
+        conn.execute(_POLARITY_TABLE_DDL)
         conn.commit()
 
         updated_at = datetime.now(timezone.utc).isoformat()
 
         for lemma, fresh_polarity in polarities.items():
             n = sample_counts.get(lemma, 1)
-            row = conn.execute(
-                "SELECT polarity, sample_count FROM token_polarities WHERE lemma = ?",
-                (lemma,),
-            ).fetchone()
-
-            if row is not None:
-                existing_polarity, existing_count = row
-                new_count = existing_count + n
-                new_polarity = (existing_count * existing_polarity + n * fresh_polarity) / new_count
-            else:
-                new_polarity = fresh_polarity
-                new_count = n
-
+            row = conn.execute(_LOAD_POLARITY_SQL, (lemma,)).fetchone()
+            new_polarity, new_count = _updated_polarity(row, fresh_polarity, n)
             conn.execute(
-                """
-                INSERT INTO token_polarities (lemma, polarity, sample_count, tokenizer_version, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(lemma) DO UPDATE SET
-                    polarity = excluded.polarity,
-                    sample_count = excluded.sample_count,
-                    tokenizer_version = excluded.tokenizer_version,
-                    updated_at = excluded.updated_at
-                """,
+                _UPSERT_POLARITY_SQL,
                 (lemma, new_polarity, new_count, TOKENIZER_VERSION, updated_at),
             )
 
@@ -252,24 +270,63 @@ def save_polarities(
 
 
 def load_polarities(db_path: str) -> dict[str, float]:
-    conn = sqlite3.connect(db_path)
+    from db import get_history_db_sync
+
+    conn = get_history_db_sync(db_path)
     try:
-        table_exists = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='token_polarities'"
-        ).fetchone()
+        table_exists = conn.execute(_POLARITY_TABLE_EXISTS_SQL).fetchone()
         if not table_exists:
             # Cold start: seed lexicon acts as the initial prior (sample_count=1 each)
             return dict(_SEED_POLARITIES)
 
-        rows = conn.execute(
-            "SELECT lemma, polarity FROM token_polarities WHERE tokenizer_version = ?",
-            (TOKENIZER_VERSION,),
-        ).fetchall()
+        rows = conn.execute(_LOAD_POLARITIES_SQL, (TOKENIZER_VERSION,)).fetchall()
         if not rows:
             return dict(_SEED_POLARITIES)
         return {lemma: polarity for lemma, polarity in rows}
     finally:
         conn.close()
+
+
+async def load_polarities_async(
+    history_connection: aiosqlite.Connection,
+) -> dict[str, float]:
+    """Load persisted polarities through an existing async history connection."""
+    table_rows = await history_connection.execute_fetchall(_POLARITY_TABLE_EXISTS_SQL)
+    if not table_rows:
+        return dict(_SEED_POLARITIES)
+
+    rows = await history_connection.execute_fetchall(
+        _LOAD_POLARITIES_SQL,
+        (TOKENIZER_VERSION,),
+    )
+    if not rows:
+        return dict(_SEED_POLARITIES)
+    return {row[0]: row[1] for row in rows}
+
+
+async def save_polarities_async(
+    history_connection: aiosqlite.Connection,
+    polarities: dict[str, float],
+    sample_counts: dict[str, int],
+) -> None:
+    """Persist polarities through an existing async history connection."""
+    if is_degraded():
+        logger.warning("Polarity saving skipped: tokenizer is in degraded mode.")
+        return
+
+    await history_connection.execute(_POLARITY_TABLE_DDL)
+    updated_at = datetime.now(timezone.utc).isoformat()
+
+    for lemma, fresh_polarity in polarities.items():
+        n = sample_counts.get(lemma, 1)
+        cursor = await history_connection.execute(_LOAD_POLARITY_SQL, (lemma,))
+        row = await cursor.fetchone()
+        new_polarity, new_count = _updated_polarity(row, fresh_polarity, n)
+
+        await history_connection.execute(
+            _UPSERT_POLARITY_SQL,
+            (lemma, new_polarity, new_count, TOKENIZER_VERSION, updated_at),
+        )
 
 
 def merge_polarities(

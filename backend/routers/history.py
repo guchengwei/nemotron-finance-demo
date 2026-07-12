@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 import aiosqlite
 
-from config import settings
+from db import history_db
 from llm import sanitize_answer_text
 from models import HistoryListResponse, SurveyRunSummary, SurveyRunDetail, ReportResponse
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 @router.get("", response_model=HistoryListResponse)
 async def list_history():
     """List all saved survey runs, sorted by date desc."""
-    async with aiosqlite.connect(settings.history_db_path) as db:
+    async with history_db() as db:
         db.row_factory = aiosqlite.Row
         rows = await db.execute_fetchall(
             "SELECT id, created_at, label, survey_theme, persona_count, status, report_json "
@@ -50,7 +50,7 @@ async def list_history():
 @router.get("/{run_id}", response_model=SurveyRunDetail)
 async def get_history_run(run_id: str):
     """Get full run data including answers, report, and follow-up chats."""
-    async with aiosqlite.connect(settings.history_db_path) as db:
+    async with history_db() as db:
         db.row_factory = aiosqlite.Row
 
         run_rows = await db.execute_fetchall(
@@ -70,6 +70,14 @@ async def get_history_run(run_id: str):
             "SELECT persona_uuid, role, content, created_at FROM followup_chats "
             "WHERE run_id = ? ORDER BY created_at",
             [run_id]
+        )
+        persona_rows = await db.execute_fetchall(
+            "SELECT persona_uuid, position, persona_summary, persona_full_json "
+            "FROM run_personas WHERE run_id = ? ORDER BY position",
+            [run_id],
+        )
+        event_rows = await db.execute_fetchall(
+            "SELECT 1 FROM run_events WHERE run_id = ? LIMIT 1", [run_id]
         )
 
     # Group chats by persona while preserving the stored sequence for display.
@@ -118,19 +126,27 @@ async def get_history_run(run_id: str):
         answers=answers,
         followup_chats=followup_chats,
         enable_thinking=bool(run.get("enable_thinking", True)),
+        personas=[{**dict(row), "persona": json.loads(row["persona_full_json"])} for row in persona_rows],
+        replay_available=bool(event_rows),
     )
 
 
 @router.delete("/{run_id}")
 async def delete_history_run(run_id: str):
     """Delete a run and all associated data."""
-    async with aiosqlite.connect(settings.history_db_path) as db:
-        row = await db.execute_fetchall("SELECT id FROM survey_runs WHERE id = ?", [run_id])
+    async with history_db() as db:
+        row = await db.execute_fetchall("SELECT status FROM survey_runs WHERE id = ?", [run_id])
         if not row:
             raise HTTPException(status_code=404, detail="Run not found")
+        if row[0][0] == "running":
+            raise HTTPException(status_code=409, detail="Active runs must be cancelled before deletion")
 
+        # Foreign keys cascade all T1-owned state from the run row. Explicit
+        # deletes preserve compatibility with version-1 schemas.
         await db.execute("DELETE FROM followup_chats WHERE run_id = ?", [run_id])
         await db.execute("DELETE FROM survey_answers WHERE run_id = ?", [run_id])
+        await db.execute("DELETE FROM run_events WHERE run_id = ?", [run_id])
+        await db.execute("DELETE FROM run_personas WHERE run_id = ?", [run_id])
         await db.execute("DELETE FROM survey_runs WHERE id = ?", [run_id])
         await db.commit()
 

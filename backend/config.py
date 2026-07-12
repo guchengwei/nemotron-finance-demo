@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     persona_hf_dataset: str = "nvidia/Nemotron-Personas-Japan"
     db_path: str = "./data/personas.db"
     history_db_path: str = "./data/history.db"
+    history_db_busy_timeout_ms: int = 30_000
 
     # Server
     backend_host: str = "0.0.0.0"

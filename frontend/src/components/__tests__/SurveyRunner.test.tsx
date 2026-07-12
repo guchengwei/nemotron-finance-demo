@@ -1,13 +1,18 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import SurveyRunner from '../SurveyRunner'
 import { useStore } from '../../store'
+import { api } from '../../api'
 
 vi.mock('../../api', () => ({
   api: {
     generateReport: vi.fn(),
   },
 }))
+
+const cancelSurvey = vi.hoisted(() => vi.fn())
+vi.mock('../../hooks/useSurvey', () => ({ useSurvey: () => ({ cancelSurvey }) }))
 
 const personaOne = {
   uuid: 'p1',
@@ -55,7 +60,7 @@ describe('SurveyRunner scoring display', () => {
     useStore.setState({
       selectedPersonas: [personaOne, personaTwo],
       questions: ['質問1', '質問2'],
-      surveyComplete: false,
+      surveyLifecycle: 'active',
       surveyCompleted: 1,
       surveyFailed: 0,
       currentRunId: null,
@@ -89,5 +94,39 @@ describe('SurveyRunner scoring display', () => {
     expect(screen.getByText('3.3')).toBeInTheDocument()
     expect(screen.getByText('4.5')).toBeInTheDocument()
     expect(screen.getByText('2.0')).toBeInTheDocument()
+  })
+
+  it('exposes an explicit cancel control while a run is active', async () => {
+    useStore.setState({
+      selectedPersonas: [personaOne], currentRunId: 'run-1', surveyLifecycle: 'active',
+      surveyCompleted: 0, surveyFailed: 0, currentHistoryRun: null, currentReport: null,
+      personaStates: { p1: { persona: personaOne, status: 'active', answers: [] } },
+    })
+    render(<SurveyRunner />)
+    await userEvent.click(screen.getByTestId('cancel-survey-button'))
+    expect(cancelSurvey).toHaveBeenCalled()
+  })
+
+  it('ends a partially completed cancelled run without offering or generating a report', () => {
+    useStore.setState({
+      selectedPersonas: [personaOne, personaTwo],
+      currentRunId: 'run-1',
+      surveyLifecycle: 'cancelled',
+      surveyCompleted: 1,
+      surveyFailed: 0,
+      currentHistoryRun: null,
+      currentReport: null,
+      personaStates: {
+        p1: { persona: personaOne, status: 'complete', answers: [{ question: '質問1', answer: '回答1' }] },
+        p2: { persona: personaTwo, status: 'not_completed', answers: [] },
+      },
+    })
+
+    render(<SurveyRunner />)
+
+    expect(screen.getByText('調査がキャンセルされました')).toBeInTheDocument()
+    expect(screen.queryByTestId('cancel-survey-button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'レポートを見る →' })).not.toBeInTheDocument()
+    expect(api.generateReport).not.toHaveBeenCalled()
   })
 })

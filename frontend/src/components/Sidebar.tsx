@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
-import { api } from '../api'
+import type { SurveyLifecycle } from '../store'
+import { api, observeSurvey } from '../api'
 import type { Persona, PersonaRunState, SurveyRunDetail } from '../types'
+import { applySurveyEvent } from '../hooks/surveyEvents'
 
 function scoreColor(score?: number): string {
   if (!score) return 'bg-fin-panel text-fin-muted'
@@ -11,9 +13,27 @@ function scoreColor(score?: number): string {
   return 'bg-fin-danger text-fin-surface'
 }
 
+function lifecycleFromRunStatus(status: string): SurveyLifecycle {
+  if (status === 'running') return 'active'
+  if (status === 'completed') return 'completed'
+  if (status === 'failed') return 'failed'
+  if (status === 'cancelled') return 'cancelled'
+  return 'idle'
+}
+
 function buildPersonaStates(detail: SurveyRunDetail) {
   const personas = new Map<string, Persona>()
   const personaStates: Record<string, PersonaRunState> = {}
+
+  for (const snapshot of detail.personas || []) {
+    try {
+      const persona = snapshot.persona || JSON.parse(snapshot.persona_full_json) as Persona
+      personas.set(snapshot.persona_uuid, persona)
+      personaStates[snapshot.persona_uuid] = { persona, status: 'waiting', answers: [] }
+    } catch {
+      // Malformed legacy data may still be recoverable from answer snapshots.
+    }
+  }
 
   for (const answer of detail.answers) {
     if (!personas.has(answer.persona_uuid)) {
@@ -37,8 +57,9 @@ function buildPersonaStates(detail: SurveyRunDetail) {
 
     personaStates[answer.persona_uuid].answers[answer.question_index] = {
       question: answer.question_text,
-      answer: answer.answer,
+      answer: answer.answer || answer.error_message || '回答を取得できませんでした。',
       score: answer.score,
+      failed: answer.outcome === 'failed',
     }
   }
 
@@ -46,8 +67,12 @@ function buildPersonaStates(detail: SurveyRunDetail) {
     const answeredCount = state.answers.filter(Boolean).length
     if (detail.status === 'completed' && answeredCount === detail.questions.length) {
       state.status = 'complete'
+    } else if (detail.status === 'running') {
+      state.status = answeredCount > 0 ? 'active' : 'waiting'
+    } else if (detail.status === 'failed' || detail.status === 'cancelled') {
+      state.status = answeredCount === detail.questions.length ? 'complete' : 'not_completed'
     } else if (answeredCount > 0) {
-      state.status = detail.status === 'running' ? 'error' : detail.status === 'failed' ? 'error' : 'complete'
+      state.status = 'complete'
     }
   }
 
@@ -60,7 +85,7 @@ function buildPersonaStates(detail: SurveyRunDetail) {
 }
 
 export default function Sidebar() {
-  const { history, setHistory, setStep, setCurrentReport, setCurrentHistoryRun, resetSurvey, setSelectedPersonas, setQuestions, setSurveyTheme, setSurveyLabel, setCurrentRunId, setPersonaStates, setSurveyComplete, setSurveyCounts, setEnableThinking } = useStore()
+  const { history, setHistory, setStep, setCurrentReport, setCurrentHistoryRun, resetSurvey, setSelectedPersonas, setQuestions, setSurveyTheme, setSurveyLabel, setCurrentRunId, setPersonaStates, setSurveyLifecycle, setSurveyCounts, setEnableThinking } = useStore()
   const dbReady = useStore((s) => s.dbReady)
 
   useEffect(() => {
@@ -68,12 +93,39 @@ export default function Sidebar() {
   }, [setHistory])
 
   const [deleting, setDeleting] = useState<string | null>(null)
+  const closeObserverRef = useRef<(() => void) | null>(null)
+  const highestEventIdRef = useRef(0)
+
+  useEffect(() => () => closeObserverRef.current?.(), [])
+
+  const attachRunningRun = (runId: string) => {
+    closeObserverRef.current?.()
+    highestEventIdRef.current = 0
+    closeObserverRef.current = observeSurvey(runId, (event, rawData, eventId) => {
+      if (eventId !== undefined) {
+        if (eventId <= highestEventIdRef.current) return
+        highestEventIdRef.current = eventId
+      }
+      const result = applySurveyEvent(event, rawData)
+      if (result !== 'none') {
+        sessionStorage.removeItem('active-survey-run-id')
+        closeObserverRef.current?.()
+        closeObserverRef.current = null
+      }
+    }, (error) => console.error('Survey reattachment failed:', error),
+    (connectionState) => useStore.getState().setConnectionState(connectionState))
+  }
 
   const deleteRun = async (e: React.MouseEvent, run_id: string) => {
     e.stopPropagation()
     setDeleting(run_id)
     try {
-      await api.deleteHistoryRun(run_id)
+      const run = history.find((item) => item.id === run_id)
+      if (run?.status === 'running') {
+        await api.cancelAndDeleteSurvey(run_id)
+      } else {
+        await api.deleteHistoryRun(run_id)
+      }
       setHistory(history.filter((r) => r.id !== run_id))
     } catch (err) {
       console.error('Failed to delete run:', err)
@@ -90,6 +142,7 @@ export default function Sidebar() {
       setSurveyTheme(detail.survey_theme)
       setQuestions(detail.questions)
       setSurveyLabel(detail.label || '')
+      setSurveyLifecycle(lifecycleFromRunStatus(detail.status))
 
       if (detail.report) {
         setCurrentReport(detail.report)
@@ -97,13 +150,13 @@ export default function Sidebar() {
         setCurrentReport(null)
       }
 
-      if (detail.status === 'running' || detail.status === 'failed') {
+      if (detail.status === 'running' || detail.status === 'failed' || detail.status === 'cancelled') {
         const reconstructed = buildPersonaStates(detail)
         setSelectedPersonas(reconstructed.personas)
         setPersonaStates(reconstructed.personaStates)
         setSurveyCounts(reconstructed.completed, reconstructed.failed)
-        setSurveyComplete(detail.status !== 'running')
         setStep(3)
+        if (detail.status === 'running' && detail.replay_available) attachRunningRun(detail.id)
         return
       }
 
@@ -112,7 +165,6 @@ export default function Sidebar() {
         setSelectedPersonas(reconstructed.personas)
         setPersonaStates(reconstructed.personaStates)
         setSurveyCounts(reconstructed.completed, reconstructed.failed)
-        setSurveyComplete(true)
         setEnableThinking(detail.enable_thinking ?? true)
         setStep(4)
         return
@@ -134,6 +186,13 @@ export default function Sidebar() {
       console.error('Failed to load run:', e)
     }
   }
+
+  useEffect(() => {
+    const activeRunId = sessionStorage.getItem('active-survey-run-id')
+    if (activeRunId) void loadRun(activeRunId)
+    // Reattach once when the application shell is restored.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <aside className="flex h-full w-64 flex-shrink-0 flex-col border-r border-fin-border/90 bg-fin-surface/95 backdrop-blur">

@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 import aiosqlite
 
 from config import settings
+from db import history_db
 from models import ReportRequest, ReportResponse, TopPick
 import llm
 import text_analysis
@@ -676,7 +677,7 @@ def _merge_top_picks(llm_picks: list[dict], persona_records: dict[str, dict], to
 @router.post("/generate", response_model=ReportResponse)
 async def generate_report_endpoint(request: ReportRequest):
     """Generate a report from a completed survey run."""
-    async with aiosqlite.connect(settings.history_db_path) as db:
+    async with history_db() as db:
         db.row_factory = aiosqlite.Row
 
         # Load run
@@ -687,6 +688,8 @@ async def generate_report_endpoint(request: ReportRequest):
         if not run_rows:
             raise HTTPException(status_code=404, detail="Run not found")
         run = dict(run_rows[0])
+        if run.get("status") != "completed":
+            raise HTTPException(status_code=409, detail="Reports require a completed Survey Run")
 
         # Return cached report if available
         if run.get("report_json"):
@@ -702,7 +705,16 @@ async def generate_report_endpoint(request: ReportRequest):
             "SELECT * FROM survey_answers WHERE run_id = ? ORDER BY persona_uuid, question_index",
             [request.run_id]
         )
-        answers = [dict(r) for r in answer_rows]
+        persona_error_rows = await db.execute_fetchall(
+            "SELECT data_json FROM run_events WHERE run_id = ? AND event_type = 'persona_error'",
+            [request.run_id],
+        )
+        all_answers = [dict(r) for r in answer_rows]
+        failed_answer_count = sum(answer.get("outcome") == "failed" for answer in all_answers)
+        answers = [answer for answer in all_answers if answer.get("outcome", "answered") == "answered"]
+        failed_persona_count = sum(
+            json.loads(row[0]).get("scope") == "persona" for row in persona_error_rows
+        )
 
         if not answers:
             raise HTTPException(status_code=400, detail="No answers found for this run")
@@ -726,7 +738,7 @@ async def generate_report_endpoint(request: ReportRequest):
                     all_persona_lemmas[lemma] += 1
 
         # Polarity learning: load historical, learn fresh, merge
-        historical_polarities = text_analysis.load_polarities(settings.history_db_path)
+        historical_polarities = await text_analysis.load_polarities_async(db)
         all_texts_by_persona = [
             [_strip_score_prefix(a.get("answer", "")) for a in record.get("answers", [])]
             for record in persona_records.values()
@@ -768,7 +780,7 @@ async def generate_report_endpoint(request: ReportRequest):
 
         # Persist fresh polarities for future surveys
         if fresh_polarities:
-            text_analysis.save_polarities(settings.history_db_path, fresh_polarities, fresh_counts)
+            await text_analysis.save_polarities_async(db, fresh_polarities, fresh_counts)
 
         if not group_tendency_raw:
             logger.warning("report fallback used for group_tendency")
@@ -794,6 +806,8 @@ async def generate_report_endpoint(request: ReportRequest):
             "conclusion": conclusion,
             "top_picks": [TopPick(**pick) for pick in merged_top_picks],
             "demographic_breakdown": aggregated["demographic_breakdown"],
+            "failed_answer_count": failed_answer_count,
+            "failed_persona_count": failed_persona_count,
         }
 
         # Save to DB

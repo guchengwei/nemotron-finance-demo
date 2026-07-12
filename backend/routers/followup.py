@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 import aiosqlite
 
 from config import settings
+from db import history_db
 from models import (
     FollowUpClearRequest,
     FollowUpClearResponse,
@@ -30,11 +31,11 @@ router = APIRouter(prefix="/api/followup", tags=["followup"])
 
 
 async def _followup_stream(request: FollowUpRequest):
-    async with aiosqlite.connect(settings.history_db_path) as history_db:
-        history_db.row_factory = aiosqlite.Row
+    async with history_db() as history_connection:
+        history_connection.row_factory = aiosqlite.Row
 
         # Load run
-        run_rows = await history_db.execute_fetchall(
+        run_rows = await history_connection.execute_fetchall(
             "SELECT * FROM survey_runs WHERE id = ?", [request.run_id]
         )
         if not run_rows:
@@ -42,7 +43,7 @@ async def _followup_stream(request: FollowUpRequest):
         run = dict(run_rows[0])
 
         # Load persona answers for this run
-        answer_rows = await history_db.execute_fetchall(
+        answer_rows = await history_connection.execute_fetchall(
             "SELECT * FROM survey_answers WHERE run_id = ? AND persona_uuid = ? "
             "ORDER BY question_index",
             [request.run_id, request.persona_uuid]
@@ -60,7 +61,7 @@ async def _followup_stream(request: FollowUpRequest):
             persona = {}
 
         # Load prior chat history
-        chat_rows = await history_db.execute_fetchall(
+        chat_rows = await history_connection.execute_fetchall(
             "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? "
             "ORDER BY created_at",
             [request.run_id, request.persona_uuid]
@@ -88,11 +89,11 @@ async def _followup_stream(request: FollowUpRequest):
         )
 
         # Save user message to history
-        await history_db.execute(
+        await history_connection.execute(
             "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'user', ?)",
             [request.run_id, request.persona_uuid, request.question]
         )
-        await history_db.commit()
+        await history_connection.commit()
 
         # Build messages: raw history (last N) + new question
         messages = [
@@ -122,7 +123,7 @@ async def _followup_stream(request: FollowUpRequest):
                     request.persona_uuid,
                 )
                 save_answer = "（回答省略）"
-            async with aiosqlite.connect(settings.history_db_path) as persist_db:
+            async with history_db() as persist_db:
                 await persist_db.execute(
                     "INSERT INTO followup_chats (run_id, persona_uuid, role, content) VALUES (?, ?, 'assistant', ?)",
                     [request.run_id, request.persona_uuid, save_answer]
@@ -186,17 +187,17 @@ async def ask_followup(request: FollowUpRequest):
 
 @router.post("/suggestions", response_model=FollowUpSuggestionResponse)
 async def followup_suggestions(request: FollowUpSuggestionRequest):
-    async with aiosqlite.connect(settings.history_db_path) as history_db:
-        history_db.row_factory = aiosqlite.Row
+    async with history_db() as history_connection:
+        history_connection.row_factory = aiosqlite.Row
 
-        run_rows = await history_db.execute_fetchall(
+        run_rows = await history_connection.execute_fetchall(
             "SELECT * FROM survey_runs WHERE id = ?", [request.run_id]
         )
         if not run_rows:
             raise HTTPException(status_code=404, detail="Run not found")
         run = dict(run_rows[0])
 
-        answer_rows = await history_db.execute_fetchall(
+        answer_rows = await history_connection.execute_fetchall(
             "SELECT * FROM survey_answers WHERE run_id = ? AND persona_uuid = ? ORDER BY question_index",
             [request.run_id, request.persona_uuid]
         )
@@ -205,7 +206,7 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
             raise HTTPException(status_code=404, detail="No answers found for this persona in this run")
 
         # Read user chat rows only; assistant replies are not part of suggestion context.
-        user_chat_rows = await history_db.execute_fetchall(
+        user_chat_rows = await history_connection.execute_fetchall(
             "SELECT role, content FROM followup_chats WHERE run_id = ? AND persona_uuid = ? AND role = 'user' ORDER BY created_at, id",
             [request.run_id, request.persona_uuid]
         )
@@ -259,11 +260,11 @@ async def followup_suggestions(request: FollowUpSuggestionRequest):
 
 @router.post("/clear", response_model=FollowUpClearResponse)
 async def clear_followup_history(request: FollowUpClearRequest):
-    async with aiosqlite.connect(settings.history_db_path) as history_db:
-        cursor = await history_db.execute(
+    async with history_db() as history_connection:
+        cursor = await history_connection.execute(
             "DELETE FROM followup_chats WHERE run_id = ? AND persona_uuid = ?",
             [request.run_id, request.persona_uuid],
         )
-        await history_db.commit()
+        await history_connection.commit()
 
     return FollowUpClearResponse(deleted_count=cursor.rowcount or 0)

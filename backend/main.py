@@ -3,6 +3,8 @@
 import asyncio
 import logging
 import threading
+import fcntl
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -31,6 +33,31 @@ logging.getLogger("uvicorn.access").addFilter(_ReadyEndpointFilter())
 
 _db_ready = threading.Event()
 _db_init_error: str | None = None
+_history_lock_file = None
+
+
+def _acquire_history_lock() -> None:
+    """Exclusively claim this process's configured history database."""
+    global _history_lock_file
+    lock_path = f"{settings.history_db_path}.owner.lock"
+    os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
+    candidate = open(lock_path, "a+")
+    try:
+        fcntl.flock(candidate.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        candidate.close()
+        raise RuntimeError(
+            f"History database already owned by another backend: {settings.history_db_path}"
+        ) from error
+    _history_lock_file = candidate
+
+
+def _release_history_lock() -> None:
+    global _history_lock_file
+    if _history_lock_file is not None:
+        fcntl.flock(_history_lock_file.fileno(), fcntl.LOCK_UN)
+        _history_lock_file.close()
+        _history_lock_file = None
 
 
 def _init_db_background():
@@ -50,11 +77,23 @@ def _init_db_background():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _history_lock_file
     logger.info("Starting up — initializing databases in background...")
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, _init_db_background)
-    yield
-    logger.info("Shutting down.")
+    while not _db_ready.is_set():
+        await asyncio.sleep(0.01)
+    if _db_init_error is None:
+        _acquire_history_lock()
+        from run_manager import run_manager
+        await run_manager.reconcile_orphans()
+    try:
+        yield
+    finally:
+        logger.info("Shutting down.")
+        from run_manager import run_manager
+        await run_manager.shutdown()
+        _release_history_lock()
 
 
 app = FastAPI(
@@ -87,6 +126,7 @@ async def health():
         "status": "ok",
         "mock_llm": settings.mock_llm,
         "llm_reachable": reachable,
+        "capabilities": {"resumable_survey_runs": True},
     }
 
 

@@ -1,7 +1,15 @@
 import json
+from contextlib import asynccontextmanager
 import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, AsyncMock
+
+
+def history_context(connection):
+    @asynccontextmanager
+    async def _context():
+        yield connection
+    return _context
 
 
 @pytest.fixture
@@ -17,15 +25,17 @@ def mock_pipeline_events():
 async def test_post_matrix_report_returns_sse(mock_pipeline_events):
     """POST /api/report/matrix returns text/event-stream content type."""
     with patch("routers.report_matrix.run_matrix_pipeline", mock_pipeline_events), \
-         patch("routers.report_matrix.get_history_db") as mock_db:
+         patch("routers.report_matrix.history_db") as mock_history:
+        mock_db = AsyncMock()
+        mock_history.side_effect = history_context(mock_db)
         mock_cursor = AsyncMock()
-        mock_cursor.fetchone = AsyncMock(return_value={"id": "run-1", "survey_theme": "test", "questions_json": "[]"})
-        mock_db.return_value.execute = AsyncMock(return_value=mock_cursor)
-        mock_db.return_value.commit = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value={"id": "run-1", "survey_theme": "test", "questions_json": "[]", "status": "completed"})
+        mock_db.execute = AsyncMock(return_value=mock_cursor)
+        mock_db.commit = AsyncMock()
 
         mock_answers_cursor = AsyncMock()
         mock_answers_cursor.fetchall = AsyncMock(return_value=[])
-        mock_db.return_value.execute.side_effect = [mock_cursor, mock_answers_cursor, AsyncMock()]
+        mock_db.execute.side_effect = [mock_cursor, mock_answers_cursor, AsyncMock()]
 
         from main import app
         transport = ASGITransport(app=app)
@@ -40,10 +50,12 @@ async def test_post_matrix_report_returns_sse(mock_pipeline_events):
 @pytest.mark.asyncio
 async def test_get_matrix_report_404_when_missing():
     """GET /api/report/matrix/{id} returns 404 when no report exists."""
-    with patch("routers.report_matrix.get_history_db") as mock_db:
+    with patch("routers.report_matrix.history_db") as mock_history:
+        mock_db = AsyncMock()
+        mock_history.side_effect = history_context(mock_db)
         mock_cursor = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=None)
-        mock_db.return_value.execute = AsyncMock(return_value=mock_cursor)
+        mock_db.execute = AsyncMock(return_value=mock_cursor)
 
         from main import app
         transport = ASGITransport(app=app)
@@ -56,10 +68,12 @@ async def test_get_matrix_report_404_when_missing():
 async def test_get_matrix_report_returns_persisted_json():
     """GET /api/report/matrix/{id} returns persisted report data."""
     stored = json.dumps({"axes": {"x_axis": {"name": "関心度"}}})
-    with patch("routers.report_matrix.get_history_db") as mock_db:
+    with patch("routers.report_matrix.history_db") as mock_history:
+        mock_db = AsyncMock()
+        mock_history.side_effect = history_context(mock_db)
         mock_cursor = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value={"matrix_report_json": stored})
-        mock_db.return_value.execute = AsyncMock(return_value=mock_cursor)
+        mock_db.execute = AsyncMock(return_value=mock_cursor)
 
         from main import app
         transport = ASGITransport(app=app)
@@ -67,6 +81,24 @@ async def test_get_matrix_report_returns_persisted_json():
             resp = await client.get("/api/report/matrix/run-1")
             assert resp.status_code == 200
             assert resp.json()["axes"]["x_axis"]["name"] == "関心度"
+
+
+@pytest.mark.asyncio
+async def test_matrix_report_rejects_non_completed_run(mock_pipeline_events):
+    with patch("routers.report_matrix.run_matrix_pipeline", mock_pipeline_events), \
+         patch("routers.report_matrix.history_db") as mock_history:
+        mock_db = AsyncMock()
+        mock_history.side_effect = history_context(mock_db)
+        cursor = AsyncMock()
+        cursor.fetchone = AsyncMock(return_value={
+            "id": "running", "survey_theme": "test", "questions_json": "[]", "status": "running",
+        })
+        mock_db.execute = AsyncMock(return_value=cursor)
+        from main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post("/api/report/matrix", json={"survey_id": "running"})
+    assert response.status_code == 409
+    assert "completed Survey Run" in response.json()["detail"]
 
 
 # -- New tests --

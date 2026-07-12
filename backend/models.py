@@ -1,6 +1,6 @@
 """Pydantic models for API request/response types."""
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, Optional, List, Dict, Any
 
 
@@ -70,11 +70,40 @@ class FiltersResponse(BaseModel):
 
 
 class SurveyRunRequest(BaseModel):
-    persona_ids: List[str]
-    survey_theme: str
+    persona_ids: List[str] = Field(min_length=1, max_length=200)
+    survey_theme: str = Field(min_length=1, max_length=500)
     questions: Optional[List[str]] = None
     label: Optional[str] = None
     enable_thinking: Optional[bool] = True
+
+    @field_validator("survey_theme")
+    @classmethod
+    def validate_theme(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("survey_theme must not be blank")
+        return value
+
+    @field_validator("persona_ids")
+    @classmethod
+    def validate_personas(cls, value: List[str]) -> List[str]:
+        if any(not persona_id.strip() for persona_id in value):
+            raise ValueError("persona IDs must not be blank")
+        if len(value) != len(set(value)):
+            raise ValueError("persona IDs must be unique")
+        return value
+
+    @field_validator("questions")
+    @classmethod
+    def validate_questions(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        if value is None:
+            return None
+        if not value or len(value) > 20:
+            raise ValueError("questions must contain between 1 and 20 items")
+        cleaned = [question.strip() for question in value]
+        if any(not question or len(question) > 1000 for question in cleaned):
+            raise ValueError("questions must be nonblank and at most 1000 characters")
+        return cleaned
 
 
 class QuestionGenerationRequest(BaseModel):
@@ -112,6 +141,8 @@ class ReportResponse(BaseModel):
     conclusion: Optional[str] = None
     top_picks: Optional[List[TopPick]] = None
     demographic_breakdown: Optional[Dict[str, Dict[str, float]]] = None
+    failed_answer_count: int = 0
+    failed_persona_count: int = 0
 
     @model_validator(mode="after")
     def _backfill_legacy_structured_fields(self):
@@ -164,6 +195,14 @@ class HistoryListResponse(BaseModel):
     runs: List[SurveyRunSummary]
 
 
+class RunPersonaSnapshot(BaseModel):
+    persona_uuid: str
+    position: int
+    persona_summary: str
+    persona_full_json: str
+    persona: Dict[str, Any]
+
+
 class SurveyRunDetail(BaseModel):
     id: str
     created_at: str
@@ -177,3 +216,5 @@ class SurveyRunDetail(BaseModel):
     answers: List[Dict[str, Any]] = []
     followup_chats: Dict[str, List[Dict[str, str]]] = {}
     enable_thinking: Optional[bool] = True
+    personas: List[RunPersonaSnapshot] = []
+    replay_available: bool = False

@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App'
-import { api } from '../../api'
+import { api, observeSurvey } from '../../api'
 import { useStore } from '../../store'
 
 vi.mock('../../api', () => ({
@@ -14,9 +14,11 @@ vi.mock('../../api', () => ({
     getHistoryRun: vi.fn(),
     generateReport: vi.fn(),
     deleteHistoryRun: vi.fn(),
+    cancelAndDeleteSurvey: vi.fn(),
     checkReady: vi.fn().mockResolvedValue({ ready: true }),
     checkHealth: vi.fn().mockResolvedValue({ status: 'ok', mock_llm: true, llm_reachable: true }),
   },
+  observeSurvey: vi.fn(),
 }))
 
 vi.mock('../../hooks/useSurvey', () => ({
@@ -27,6 +29,7 @@ vi.mock('../../hooks/useSurvey', () => ({
 }))
 
 const mockedApi = api as unknown as Record<string, ReturnType<typeof vi.fn>>
+const mockedObserveSurvey = vi.mocked(observeSurvey)
 
 const filtersResponse = {
   sex: ['男', '女'],
@@ -178,5 +181,97 @@ describe('Sidebar delete', () => {
       expect(screen.queryByText('テストテーマ')).not.toBeInTheDocument()
     })
     expect(mockedApi.deleteHistoryRun).toHaveBeenCalledWith('run-1')
+  })
+
+  it('cancels a running survey before deleting it', async () => {
+    const user = userEvent.setup()
+    mockedApi.getHistory.mockResolvedValue({ runs: [{
+      id: 'run-active', created_at: '2026-03-18T00:00:00',
+      survey_theme: '実行中テーマ', persona_count: 2, status: 'running',
+    }] })
+    mockedApi.cancelAndDeleteSurvey.mockResolvedValue(undefined)
+
+    render(<App />)
+    expect(await screen.findByText('実行中テーマ')).toBeInTheDocument()
+    await user.click(screen.getByTestId('delete-run-run-active'))
+
+    await waitFor(() => expect(mockedApi.cancelAndDeleteSurvey).toHaveBeenCalledWith('run-active'))
+    expect(mockedApi.deleteHistoryRun).not.toHaveBeenCalledWith('run-active')
+    expect(screen.queryByText('実行中テーマ')).not.toBeInTheDocument()
+  })
+})
+
+describe('Sidebar running-run reattachment', () => {
+  it('hydrates persona snapshots and attaches an observer', async () => {
+    const user = userEvent.setup()
+    const run = { id: 'running-1', created_at: '2026-03-18T00:00:00', survey_theme: '再接続', persona_count: 1, status: 'running' }
+    mockedApi.getHistory.mockResolvedValue({ runs: [run] })
+    mockedApi.getHistoryRun.mockResolvedValue({
+      ...run, questions: ['質問'], answers: [], followup_chats: {}, replay_available: true,
+      personas: [{ persona_uuid: sampledPersona.uuid, position: 0, persona_summary: '田中太郎', persona_full_json: JSON.stringify(sampledPersona), persona: sampledPersona }],
+    })
+    mockedObserveSurvey.mockReturnValue(vi.fn())
+    render(<App />)
+    await user.click(await screen.findByText('再接続'))
+    await waitFor(() => expect(mockedObserveSurvey).toHaveBeenCalledWith(
+      'running-1', expect.any(Function), expect.any(Function), expect.any(Function),
+    ))
+    expect(useStore.getState().selectedPersonas[0].uuid).toBe(sampledPersona.uuid)
+    expect(screen.getByTestId('survey-runner-screen')).toBeVisible()
+  })
+})
+
+describe('Sidebar failed-run restoration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useStore.getState().resetSurvey()
+    useStore.setState({ dbReady: true })
+    mockedApi.getFilters.mockResolvedValue(filtersResponse)
+    mockedApi.getCount.mockResolvedValue({ total_matching: 100 })
+    mockedApi.checkReady.mockResolvedValue({ ready: true })
+    mockedApi.checkHealth.mockResolvedValue({ status: 'ok', mock_llm: true, llm_reachable: true })
+  })
+
+  it('renders a restored failed run as non-reportable error even when failed count is zero', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      value: vi.fn(),
+      writable: true,
+    })
+    const user = userEvent.setup()
+    const run = {
+      id: 'failed-1', created_at: '2026-03-18T00:00:00', survey_theme: '障害終了',
+      persona_count: 1, status: 'failed',
+    }
+    mockedApi.getHistory.mockResolvedValue({ runs: [run] })
+    mockedApi.getHistoryRun.mockResolvedValue({
+      ...run,
+      questions: ['質問'],
+      answers: [{
+        persona_uuid: sampledPersona.uuid,
+        persona_summary: sampledPersona.name,
+        persona_full_json: JSON.stringify(sampledPersona),
+        question_index: 0,
+        question_text: '質問',
+        answer: '途中回答',
+        outcome: 'answered',
+      }],
+      followup_chats: {},
+      personas: [{
+        persona_uuid: sampledPersona.uuid,
+        position: 0,
+        persona_summary: sampledPersona.name,
+        persona_full_json: JSON.stringify(sampledPersona),
+        persona: sampledPersona,
+      }],
+    })
+
+    render(<App />)
+    await user.click(await screen.findByText('障害終了'))
+
+    expect(await screen.findByRole('heading', { name: '調査エラー' })).toBeInTheDocument()
+    expect(useStore.getState().surveyLifecycle).toBe('failed')
+    expect(useStore.getState().surveyFailed).toBe(0)
+    expect(screen.queryByRole('button', { name: 'レポートを見る →' })).not.toBeInTheDocument()
+    expect(mockedApi.generateReport).not.toHaveBeenCalled()
   })
 })
