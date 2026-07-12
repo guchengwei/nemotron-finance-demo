@@ -54,6 +54,7 @@ class RunHandle:
 class RunManager:
     def __init__(self) -> None:
         self.handles: dict[str, RunHandle] = {}
+        self._reapers: set[asyncio.Task[None]] = set()
 
     def get_or_create(self, run_id: str) -> RunHandle:
         return self.handles.setdefault(run_id, RunHandle(run_id))
@@ -95,16 +96,63 @@ class RunManager:
             if event_type in TERMINAL_EVENTS:
                 handle.terminal = True
                 handle.completion.set()
+                self._schedule_reap(handle)
             handle.publish(seq, event_type, data)
             return seq
+
+    def _schedule_reap(self, handle: RunHandle, grace_seconds: float = 300) -> None:
+        async def reap() -> None:
+            await asyncio.sleep(grace_seconds)
+            if self.handles.get(handle.run_id) is not handle:
+                return
+            if handle.observer_state:
+                self._schedule_reap(handle, grace_seconds)
+            else:
+                self.handles.pop(handle.run_id, None)
+
+        task = asyncio.create_task(reap(), name=f"survey-reap:{handle.run_id}")
+        self._reapers.add(task)
+        task.add_done_callback(self._reapers.discard)
 
     def publish_delta(self, handle: RunHandle, event_type: str, data: dict[str, Any]) -> None:
         if not handle.terminal:
             handle.publish(None, event_type, data)
 
+    async def finish_run(
+        self,
+        handle: RunHandle,
+        event_type: str,
+        status: str,
+        total: int,
+        code: str | None = None,
+        not_completed_reason: str | None = None,
+    ) -> int | None:
+        """Derive authoritative persona totals and atomically reserve one terminal outcome."""
+        async with history_db() as db:
+            outcomes = await db.execute_fetchall(
+                "SELECT event_type, data_json FROM run_events WHERE run_id = ? "
+                "AND event_type IN ('persona_complete', 'persona_error')", [handle.run_id]
+            )
+        completed = sum(row[0] == "persona_complete" for row in outcomes)
+        failed = sum(
+            row[0] == "persona_error" and json.loads(row[1]).get("scope") == "persona"
+            for row in outcomes
+        )
+        payload = terminal_payload(handle.run_id, total, completed, failed, code)
+        if not_completed_reason and payload["not_completed"]:
+            payload["not_completed_reason"] = not_completed_reason
+
+        async def update_status(db: aiosqlite.Connection) -> None:
+            await db.execute(
+                "UPDATE survey_runs SET status = ? WHERE id = ? AND status = 'running'",
+                [status, handle.run_id],
+            )
+
+        return await self.append_event(handle, event_type, payload, update_status)
+
     async def cancel(self, run_id: str) -> str | None:
         async with history_db() as db:
-            rows = await db.execute_fetchall("SELECT status FROM survey_runs WHERE id = ?", [run_id])
+            rows = await db.execute_fetchall("SELECT status, persona_count FROM survey_runs WHERE id = ?", [run_id])
         if not rows:
             return None
         status = str(rows[0][0])
@@ -113,6 +161,15 @@ class RunManager:
             handle.cancel_requested.set()
             if handle.task and not handle.task.done():
                 handle.task.cancel()
+                await asyncio.gather(handle.task, return_exceptions=True)
+            if not handle.terminal:
+                await self.finish_run(
+                    handle, "survey_cancelled", "cancelled", int(rows[0][1] or 0),
+                    "run_cancelled", "run_cancelled",
+                )
+            async with history_db() as db:
+                final = await db.execute_fetchall("SELECT status FROM survey_runs WHERE id = ?", [run_id])
+            return str(final[0][0])
         return status
 
     async def shutdown(self) -> None:
@@ -132,41 +189,25 @@ class RunManager:
                 run_rows = await db.execute_fetchall(
                     "SELECT persona_count, status FROM survey_runs WHERE id = ?", [handle.run_id]
                 )
-                outcome_rows = await db.execute_fetchall(
-                    "SELECT event_type, COUNT(*) FROM run_events WHERE run_id = ? "
-                    "AND event_type IN ('persona_complete', 'persona_error') "
-                    "GROUP BY event_type", [handle.run_id]
-                )
             if not run_rows or run_rows[0][1] != "running":
                 continue
-            counts = dict(outcome_rows)
             total = int(run_rows[0][0] or 0)
-            completed = int(counts.get("persona_complete", 0))
-            # Only persona-scoped errors count here; derive exactly below.
-            async with history_db() as db:
-                error_rows = await db.execute_fetchall(
-                    "SELECT data_json FROM run_events WHERE run_id = ? AND event_type = 'persona_error'",
-                    [handle.run_id],
-                )
-            failed = sum(json.loads(row[0]).get("scope") == "persona" for row in error_rows)
-            payload = terminal_payload(handle.run_id, total, completed, failed, "server_shutdown")
-
-            async def fail(db: aiosqlite.Connection, rid=handle.run_id) -> None:
-                await db.execute("UPDATE survey_runs SET status = 'failed' WHERE id = ? AND status = 'running'", [rid])
-
-            await self.append_event(handle, "survey_error", payload, fail)
+            await self.finish_run(
+                handle, "survey_error", "failed", total, "server_shutdown", "run_failed"
+            )
+        for reaper in tuple(self._reapers):
+            reaper.cancel()
+        if self._reapers:
+            await asyncio.gather(*self._reapers, return_exceptions=True)
 
     async def reconcile_orphans(self, code: str = "server_restart") -> None:
         async with history_db() as db:
             rows = await db.execute_fetchall("SELECT id, persona_count FROM survey_runs WHERE status = 'running'")
         for run_id, total in rows:
             handle = self.get_or_create(str(run_id))
-            payload = terminal_payload(str(run_id), int(total or 0), 0, 0, code=code)
-
-            async def fail(db: aiosqlite.Connection, rid=str(run_id)) -> None:
-                await db.execute("UPDATE survey_runs SET status = 'failed' WHERE id = ? AND status = 'running'", [rid])
-
-            await self.append_event(handle, "survey_error", payload, fail)
+            await self.finish_run(
+                handle, "survey_error", "failed", int(total or 0), code, "run_failed"
+            )
 
 
 def public_error(code: str, scope: str | None = None, **identifiers: Any) -> dict[str, Any]:
@@ -176,6 +217,7 @@ def public_error(code: str, scope: str | None = None, **identifiers: Any) -> dic
         "server_restart": "サーバーの再起動により実行を継続できませんでした。",
         "server_shutdown": "サーバー停止により実行を完了できませんでした。",
         "run_cancelled": "アンケート実行はキャンセルされました。",
+        "replay_unavailable": "この履歴ではイベントの再生を利用できません。",
         "internal_error": "処理中にエラーが発生しました。",
     }
     result: dict[str, Any] = {

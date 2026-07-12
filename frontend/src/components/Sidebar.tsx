@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { api, observeSurvey } from '../api'
 import type { Persona, PersonaRunState, SurveyRunDetail } from '../types'
+import { applySurveyEvent } from '../hooks/surveyEvents'
 
 function scoreColor(score?: number): string {
   if (!score) return 'bg-fin-panel text-fin-muted'
@@ -17,7 +18,7 @@ function buildPersonaStates(detail: SurveyRunDetail) {
 
   for (const snapshot of detail.personas || []) {
     try {
-      const persona = JSON.parse(snapshot.persona_full_json) as Persona
+      const persona = snapshot.persona || JSON.parse(snapshot.persona_full_json) as Persona
       personas.set(snapshot.persona_uuid, persona)
       personaStates[snapshot.persona_uuid] = { persona, status: 'waiting', answers: [] }
     } catch {
@@ -96,55 +97,9 @@ export default function Sidebar() {
         if (eventId <= highestEventIdRef.current) return
         highestEventIdRef.current = eventId
       }
-      const data = rawData as Record<string, any>
-      const state = useStore.getState()
-      const personaId = data.persona_uuid as string | undefined
-      if (event === 'questions_generated') state.setQuestions(data.questions as string[])
-      if (event === 'persona_start' && personaId) {
-        state.updatePersonaState(personaId, { status: 'active', activeAnswer: '', activeQuestion: 0 })
-      }
-      if (event === 'persona_answer_chunk' && personaId) {
-        const personaState = state.personaStates[personaId]
-        state.updatePersonaState(personaId, {
-          activeQuestion: data.question_index,
-          activeAnswer: `${personaState?.activeAnswer || ''}${data.chunk || ''}`,
-        })
-      }
-      if (event === 'persona_answer' && personaId) {
-        const personaState = state.personaStates[personaId]
-        if (personaState) {
-          const answers = [...personaState.answers]
-          answers[data.question_index] = {
-            question: state.questions[data.question_index] || `Q${Number(data.question_index) + 1}`,
-            answer: data.answer || '', score: data.score, thinking: data.thinking,
-          }
-          state.updatePersonaState(personaId, { answers, activeAnswer: undefined, activeQuestion: undefined })
-        }
-      }
-      if (event === 'persona_error' && personaId && data.scope === 'question') {
-        const personaState = state.personaStates[personaId]
-        if (personaState) {
-          const answers = [...personaState.answers]
-          answers[data.question_index] = {
-            question: state.questions[data.question_index] || `Q${Number(data.question_index) + 1}`,
-            answer: data.message || '回答を取得できませんでした。', failed: true,
-          }
-          state.updatePersonaState(personaId, { answers })
-        }
-      } else if (event === 'persona_error' && personaId) {
-        state.updatePersonaState(personaId, { status: 'error', activeAnswer: undefined })
-      }
-      if (event === 'persona_complete' && personaId) state.updatePersonaState(personaId, { status: 'complete' })
-      if (event === 'survey_complete' || event === 'survey_error' || event === 'survey_cancelled') {
-        if (event !== 'survey_complete') {
-          for (const [id, personaState] of Object.entries(state.personaStates)) {
-            if (personaState.status === 'waiting' || personaState.status === 'active') {
-              state.updatePersonaState(id, { status: 'not_completed', activeAnswer: undefined })
-            }
-          }
-        }
-        state.setSurveyCounts(Number(data.completed || 0), Number(data.failed || 0))
-        state.setSurveyComplete(true)
+      const result = applySurveyEvent(event, rawData)
+      if (result !== 'none') {
+        sessionStorage.removeItem('active-survey-run-id')
         closeObserverRef.current?.()
         closeObserverRef.current = null
       }
@@ -156,7 +111,12 @@ export default function Sidebar() {
     e.stopPropagation()
     setDeleting(run_id)
     try {
-      await api.deleteHistoryRun(run_id)
+      const run = history.find((item) => item.id === run_id)
+      if (run?.status === 'running') {
+        await api.cancelAndDeleteSurvey(run_id)
+      } else {
+        await api.deleteHistoryRun(run_id)
+      }
       setHistory(history.filter((r) => r.id !== run_id))
     } catch (err) {
       console.error('Failed to delete run:', err)

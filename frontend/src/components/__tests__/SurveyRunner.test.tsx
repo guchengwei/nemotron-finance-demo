@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import SurveyRunner from '../SurveyRunner'
 import { useStore } from '../../store'
@@ -8,6 +9,9 @@ vi.mock('../../api', () => ({
     generateReport: vi.fn(),
   },
 }))
+
+const cancelSurvey = vi.hoisted(() => vi.fn())
+vi.mock('../../hooks/useSurvey', () => ({ useSurvey: () => ({ cancelSurvey }) }))
 
 const personaOne = {
   uuid: 'p1',
@@ -89,5 +93,16 @@ describe('SurveyRunner scoring display', () => {
     expect(screen.getByText('3.3')).toBeInTheDocument()
     expect(screen.getByText('4.5')).toBeInTheDocument()
     expect(screen.getByText('2.0')).toBeInTheDocument()
+  })
+
+  it('exposes an explicit cancel control while a run is active', async () => {
+    useStore.setState({
+      selectedPersonas: [personaOne], currentRunId: 'run-1', surveyComplete: false,
+      surveyCompleted: 0, surveyFailed: 0, currentHistoryRun: null, currentReport: null,
+      personaStates: { p1: { persona: personaOne, status: 'active', answers: [] } },
+    })
+    render(<SurveyRunner />)
+    await userEvent.click(screen.getByTestId('cancel-survey-button'))
+    expect(cancelSurvey).toHaveBeenCalled()
   })
 })

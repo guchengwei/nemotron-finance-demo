@@ -126,13 +126,16 @@ export interface SurveyRunDetail {
   answers: SurveyAnswer[]
   followup_chats: Record<string, Array<{ role: string; content: string }>>
   enable_thinking?: boolean
-  personas?: Array<{
-    persona_uuid: string
-    position: number
-    persona_summary: string
-    persona_full_json: string
-  }>
+  personas?: RunPersonaSnapshot[]
   replay_available?: boolean
+}
+
+export interface RunPersonaSnapshot {
+  persona_uuid: string
+  position: number
+  persona_summary: string
+  persona_full_json: string
+  persona: Persona
 }
 
 export interface FollowUpSuggestionResponse {

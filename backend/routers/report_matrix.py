@@ -7,7 +7,7 @@ GET  /api/report/matrix/{survey_id} — returns persisted report JSON.
 import json
 import logging
 import aiosqlite
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -39,23 +39,15 @@ def _extract_full_name(persona_full_json: str | None, persona_summary: str | Non
     return persona_uuid[:8]
 
 
-async def _matrix_stream(request: MatrixReportRequest):
+async def _matrix_stream(request: MatrixReportRequest, run):
     """Generator that yields SSE-formatted events from the pipeline."""
     import aiosqlite
     async with history_db() as db:
         db.row_factory = aiosqlite.Row
-        row = await db.execute(
-            "SELECT id, survey_theme, questions_json FROM survey_runs WHERE id = ?",
-            [request.survey_id],
-        )
-        run = await row.fetchone()
-        if not run:
-            yield f"event: report_error\ndata: {json.dumps({'error': 'Survey run not found'})}\n\n"
-            return
-
         answers_rows = await db.execute(
             "SELECT persona_uuid, persona_summary, persona_full_json, answer, question_index "
-            "FROM survey_answers WHERE run_id = ? ORDER BY persona_uuid, question_index",
+            "FROM survey_answers WHERE run_id = ? AND outcome = 'answered' "
+            "ORDER BY persona_uuid, question_index",
             [request.survey_id],
         )
         answers = await answers_rows.fetchall()
@@ -123,8 +115,19 @@ async def _matrix_stream(request: MatrixReportRequest):
 
 @router.post("")
 async def generate_matrix_report(request: MatrixReportRequest):
+    async with history_db() as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, survey_theme, questions_json, status FROM survey_runs WHERE id = ?",
+            [request.survey_id],
+        )
+        run = await cursor.fetchone()
+    if not run:
+        raise HTTPException(status_code=404, detail="Survey run not found")
+    if run["status"] != "completed":
+        raise HTTPException(status_code=409, detail="Reports require a completed Survey Run")
     return StreamingResponse(
-        _matrix_stream(request),
+        _matrix_stream(request, run),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

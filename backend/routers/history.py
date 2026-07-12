@@ -126,7 +126,7 @@ async def get_history_run(run_id: str):
         answers=answers,
         followup_chats=followup_chats,
         enable_thinking=bool(run.get("enable_thinking", True)),
-        personas=[dict(row) for row in persona_rows],
+        personas=[{**dict(row), "persona": json.loads(row["persona_full_json"])} for row in persona_rows],
         replay_available=bool(event_rows),
     )
 

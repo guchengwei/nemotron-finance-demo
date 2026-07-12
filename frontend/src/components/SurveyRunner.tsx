@@ -4,6 +4,7 @@ import { api } from '../api'
 import PersonaAvatar from './PersonaAvatar'
 import SurveyProgress from './SurveyProgress'
 import { scoreBg } from '../utils/scoreParser'
+import { useSurvey } from '../hooks/useSurvey'
 
 function sanitizeVisibleText(text: string) {
   return text.replace(/<\/?think[^>]*>/gi, '').trim()
@@ -76,6 +77,7 @@ const PersonaListItem = React.memo(function PersonaListItem({
 })
 
 export default function SurveyRunner() {
+  const { cancelSurvey } = useSurvey()
   const {
     personaStates, surveyComplete, surveyCompleted, surveyFailed,
     questions, currentRunId, setCurrentReport, setStep, selectedPersonas, currentHistoryRun,
@@ -157,6 +159,15 @@ export default function SurveyRunner() {
           <span data-testid="survey-connection-state" className="rounded-full border border-fin-border px-3 py-1 text-xs text-fin-muted">
             {connectionState === 'live' ? '接続中' : connectionState === 'reconnecting' ? '再接続中' : '切断'}
           </span>
+          {!surveyComplete && currentRunId && (
+            <button
+              data-testid="cancel-survey-button"
+              onClick={cancelSurvey}
+              className="rounded-full border border-fin-danger/40 px-3 py-1 text-xs font-semibold text-fin-danger hover:bg-fin-danger/10"
+            >
+              調査をキャンセル
+            </button>
+          )}
           {(surveyComplete || restoredInterruptedRun || restoredFailedRun) && (surveyCompleted > 0 || allStates.some((s) => s.answers.length > 0)) && (
             <button
               onClick={async () => {

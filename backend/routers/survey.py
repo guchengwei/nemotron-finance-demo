@@ -20,7 +20,7 @@ from e2e_support import get_e2e_scenario
 from llm import generate_questions, sanitize_answer_text, stream_survey_answer
 from models import QuestionGenerationRequest, QuestionGenerationResponse, SurveyRunRequest
 from prompts import build_survey_system_prompt, sex_display
-from run_manager import RunHandle, TERMINAL_EVENTS, public_error, run_manager, terminal_payload
+from run_manager import RunHandle, TERMINAL_EVENTS, public_error, run_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/survey", tags=["survey"])
@@ -175,7 +175,6 @@ async def _execute_run(handle: RunHandle, e2e_scenario: str | None = None) -> No
         return
     run = dict(run_rows[0])
     snapshots = [dict(row) for row in snapshot_rows]
-    completed = failed = 0
     tasks: list[asyncio.Task[None]] = []
     try:
         questions = json.loads(run["questions_json"] or "[]")
@@ -200,50 +199,25 @@ async def _execute_run(handle: RunHandle, e2e_scenario: str | None = None) -> No
             for snapshot in snapshots
         ]
         for _ in snapshots:
-            outcome = await results.get()
-            completed += outcome == "completed"
-            failed += outcome == "failed"
+            await results.get()
         await asyncio.gather(*tasks)
-        payload = terminal_payload(handle.run_id, len(snapshots), completed, failed)
-
-        async def complete(db: aiosqlite.Connection) -> None:
-            await db.execute("UPDATE survey_runs SET status = 'completed' WHERE id = ? AND status = 'running'", [handle.run_id])
-
-        await run_manager.append_event(handle, "survey_complete", payload, complete)
+        await run_manager.finish_run(handle, "survey_complete", "completed", len(snapshots))
     except asyncio.CancelledError:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         if handle.cancel_requested.is_set():
-            async with history_db() as db:
-                outcome_rows = await db.execute_fetchall(
-                    "SELECT event_type, data_json FROM run_events WHERE run_id = ? "
-                    "AND event_type IN ('persona_complete', 'persona_error')", [handle.run_id]
-                )
-            completed = sum(row[0] == "persona_complete" for row in outcome_rows)
-            failed = sum(
-                row[0] == "persona_error" and json.loads(row[1]).get("scope") == "persona"
-                for row in outcome_rows
+            await run_manager.finish_run(
+                handle, "survey_cancelled", "cancelled", len(snapshots),
+                "run_cancelled", "run_cancelled",
             )
-            payload = terminal_payload(handle.run_id, len(snapshots), completed, failed, "run_cancelled")
-            payload["not_completed_reason"] = "run_cancelled"
-
-            async def cancelled(db: aiosqlite.Connection) -> None:
-                await db.execute("UPDATE survey_runs SET status = 'cancelled' WHERE id = ? AND status = 'running'", [handle.run_id])
-
-            await run_manager.append_event(handle, "survey_cancelled", payload, cancelled)
         else:
             raise
     except Exception:
-        error = public_error("internal_error", run_id=handle.run_id)
-        logger.exception("Survey Run failed correlation_id=%s", error["correlation_id"])
-        payload = terminal_payload(handle.run_id, len(snapshots), completed, failed)
-        payload.update(error)
-
-        async def fail(db: aiosqlite.Connection) -> None:
-            await db.execute("UPDATE survey_runs SET status = 'failed' WHERE id = ? AND status = 'running'", [handle.run_id])
-
-        await run_manager.append_event(handle, "survey_error", payload, fail)
+        logger.exception("Survey Run failed run_id=%s", handle.run_id)
+        await run_manager.finish_run(
+            handle, "survey_error", "failed", len(snapshots), "internal_error", "run_failed"
+        )
 
 
 @router.post("/questions", response_model=QuestionGenerationResponse)

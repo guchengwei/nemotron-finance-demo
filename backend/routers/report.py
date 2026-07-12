@@ -705,11 +705,16 @@ async def generate_report_endpoint(request: ReportRequest):
             "SELECT * FROM survey_answers WHERE run_id = ? ORDER BY persona_uuid, question_index",
             [request.run_id]
         )
+        persona_error_rows = await db.execute_fetchall(
+            "SELECT data_json FROM run_events WHERE run_id = ? AND event_type = 'persona_error'",
+            [request.run_id],
+        )
         all_answers = [dict(r) for r in answer_rows]
         failed_answer_count = sum(answer.get("outcome") == "failed" for answer in all_answers)
         answers = [answer for answer in all_answers if answer.get("outcome", "answered") == "answered"]
-        answered_personas = {answer["persona_uuid"] for answer in answers}
-        failed_persona_count = max(0, int(run.get("persona_count") or 0) - len(answered_personas))
+        failed_persona_count = sum(
+            json.loads(row[0]).get("scope") == "persona" for row in persona_error_rows
+        )
 
         if not answers:
             raise HTTPException(status_code=400, detail="No answers found for this run")

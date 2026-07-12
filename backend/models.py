@@ -195,6 +195,14 @@ class HistoryListResponse(BaseModel):
     runs: List[SurveyRunSummary]
 
 
+class RunPersonaSnapshot(BaseModel):
+    persona_uuid: str
+    position: int
+    persona_summary: str
+    persona_full_json: str
+    persona: Dict[str, Any]
+
+
 class SurveyRunDetail(BaseModel):
     id: str
     created_at: str
@@ -208,5 +216,5 @@ class SurveyRunDetail(BaseModel):
     answers: List[Dict[str, Any]] = []
     followup_chats: Dict[str, List[Dict[str, str]]] = {}
     enable_thinking: Optional[bool] = True
-    personas: List[Dict[str, Any]] = []
+    personas: List[RunPersonaSnapshot] = []
     replay_available: bool = False

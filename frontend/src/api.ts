@@ -185,6 +185,37 @@ export const api = {
   cancelSurvey: (run_id: string): Promise<{ run_id: string; status: string }> =>
     post(`/survey/${run_id}/cancel`, {}),
 
+  cancelAndDeleteSurvey: async (run_id: string): Promise<void> => {
+    let closeObserver = () => {}
+    const terminalDelivered = new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        closeObserver()
+        reject(new Error('Timed out waiting for survey cancellation'))
+      }, 30_000)
+      closeObserver = observeSurvey(run_id, (event) => {
+        if (event === 'survey_cancelled') {
+          window.clearTimeout(timeout)
+          closeObserver()
+          resolve()
+        }
+      }, (error) => {
+        if (error.message !== 'Survey observer disconnected') {
+          window.clearTimeout(timeout)
+          reject(error)
+        }
+      })
+    })
+    try {
+      await post(`/survey/${run_id}/cancel`, {})
+      await terminalDelivered
+    } catch (error) {
+      closeObserver()
+      throw error
+    }
+    await del(`/history/${run_id}`)
+    sessionStorage.removeItem('active-survey-run-id')
+  },
+
   async checkReady(): Promise<{ ready: boolean; error?: string }> {
     try {
       const res = await fetch('/ready')
@@ -234,13 +265,14 @@ export const api = {
 
 const SURVEY_EVENTS = [
   'run_created', 'questions_generated', 'persona_start', 'persona_answer_chunk',
-  'persona_answer', 'persona_complete', 'persona_error', 'survey_complete',
+  'persona_thinking', 'persona_answer', 'persona_complete', 'persona_error', 'survey_complete',
   'survey_error', 'survey_cancelled',
-]
+] as const
+export type SurveyEventName = typeof SURVEY_EVENTS[number]
 
 export function observeSurvey(
   runId: string,
-  onEvent: (event: string, data: unknown, id?: number) => void,
+  onEvent: (event: SurveyEventName, data: unknown, id?: number) => void,
   onError: (err: Error) => void,
   onConnectionState?: (state: 'live' | 'reconnecting' | 'disconnected') => void,
 ): () => void {
@@ -266,7 +298,7 @@ export function observeSurvey(
 
 export function startSurveySSE(
   request: SurveyRunRequest,
-  onEvent: (event: string, data: unknown, id?: number) => void,
+  onEvent: (event: SurveyEventName, data: unknown, id?: number) => void,
   onError: (err: Error) => void,
   onConnectionState?: (state: 'live' | 'reconnecting' | 'disconnected') => void,
 ): () => void {
